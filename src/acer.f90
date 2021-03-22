@@ -285,6 +285,7 @@ contains
       mcnpx=1
       iopt=-iopt
    endif
+   hk=''
    read(nsysi,*) hk
    do i=1,16
       izn(i)=0

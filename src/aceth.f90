@@ -530,7 +530,7 @@ contains
    !-------------------------------------------------------------------
    ! Print and or edit an ACE thermal file.
    !-------------------------------------------------------------------
-   use util  ! provides closz
+   use util ! provides closz
    use acecm ! provides newsuff
    ! externals
    integer::itype,nin,nout,ndir,iprint,nplot,mcnpx,nxtra

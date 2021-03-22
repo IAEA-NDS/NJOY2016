@@ -840,6 +840,7 @@ contains
          ncs(nxc)=ncs(nxc)+1+nint((scr(5)+5)/6)
       endif
       call tosend(nin,nout,0,scr)
+      deallocate(scr)
       return
    endif
 
@@ -900,6 +901,7 @@ contains
          deallocate(p1456nu)
       endif
       call contio(nin,nout,0,scr,nb,nw)
+      deallocate(scr)
       return
    endif
 
@@ -1028,6 +1030,11 @@ contains
    endif
    call contio(nin,nout,0,scr,nb,nw)
    call closz(-itape)
+   deallocate(y)
+   deallocate(x)
+   deallocate(buf)
+   deallocate(scr2)
+   deallocate(scr)
 
    !--finished
    return
@@ -1939,7 +1946,7 @@ contains
    real(kr)::b(50)
    real(kr),dimension(:),allocatable::tab1
    real(kr),dimension(:),allocatable::scr
-   integer,parameter::nwmaxn=65000
+   integer,parameter::nwmaxn=1000000
    real(kr),parameter::big=1.e9_kr
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
@@ -1953,7 +1960,7 @@ contains
    jpp=0
    jpnu=0
    nkk=0
-   nt1w=4200
+   nt1w=20000
    allocate(tab1(nt1w))
    nsix=19
    nin0=0
@@ -2063,6 +2070,8 @@ contains
                         call moreio(nin,0,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
+                     if (now.gt.nwmax) call error('topfil',&
+                         'scratch storage exceeded',' ')
                      now=now-1
                      call ptleg(no,scr)
                   else
@@ -2072,6 +2081,8 @@ contains
                         call moreio(nin,0,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
+                     if (now.gt.nwmax) call error('topfil',&
+                         'scratch storage exceeded',' ')
                      call pttab(ltt,scr,no)
                   endif
                enddo
@@ -2121,6 +2132,8 @@ contains
             endif
             call moreio(nin,0,0,tab1(loct1),nb,nw)
          enddo
+         if (loct1+nw.gt.nt1w) call error('topfil',&
+             'tab1 allocation is too small',' ')
          lf=nint(tab1(4))
          ! move this tab1 to nout (all the time).
          loct1=1
@@ -2151,6 +2164,8 @@ contains
                   endif
                   call moreio(nin,0,0,tab1(loct1),nb,nw)
                enddo
+               if (loct1+nw.gt.nt1w) call error('topfil',&
+                   'tab1 allocation is too small',' ')
                nr=nint(tab1(5))
                nf=nint(tab1(6))
                ! check tab1 for multiple f(e)=0 data.
@@ -2323,6 +2338,8 @@ contains
                         loc=loc+nw
                      enddo
                   enddo
+                  if (loc.gt.nwmax) call error('topfil',&
+                      'scratch storage exceeded',' ')
                   ! fix up the tab2 for law1
                   if (ie.eq.1) then
                      b(3)=10+intmu
@@ -2342,7 +2359,11 @@ contains
                         scr(igrd+ngrd-1)=scr(loc+4+2*m+2*iep)
                      enddo
                   enddo
+                  if (igrd+ngrd.gt.nwmax) call error('topfil',&
+                      'scratch storage exceeded',' ')
                   call ordr(scr(igrd),ngrd)
+                  if ((igrd+6+ngrd*(3+2*nmu)).gt.nwmax) call error('topfil',&
+                      'scratch storage exceeded',' ')
                   ! interpolate for angular distributions
                   ! on the union eprime grid to construct
                   ! the law1 distribution.
@@ -2409,6 +2430,8 @@ contains
                         call moreio(nin,0,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
+                     if (now.gt.nwmax) call error('topfil',&
+                         'scratch storage exceeded',' ')
                      call cptab(nout,scr)
                   ! law=2 for newfor=1 - copy the subsection
                   else if (lf.eq.2.and.newfor.eq.1) then
@@ -2418,6 +2441,8 @@ contains
                         call moreio(nin,nout,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
+                     if (now.gt.nwmax) call error('topfil',&
+                         'scratch storage exceeded',' ')
                   ! law=2 for newfor=0 - convert to probability bins
                   else if (lf.eq.2.and.newfor.eq.0) then
                      call listio(nin,0,0,scr,nb,nw)
@@ -2426,6 +2451,8 @@ contains
                         call moreio(nin,0,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
+                     if (now.gt.nwmax) call error('topfil',&
+                         'scratch storage exceeded',' ')
                      now=now-1
                      lang=nint(scr(3))
                      if (lang.eq.0) then
@@ -2455,6 +2482,8 @@ contains
                         call moreio(nin,nout,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
+                     if (now.gt.nwmax) call error('topfil',&
+                         'scratch storage exceeded',' ')
                   ! law=7 -- the tab2 is converted to a special tab1
                   ! containing the overall angular distribution and
                   ! the angle-energy data are copied
@@ -2474,6 +2503,8 @@ contains
                            call moreio(nin,0,0,scr(l),nb,nw)
                            l=l+nw
                         enddo
+                        if (l.gt.nwmax) call error('topfil',&
+                            'scratch storage exceeded',' ')
                         e1=0
                         e2=big
                         ir=1
@@ -2502,6 +2533,8 @@ contains
                            call moreio(0,nout,0,scr(l),nb,nw)
                            l=l+nw
                         enddo
+                        if (l.gt.nwmax) call error('topfil',&
+                            'scratch storage exceeded',' ')
                      enddo
                   endif
                enddo
@@ -2517,6 +2550,7 @@ contains
 
    !--topfil is finished.
    deallocate(scr)
+   deallocate(tab1)
    return
    end subroutine topfil
 
@@ -3393,10 +3427,10 @@ contains
          call listio(nin,0,0,a(l),nb,nw)
          l=l+nw
          do while (nb.ne.0)
-            if (l.gt.namax) call error('fix6','storage exceeded',' ')
             call moreio(nin,0,0,a(l),nb,nw)
             l=l+nw
          enddo
+         if (l.gt.namax) call error('fix6','storage exceeded',' ')
          l2=l
          ein=a(l1+1)
          nep=nint(a(l1+5))
@@ -3825,6 +3859,10 @@ contains
    call closz(-iold)
    call closz(-inew)
    call repoz(nf12c)
+   deallocate(scr2)
+   deallocate(scr)
+   deallocate(bufn)
+   deallocate(bufo)
    return
    end subroutine gamsum
 
@@ -4023,9 +4061,9 @@ contains
    do while (nb.ne.0)
       jtot=jtot+nw
       call moreio(kscr,0,0,tot(jtot),nb,nw)
-      if (jtot.gt.nwtot) call error('convr',&
-        'exceeded tot array',' ')
    enddo
+   if (jtot+nw.gt.nwtot) call error('convr',&
+       'exceeded tot array',' ')
    ! supplement grid with discontinuities
    l=6+2*nr
    do i=1,np
@@ -4457,6 +4495,15 @@ contains
      &'' energy discontinuities found in gamma files''/&
      &(10x,1p,e13.5))')&
      (disc(iedis),iedis=1,nedis)
+   deallocate(tot)
+   deallocate(yold)
+   deallocate(scr)
+   deallocate(rr)
+   deallocate(aa)
+   deallocate(yy)
+   deallocate(es)
+   deallocate(eg)
+   deallocate(ee)
    return
    end subroutine convr
 
@@ -4597,6 +4644,8 @@ contains
                            call moreio(nf12c,0,0,scr(now),nb,nw)
                            now=now+nw
                         enddo
+                        if (now.gt.nwamax) call error('gamout',&
+                            'scratch storage exceeded',' ')
                         call pttab(ltt,scr,nout)
                      endif
                   enddo
@@ -4836,6 +4885,10 @@ contains
    !--the gamma angle and energy distributions are ready
    call amend(nout,0)
    call atend(nout,0)
+   if (allocated(ee)) deallocate(ee)
+   if (allocated(eb)) deallocate(eb)
+   deallocate(scr)
+   deallocate(sig)
    deallocate(egn)
    deallocate(egg)
    return
@@ -4878,7 +4931,7 @@ contains
    !--initialize
    inow=0
    nnex=0
-   nwscr=10000
+   nwscr=1000000
    allocate(scr(nwscr))
    do i=1,8
       nxsd(i)=0
@@ -5138,6 +5191,8 @@ contains
                call moreio(nin,0,0,scr(inow),nb,nw)
                inow=inow+nw
             enddo
+            if (inow.gt.nwscr) call error('acelod',&
+                'exceeded scratch storage',' ')
             m=nint(scr(5))
             n=nint(scr(6))
             jnt=nint(scr(8))
@@ -5754,6 +5809,8 @@ contains
                   call moreio(nin,0,0,scr(jscr),nb,nw)
                   jscr=jscr+nw
                enddo
+               if (jscr.gt.nwscr) call error('acelod',&
+                   'exceeded scratch storage',' ')
             endif
             iso=nint(scr(3))
             lct=nint(scr(4))
@@ -6055,6 +6112,8 @@ contains
                   call moreio(nin,0,0,scr(loc),nb,nw)
                   loc=loc+nw
                enddo
+               if (loc.gt.nwscr) call error('acelod',&
+                   'exceeded scratch storage',' ')
                l=next+1
                sumup=0
                do j=1,mm
@@ -6089,6 +6148,8 @@ contains
                call moreio(nin,0,0,scr(loc),nb,nw)
                loc=loc+nw
             enddo
+            if (loc.gt.nwscr) call error('acelod',&
+                'exceeded scratch storage',' ')
             nn=n1h
             mm=n2h
 
@@ -6109,6 +6170,8 @@ contains
                   mm=mm+1
                enddo
             endif
+            if (2*mm+10.gt.nwscr) call error('acelod',&
+                'exceeded scratch storage',' ')
 
             !--there is no incident energy dependence, we represent
             !--this by two energies with duplicated distributions
@@ -6233,6 +6296,11 @@ contains
 
    !--load particle production information
    call acelcp(next,matd,nin,za,awr)
+   if (allocated(urd)) deallocate(urd)
+   if (allocated(nudn)) deallocate(nudn)
+   if (allocated(nup)) deallocate(nup)
+   if (allocated(nut)) deallocate(nut)
+   deallocate(scr)
 
    return
    end subroutine acelod
@@ -6690,6 +6758,8 @@ contains
                  'scratch storage exceeded reading lf=1',' ')
                call moreio(nin,0,0,scr(jscr),nb,nw)
             enddo
+            if (jscr+nw.gt.nwscr) call error('acelf5',&
+                'scratch storage exceeded',' ')
             e=c2h
             xss(next+j)=sigfig(e/emev,7,0)
             xss(nextn+j)=nexd-dlw+1
@@ -6732,6 +6802,8 @@ contains
                   endif
                enddo
             endif
+            if (14+2*m+2*n.gt.nwscr) call error('acelf5',&
+                'scratch storage exceeded',' ')
             xss(nexd)=jnt
             xss(nexd+1)=n
             nexd=nexd+1
@@ -7011,7 +7083,7 @@ contains
    integer::loc(5)
    character(60)::strng
    real(kr),dimension(:),allocatable::scr
-   integer,parameter::nwscr=18000
+   integer,parameter::nwscr=1000000
    real(kr),parameter::emev=1.e6_kr
    real(kr),parameter::small=1.e-30_kr
    real(kr),parameter::etop=1.e10_kr
@@ -7074,6 +7146,8 @@ contains
             jnt=nint(scr(jscr+5+2*m))
             if (next+2*m+2*n+3.gt.nxss) call error('acelf6',&
               'insufficient space for mf6 neutron yield',' ')
+            if (jscr+5+2*m+2*n+1.gt.nwscr) call error('acelf6',&
+                'exceeded scratch storage',' ')
             jscr=jscr+nw
             do while (nb.ne.0)
                call moreio(nin,0,0,scr(jscr),nb,nw)
@@ -7350,6 +7424,8 @@ contains
       n=nint(scr(6))
       if (next+2*m+1.gt.nxss) call error('acelf6',&
         'insufficient space for mf6 tab2',' ')
+      if (6+2*m+1.gt.nwscr) call error('acelf6',&
+          'exceeded scratch storage',' ')
       jnt=nint(scr(8))
       jnt=mod(jnt,10)
       if (jnt.gt.2) jnt=2
@@ -7383,6 +7459,8 @@ contains
                call moreio(nin,0,0,scr(jscr),nb,nw)
                jscr=jscr+nw
             enddo
+            if (jscr.gt.nwscr) call error('acelf6',&
+            'exceeded scratch storage',' ')
             xss(next+j)=sigfig(c2h/emev,7,0)
             ee=c2h/emev
             xss(nextn+j)=nexd-dlw+1
@@ -7445,6 +7523,8 @@ contains
                ! make room for initial data at zero energy, then
                ! insert those zero energy data
                if (scr(7).gt.ex) then
+                  if(6+nx+ncyc+1.gt.nwscr) call error('acelf6',&
+                     'exceeded scratch storage',' ')
                   write(nsyso,'('' extending lin-lin as sqrt(E) '',&
                    &''below'',1p,e10.2,'' MeV for E='',e10.2,'' MeV mt='',i3)&
                    &')scr(7)/emev,ee,mt
@@ -7461,6 +7541,8 @@ contains
                ! insert new data between the original E1 and zero.
                ! continue until reach an energy below ex.
                do while (scr(7+ncyc).gt.ex)
+                 if(6+nx+ncyc+1.gt.nwscr) call error('acelf6',&
+                    'exceeded scratch storage',' ')
                   nn=nn+1
                   do ix=nx,ncyc+1,-1
                      scr(6+ncyc+ix)=scr(6+ix)
@@ -7657,6 +7739,8 @@ contains
                   xss(nexcd)=intmu
                   nmu=nint(scr(jscr+5))
                   xss(nexcd+1)=nmu
+                  if (jscr+7+2*nmu+1.gt.nwscr) call error('acelf6',&
+                      'exceeded scratch storage',' ')
                   do imu=1,nmu
                      xss(nexcd+1+imu)=sigfig(scr(jscr+6+2*imu),7,0)
                      xss(nexcd+1+nmu+imu)=sigfig(scr(jscr+7+2*imu),7,0)
@@ -7748,6 +7832,8 @@ contains
                   call moreio(nin,0,0,scr(jscr),nb,nw)
                   jscr=jscr+nw
                enddo
+               if (jscr.gt.nwscr) call error('acelf6',&
+                   'exceeded scratch storage',' ')
                xss(mus+imu-1)=c2h
                xss(mus+nmu+imu-1)=nexd-dlw+1
                xss(nexd)=intep
@@ -8074,8 +8160,9 @@ contains
    real(kr),dimension(:),allocatable::scr
    real(kr),dimension(:),allocatable::dise
    real(kr),dimension(:),allocatable::tdise
+   character(120)::line1,line2
    character(66)::strng
-   integer,parameter::nwscr=5000
+   integer,parameter::nwscr=1000000
    integer,parameter::ndise=5000
    real(kr),dimension(:),allocatable::phot
    real(kr),parameter::emev=1.e6_kr
@@ -8388,6 +8475,8 @@ contains
                   jscr=jscr+nw
                   call moreio(nin,0,0,scr(jscr),nb,nw)
                enddo
+               if (jscr+nw.gt.nwscr) call error('acelpp',&
+                   'exceeded scratch storage',' ')
                m=n1h
                n=n2h
                jnt=nint(scr(6+2*m))
@@ -8432,11 +8521,10 @@ contains
                   jscr=1
                   do while (nb.ne.0)
                      jscr=jscr+nw
-                     if (jscr.gt.nwscr) call error('acelpp',&
-                       'insufficient storage for input photon data.',&
-                       ' ')
                      call moreio(nin,0,0,scr(jscr),nb,nw)
                   enddo
+                  if (jscr+nw.gt.nwscr) call error('acelpp',&
+                      'insufficient storage for input photon data.',' ')
                   xss(nex-1+ie)=sigfig(c2h/emev,7,0)
                   xss(nex-1+ne+ie)=nexd-dlwp+1
                   m=n1h
@@ -8506,6 +8594,8 @@ contains
                jscr=jscr+nw
                call moreio(nin,0,0,scr(jscr),nb,nw)
             enddo
+            if (jscr+nw.gt.nwscr) call error('acelpp',&
+                'exceeded scratch storage',' ')
             if (nd.gt.0) then
                !--create an initial list of discrete photons.
                !--use nd0 as a list counter.  if a discrete photon
@@ -8553,6 +8643,17 @@ contains
                      endif
                      do m=1,nd0
                         r=abs(ep/dise(m)-1)
+                        if (r.le.eps.and.r.gt.0.9*eps)then
+                          write(line1,'(a,1pe16.9)')'two discrete photon energies are &
+                          &too close, difference less than ',eps
+                          write(line2,*)'photon energy corresponding to the &
+                          &second read value will be ignored'
+                          call mess('acelpp',line1,line2)
+                          write(line1,'(a,i6,a,1pe16.9)')'mtd= ',mtd,' Incident energy ei= ',ei
+                          write(line2,'(a,i6,a,1pe16.9,a,i6,a,1pe16.9)')'Photon energy(',ki,')= ',ep,&
+                          &' compared against dise(',m,')= ',dise(m)
+                          call mess('acelpp',line1,line2)
+                        endif
                         if (r.le.eps) go to 111
                      enddo
                      !--found a new discrete energy.  insert it into
@@ -8593,8 +8694,8 @@ contains
                   enddo
                endif
                if (nd0.gt.ndise) then
-                  write(strng,'(''nwords is'',i6,'' but need '',i6)')&
-                        nwords,nd0
+                  write(strng, '(''ndise is'',i6,'' but need '',i6)')&
+                        ndise,nd0
                   call error('acelpp',&
                              'too many discrete photons found',strng)
                endif
@@ -8611,6 +8712,8 @@ contains
             jscr=jscr+nw
             call moreio(nin,0,0,scr(jscr),nb,nw)
          enddo
+         if (jscr+nw.gt.nwscr) call error('acelpp',&
+             'exceeded scratch storage',' ')
          m=n1h
          n=n2h
          xss(nex+3)=0
@@ -8655,6 +8758,8 @@ contains
                jscr=jscr+nw
                call moreio(nin,0,0,scr(jscr),nb,nw)
             enddo
+            if (jscr+nw.gt.nwscr) call error('acelpp',&
+                'exceeded scratch storage',' ')
             xss(nex-1+ie)=sigfig(c2h/emev,7,0)
             xss(nex-1+ne+ie)=nexd-dlwp+1
             n=n2h
@@ -9007,7 +9112,7 @@ contains
    real(kr)::eav,suml,chkl,ebar,ad,amuu,amulst,chklst,heat,g
    real(kr)::epl,gl,gammsq,amun,eavlst
    real(kr),dimension(:),allocatable::scr
-   integer,parameter::nwscr=800000
+   integer,parameter::nwscr=10000000
    real(kr),parameter::awr1=.99862e0_kr
    real(kr),parameter::awr2=1.99626e0_kr
    real(kr),parameter::awr3=2.98960e0_kr
@@ -9075,6 +9180,7 @@ contains
       ptype=0
       ntro=0
       ploct=0
+      deallocate(scr)
       return
    endif
 
@@ -9210,6 +9316,8 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
+                  if (ll.gt.nwscr) call error('acelcp',&
+                      'exceeded scratch storage',' ')
 
                   !--if not the desired particle,
                   !--or not a law=1 subsection,
@@ -9229,6 +9337,8 @@ contains
                            call moreio(nin,0,0,scr(ll),nb,nw)
                            ll=ll+nw
                         enddo
+                        if (ll.gt.nwscr) call error('acelcp',&
+                            'exceeded scratch storage',' ')
                         na=nint(scr(4))
                         if (na.gt.0) isocp=0
                      enddo
@@ -9680,6 +9790,8 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
+                  if (ll.gt.nwscr) call error('acelcp',&
+                      'exceeded scratch storage',' ')
                   if (ik.eq.lprod(j)) then
                      lld=ll
                      xss(landh+jp-1)=-1
@@ -9705,6 +9817,8 @@ contains
                         call moreio(nin,0,0,scr(ll),nb,nw)
                         ll=ll+nw
                      enddo
+                     if (ll.gt.nwscr) call error('acelcp',&
+                         'exceeded scratch storage',' ')
                   endif
 
                   !--law 2 angular distribution
@@ -9852,6 +9966,8 @@ contains
                            call moreio(nin,0,0,scr(ll),nb,nw)
                            ll=ll+nw
                         enddo
+                        if (ll.gt.nwscr) call error('acelcp',&
+                            'exceeded scratch storage',' ')
                         nmu=nint(scr(lld+3))
                         nx=nint(scr(lld+5))
                         intx=nint(scr(lld+7))
@@ -10020,6 +10136,8 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
+                  if (ll.gt.nwscr) call error('acelcp',&
+                      'exceeded scratch storage',' ')
 
                   !--if not the desired particle, skip the subsection
                   if (ik.ne.lprod(j).or.law.ne.1) then
@@ -10039,6 +10157,8 @@ contains
                            call moreio(nin,0,0,scr(ll),nb,nw)
                            ll=ll+nw
                         enddo
+                        if (ll.gt.nwscr) call error('acelcp',&
+                            'exceeded scratch storage',' ')
                         na=nint(scr(lld+3))
                         if (na.gt.0) isocp=0
                      enddo
@@ -10064,6 +10184,8 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
+                  if (ll.gt.nwscr) call error('acelcp',&
+                      'exceeded scratch storage',' ')
 
                   !--if not the desired particle, skip the subsection
                   if (izap.ne.ip) then
@@ -10142,6 +10264,8 @@ contains
                            call moreio(nin,0,0,scr(ll),nb,nw)
                            ll=ll+nw
                         enddo
+                        if (ll.gt.nwscr) call error('acelcp',&
+                            'exceeded scratch storage',' ')
                         if (ie.eq.1) then
                            xss(lee+2)=sigfig(scr(lld+1)/emev,7,0)
                            xss(lee+4)=1
@@ -10572,6 +10696,8 @@ contains
                               call moreio(nin,0,0,scr(ll),nb,nw)
                               ll=ll+nw
                            enddo
+                           if (ll.gt.nwscr) call error('acelcp',&
+                               'exceeded scratch storage',' ')
                            xss(mus+imu-1)=c2h
                            amuu=c2h
                            xss(mus+nmu+imu-1)=next-dlwh+1
@@ -10704,7 +10830,10 @@ contains
    !--continue loop over production types
    enddo
    len2=next-1
-   if (izai.le.1) return
+   if (izai.le.1) then
+     deallocate(scr)
+     return
+   endif
 
    !--for incident charged particles,
    !--go back through file 6 and get heating from recoils
@@ -10736,6 +10865,8 @@ contains
                call moreio(nin,0,0,scr(ll),nb,nw)
                ll=ll+nw
             enddo
+            if (ll.gt.nwscr) call error('acelcp',&
+                'exceeded scratch storage',' ')
 
             !--compute the heating from this recoil nuclide
             if (izap.gt.2004) then
@@ -10765,6 +10896,8 @@ contains
                         call moreio(nin,0,0,scr(ll),nb,nw)
                         ll=ll+nw
                      enddo
+                     if (ll.gt.nwscr) call error('acelcp',&
+                         'exceeded scratch storage',' ')
                      e=c2h
                      if (law.ne.2) then
                         heat=0
@@ -10835,7 +10968,11 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
+                  if (ll.gt.nwscr) call error('acelcp',&
+                      'exceeded scratch storage',' ')
                   call tab2io(nin,0,0,scr(ll),nb,nw)
+                  if (ll+nw.gt.nwscr) call error('acelcp',&
+                      'exceeded scratch storage',' ')
                   ne=nint(scr(ll+5))
                   th=(1+amass)*q/amass
                   r1=amass*(amass+1-aprime)/aprime
@@ -12338,6 +12475,7 @@ contains
         &'' ---------------------------------------------------''//&
         &(6x,12i6))') (nint(xss(i+yp)),i=1,nyp)
    endif
+   if (allocated(indx)) deallocate(indx)
    return
    end subroutine aceppp
 
@@ -12836,21 +12974,21 @@ contains
    if (mcnpx.eq.0) then
       if (iurpt.gt.0) then
          write(ndir,&
-           '(a10,f12.6,'' filename route'',i2,i4,1x,i8,2i6,1p,e10.3,&
+           '(a10,f12.6,'' filename route'',i2,i4,1x,i9,2i6,1p,e10.3,&
            &'' ptable'')') hz(1:10),aw0,itype,irec1,len2,lrec,nern,tz
       else
          write(ndir,&
-           '(a10,f12.6,'' filename route'',i2,i4,1x,i8,2i6,1p,e10.3)')&
+           '(a10,f12.6,'' filename route'',i2,i4,1x,i9,2i6,1p,e10.3)')&
            hz(1:10),aw0,itype,irec1,len2,lrec,nern,tz
       endif
    else
       if (iurpt.gt.0) then
          write(ndir,&
-           '(a13,f12.6,'' file route'',i2,i4,1x,i8,2i6,1p,e10.3,&
+           '(a13,f12.6,'' file route'',i2,i4,1x,i9,2i6,1p,e10.3,&
            &'' ptable'')') hz(1:13),aw0,itype,irec1,len2,lrec,nern,tz
       else
          write(ndir,&
-           '(a13,f12.6,'' file route'',i2,i4,1x,i8,2i6,1p,e10.3)')&
+           '(a13,f12.6,'' file route'',i2,i4,1x,i9,2i6,1p,e10.3)')&
           hz(1:13),aw0,itype,irec1,len2,lrec,nern,tz
       endif
    endif
@@ -14117,6 +14255,8 @@ contains
    integer::ipt,mtrh,nmtr
    integer::hpd,lsigh,sigh,ldlwh,dlwh,nj
    integer::locl(20)
+   integer::nure,nurb,lurt,luri,lura,lurf,ib
+   integer::nerrtb,nerrxt,nerrxe,nerrxf,nerrxg,nerrxh
    real(kr)::thresh,elast,e,aprime,q,epmax,clast,ep,c,p,r
    real(kr)::cclast,co,cc,gsum,ss,y,gg,sum,frac,x,xlast
    character(10)::name
@@ -14634,6 +14774,107 @@ contains
                enddo
             endif
          enddo
+      enddo
+   endif
+
+   !--check unresolved-range probability tables
+   if (iurpt.ne.0) then
+      write(nsyso,'(/'' check probability tables''/&
+      &'' ------------------------'')')
+      nure=nint(xss(iurpt))
+      nurb=nint(xss(iurpt+1))
+      lurt=nint(xss(iurpt+2))
+      luri=nint(xss(iurpt+3))
+      lura=nint(xss(iurpt+4))
+      lurf=nint(xss(iurpt+5))
+      write(nsyso,'(/''     number of energies: '',i6/&
+                    &''     number of bins:     '',i6/&
+                    &''     interpolation law:  '',i6/&
+                    &''     inelastic reaction: '',i6/&
+                    &''     absorption reaction:'',i6)')&
+                    & nure,nurb,lurt,luri,lura
+      if (lurf.eq.0) write(nsyso,'(&
+                    &''     tables are cross sections (lssf=0)'')')
+      if (lurf.eq.1) write(nsyso,'(&
+                    &''     tables are factors (lssf=1)'')')
+      do ie=1,nure
+         write(nsyso,'(/'' energy='',1p,e14.6)') xss(iurpt+5+ie)
+         nerrtb=0
+         nerrxt=0
+         nerrxe=0
+         nerrxf=0
+         nerrxg=0
+         nerrxh=0
+         ll=iurpt+5+nure+(ie-1)*6*nurb
+         do ib=1,nurb
+           if (xss(ll+ib).lt.0.0d0) then
+             write(nsyso,'('' consis: negative probability value='',&
+             & 1pe14.6,'' for bin '',i4)')xss(ll+ib),ib
+             nerrtb=nerrtb+1
+           endif
+           if (xss(ll+nurb+ib).lt.0.0d0) then
+             write(nsyso,'('' consis: negative total cross section/factor='',&
+             & 1pe14.6,'' for bin '',i4)')xss(ll+nurb+ib),ib
+             nerrxt=nerrxt+1
+           endif
+           if (xss(ll+2*nurb+ib).lt.0.0d0) then
+             write(nsyso,'('' consis: negative elastic cross section/factor='',&
+             & 1pe14.6,'' for bin '',i4)')xss(ll+2*nurb+ib),ib
+             nerrxe=nerrxe+1
+           endif
+           if (xss(ll+3*nurb+ib).lt.0.0d0) then
+             write(nsyso,'('' consis: negative fission cross section/factor='',&
+             & 1pe14.6,'' for bin '',i4)')xss(ll+3*nurb+ib),ib
+             nerrxf=nerrxf+1
+           endif
+           if (xss(ll+4*nurb+ib).lt.0.0d0) then
+             write(nsyso,'('' consis: negative capture cross section/factor='',&
+             & 1pe14.6,'' for bin '',i4)')xss(ll+4*nurb+ib),ib
+             nerrxg=nerrxg+1
+           endif
+           if (xss(ll+5*nurb+ib).lt.0.0d0) then
+             write(nsyso,'('' consis: negative heating cross section/factor='',&
+             & 1pe14.6,'' for bin '',i4)')xss(ll+5*nurb+ib),ib
+             nerrxh=nerrxh+1
+           endif
+         enddo
+         nerr=nerr+nerrtb+nerrxt+nerrxe+nerrxf+nerrxg+nerrxh
+         if (nerrxh.gt.0.and.lurf.eq.1) then
+           write(nsyso,'('' consis: ***** heating factors corrected by '',&
+           & ''setting to  1.000000E+00 *****'')')
+           do ib=1,nurb
+             xss(ll+5*nurb+ib)=1.0d0
+           enddo
+         elseif (nerrxh.gt.0.and.lurf.eq.0) then
+           c=xss(iurpt+5+ie)
+           do k=1,nes
+             e=xss(esz+k)
+             if (c.le.e) then
+               ib=k
+               exit
+             endif
+           enddo
+           if (c.lt.e) then
+             y=(c-xss(esz+ib-1))/(e-xss(esz+ib-1))* &
+              & (xss(esz+nes+ib)-xss(esz+nes+ib-1))+xss(esz+nes+ib-1)
+             x=(c-xss(esz+ib-1))/(e-xss(esz+ib-1))* &
+              & (xss(esz+4*nes+ib)-xss(esz+4*nes+ib-1))+xss(esz+4*nes+ib-1)
+           else
+             y=xss(esz+nes+ib)
+             x=xss(esz+4*nes+ib)
+           endif
+           if (y.ne.0.0d0) then
+             c=x/y
+           else
+             c=0.0d0
+           endif
+           write(nsyso,'('' consis: ***** heating values corrected by '',&
+           & ''setting to '',1pe14.6," *****")')c
+           do ib=1,nurb
+             xss(ll+5*nurb+ib)=c
+             if (xss(ll+5*nurb+ib).lt.0.0d0) xss(ll+5*nurb+ib)=0.0d0
+           enddo
+         endif
       enddo
    endif
 
@@ -17036,6 +17277,7 @@ contains
 
    ! initialise
    it=0
+
 
    !--loop over angular distributions
    nr1=nr+1
@@ -19528,3 +19770,4 @@ contains
    end subroutine ascll
 
 end module acefc
+

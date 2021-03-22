@@ -242,7 +242,7 @@ contains
    !     30           ukaea 1025-group structure  (30 MeV)
    !     31           ukaea 1067-group structure (200 MeV)
    !     32           ukaea 1102-group structure   (1 GeV)
-   !     33           ukaea  142-group structure (200 MeV)   
+   !     33           ukaea  142-group structure (200 MeV)
    !     34           lanl 618-group structure
    !
    !     igg          meaning
@@ -365,7 +365,7 @@ contains
    real(kr),parameter::zero=0
 
    !--initialize
-   nwscr=10000
+   nwscr=20000
    nfscr=10
    nflx=11
    nend2=12
@@ -619,6 +619,20 @@ contains
    if (mfd.gt.36.and.mfd.lt.10000000) go to 381
    if (mfd.ge.12.and.mfd.le.18.and.igg.eq.0)&
      call error('groupr','photons not allowed with igg=0.',' ')
+   if ((mfd.eq.26.and.mtdp.eq.18) .or. &
+       (mfd.eq.26.and.mtdp.eq.19) .or. &
+       (mfd.eq.26.and.mtdp.eq.20) .or. &
+       (mfd.eq.26.and.mtdp.eq.21) .or. &
+       (mfd.eq.26.and.mtdp.eq.38) .or. &
+       (mfd.eq.36.and.mtdp.eq.18) .or. &
+       (mfd.eq.36.and.mtdp.eq.19) .or. &
+       (mfd.eq.36.and.mtdp.eq.20) .or. &
+       (mfd.eq.36.and.mtdp.eq.21) .or. &
+       (mfd.eq.36.and.mtdp.eq.38)) then
+       call mess('groupr','no heavy residual with fission',&
+                          'skipping this input request')
+       go to 365
+   endif
    if (mfd.eq.0) go to 590
    if (mtdp.eq.-1000) go to 382
    read(strng,'(15a4)') (mtname(i),i=1,15)
@@ -961,6 +975,7 @@ contains
    deallocate(egn)
    deallocate(egg)
    deallocate(wtbuf)
+   deallocate(scr)
    if (allocated(wght)) deallocate(wght)
    if (allocated(temp)) deallocate(temp)
    if (allocated(sigz)) deallocate(sigz)
@@ -1592,8 +1607,8 @@ contains
    !    30      UKAEA 1025-group structure
    !    31      UKAEA 1067-group structure
    !    32      UKAEA 1102-group structure
-   !    33      UKAEA  142-group structure   
-   !    34      LANL 618 group structure   
+   !    33      UKAEA  142-group structure
+   !    34      LANL 618 group structure
    !
    !-------------------------------------------------------------------
    use mainio ! provides nsyso
@@ -3537,7 +3552,7 @@ contains
      1.202264e+08_kr,1.258925e+08_kr,1.318257e+08_kr,1.380384e+08_kr,&
      1.445440e+08_kr,1.513561e+08_kr,1.584893e+08_kr,1.659587e+08_kr,&
      1.737801e+08_kr,1.819701e+08_kr,1.905461e+08_kr,1.995262e+08_kr/)
-   real(kr),dimension(1103),parameter::eg32=(/& 
+   real(kr),dimension(1103),parameter::eg32=(/&
      1.000000e-05_kr,1.047129e-05_kr,1.096478e-05_kr,1.148154e-05_kr,&
      1.202264e-05_kr,1.258925e-05_kr,1.318257e-05_kr,1.380384e-05_kr,&
      1.445440e-05_kr,1.513561e-05_kr,1.584893e-05_kr,1.659587e-05_kr,&
@@ -3814,7 +3829,7 @@ contains
      6.309573e+08_kr,6.606934e+08_kr,6.918310e+08_kr,7.244360e+08_kr,&
      7.585776e+08_kr,7.943282e+08_kr,8.317638e+08_kr,8.709636e+08_kr,&
      9.120108e+08_kr,9.549926e+08_kr,1.000000e+09_kr/)
-   real(kr),dimension(143),parameter::eg33=(/& 
+   real(kr),dimension(143),parameter::eg33=(/&
      5.000000e+03_kr,1.000000e+04_kr,1.500000e+04_kr,2.000000e+04_kr,&
      2.500000e+04_kr,3.000000e+04_kr,3.500000e+04_kr,4.000000e+04_kr,&
      4.500000e+04_kr,5.000000e+04_kr,5.500000e+04_kr,6.000000e+04_kr,&
@@ -3851,7 +3866,7 @@ contains
      5.500000e+07_kr,6.000000e+07_kr,7.000000e+07_kr,8.000000e+07_kr,&
      9.000000e+07_kr,1.000000e+08_kr,1.200000e+08_kr,1.400000e+08_kr,&
      1.600000e+08_kr,1.800000e+08_kr,2.000000e+08_kr/)
-   real(kr),dimension(619),parameter::eg618=(/& 
+   real(kr),dimension(619),parameter::eg618=(/&
      1.00000000000000e-05_kr,2.56901129797510e-05_kr,4.23558357164050e-05_kr,&
      6.98329672839171e-05_kr,1.15135098557100e-04_kr,1.39000000000000e-04_kr,&
      1.89825685995247e-04_kr,2.43741005558083e-04_kr,3.12969646225607e-04_kr,&
@@ -4410,7 +4425,7 @@ contains
       ngp=ngn+1
       allocate(egn(ngp))
       do ig=1,ngp
-         egn(ig)=eg24(ig)
+         egn(ig)=eg29(ig)
       enddo
 
    !--ukaea  1025-group structure
@@ -4419,7 +4434,7 @@ contains
       ngp=ngn+1
       allocate(egn(ngp))
       do ig=1,ngp
-         egn(ig)=eg25(ig)
+         egn(ig)=eg30(ig)
       enddo
 
    !--ukaea  1067-group structure
@@ -4428,7 +4443,7 @@ contains
       ngp=ngn+1
       allocate(egn(ngp))
       do ig=1,ngp
-         egn(ig)=eg26(ig)
+         egn(ig)=eg31(ig)
       enddo
 
    !--ukaea  1102-group structure
@@ -4437,7 +4452,7 @@ contains
       ngp=ngn+1
       allocate(egn(ngp))
       do ig=1,ngp
-         egn(ig)=eg27(ig)
+         egn(ig)=eg32(ig)
       enddo
 
    !--ukaea  142-group structure
@@ -4446,7 +4461,7 @@ contains
       ngp=ngn+1
       allocate(egn(ngp))
       do ig=1,ngp
-         egn(ig)=eg28(ig)
+         egn(ig)=eg33(ig)
       enddo
 
    !--lanl 618 group structure
@@ -6612,7 +6627,7 @@ contains
          enddo
          if (jfs.lt.0) then
             write(strng,'("can''t find mf,mt,izar,lfs = ",3i9,i5)')&
-                                       mf,mt,izar,lfs
+                           mf,mt,izar,lfs
             call error('getsig',strng,' ')
          endif
          nskip=jfs-1
@@ -7448,7 +7463,7 @@ contains
    real(kr),parameter::eps=0.02e0_kr
    real(kr),parameter::zero=0
    real(kr),parameter::alight=5
-   integer,parameter::ntmp=990000
+   integer,parameter::ntmp=1000000
    save nne,ne,int
    save jlo,elo,jhi,ehi,terml
    save pspmax,langn,lepn,disc102
@@ -8470,7 +8485,11 @@ contains
       do while (idone.eq.0)
          epnext=cnow(lnow)
          if (ep.lt.off*epnext) then
-            eplast=cnow(lnow-ncnow)
+            if (lnow.gt.inow) then
+               eplast=cnow(lnow-ncnow)
+            else
+               eplast=0
+            endif
             if (ep.ge.off*eplast) then
                idone=1
             else
@@ -9579,7 +9598,8 @@ contains
    character(60)::strng
    integer,parameter::mxlg=65
    real(kr)::flo(mxlg),fhi(mxlg)
-   integer,parameter::ncmax=350
+   integer,parameter::ncmax=7000
+   integer ll
    real(kr)::fls(ncmax)
    real(kr),parameter::emax=1.e10_kr
    real(kr),parameter::small=1.e-10_kr
@@ -9689,8 +9709,22 @@ contains
    else if (nne.eq.ne) then
       call error('getfle','desired energy above highest given.',' ')
    endif
-   if (ltt.eq.1) call listio(nin,0,0,fls(iraw),nb,nwc)
-   if (ltt.eq.2) call tab1io(nin,0,0,fls(iraw),nb,nwc)
+   if (ltt.eq.1) then
+     ll=iraw
+     call listio(nin,0,0,fls(iraw),nb,nwc)
+     do while(nb.ne.0)
+       ll=ll+nwc
+       call moreio(nin,0,0,fls(ll),nb,nwc)
+     enddo
+   endif
+   if (ltt.eq.2) then
+     ll=iraw
+     call tab1io(nin,0,0,fls(iraw),nb,nwc)
+     do while(nb.ne.0)
+       ll=ll+nwc
+       call moreio(nin,0,0,fls(ll),nb,nwc)
+     enddo
+   endif
    ehi=fls(iraw+1)
    nhi=nle
    if (lidp.ge.0) fls(iraw+3)=lidp
@@ -10189,7 +10223,7 @@ contains
    li=nint(b(3))
    ltt=nint(b(4))
    ni=nint(b(6))
-   ntmp=10000
+   ntmp=20000
    allocate(tmp(ntmp))
    enext=emax
 
@@ -10997,7 +11031,11 @@ contains
          irr25=irr25+1
       endif
    endif
-   if (jzar.gt.2004) then
+   if (jzar.gt.2004.and.(mth.ne.18.and.&
+                         mth.ne.19.and.&
+                         mth.ne.20.and.&
+                         mth.ne.21.and.&
+                         mth.ne.38)) then  !don't include fission
       itest=0
       if (irr26.ne.1) then
          if (mth.le.iabs(mf4r(6,irr26-1))+1) itest=1
@@ -11560,6 +11598,9 @@ contains
    imf25=imf25+1
    go to 790
   755 continue
+   if (mth.eq.18.or.mth.eq.19.or.&
+       mth.eq.20.or.mth.eq.21.or.&
+       mth.eq.38) go to 790  !don't include fission
    if (imf26.eq.1) go to 756
    if (mth.eq.iabs(mf6p(6,imf26-1))) go to 790
    if (mth.gt.iabs(mf6p(6,imf26-1))+1) go to 756
@@ -11661,6 +11702,7 @@ contains
    mf4r(4,irr24)=0
    mf4r(5,irr25)=0
    mf4r(6,irr26)=0
+   deallocate(scr)
    return
    end subroutine conver
 
@@ -11750,6 +11792,8 @@ contains
                   call moreio(nin,0,0,tmp(l),nb,nw)
                   l=l+nw
                enddo
+               if (l.gt.ntmp) call error('getsed',&
+                   'exceeded tmp storage',' ')
                do ip=2,np
                   delta=abs(tmp(ln+2*ip)-tmp(ln+2*ip-2))
                   if (delta.ge.eps*tmp(ln+2*ip-2)) then
@@ -11769,6 +11813,8 @@ contains
                      call moreio(nin,0,0,tmp(l),nb,nw)
                      l=l+nw
                   enddo
+                  if (l.gt.ntmp) call error('getsed',&
+                      'exceeded tmp storage',' ')
                   !extend lowest delayed bin using sqrt(e) shape
                   if (ismooth.gt.0.and.mtd.eq.455.and.&
                     nint(tmp(l1+7)).eq.1) then
