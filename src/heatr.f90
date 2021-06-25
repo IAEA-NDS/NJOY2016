@@ -19,6 +19,7 @@ module heatm
    ! global variables
    integer::matd,mgam,npk,mtp(28),nqa,mta(nqamax),mt303,mt19
    integer::ne,kchk,iprint,lqs(nqamax)
+   integer::kkerma
    real(kr),dimension(:),allocatable::qbar
    real(kr)::qa(nqamax),efirst,elast,za,awr,elist(ilmax)
    real(kr)::break
@@ -96,6 +97,8 @@ contains
    !    iprint   print (0 min, 1 max, 2 check) (default=0)
    !    ed       displacement energy for damage
    !             (default from built-in table)
+   !    kkerma   0/1=total (mt301) is energy balance / kinematic
+   !             (default=0)
    ! card 3      for npk gt 0 only
    !    mtk      mt numbers for partial kermas desired
    !             total (mt301) will be provided automatically.
@@ -141,6 +144,7 @@ contains
    real(kr),parameter::qflag=-1.e-9_kr
    real(kr),parameter::zero=0
    integer,parameter::maxqbar=10000
+   integer::mtkk
 
    !--start
    call timer(time)
@@ -161,7 +165,8 @@ contains
    local=0
    iprint=0
    break=0
-   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break
+   kkerma=0
+   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break,kkerma
    kchk=0
    if (iprint.eq.2) kchk=1
    if (iprint.eq.2) iprint=1
@@ -173,6 +178,28 @@ contains
      call error('heatr','requested too many q values.',' ')
    if (npk.gt.0) then
       read(nsysi,*) (mtk(i),i=1,npk)
+   endif
+   if (kkerma.eq.1) then
+      if (npk.gt.0) then
+         mtkk=0
+         do i=1,npk
+            if (mtk(i).eq.443) mtkk=i
+         enddo
+         if (mtkk.eq.0) then
+            npk=npk+1
+            if (kchk.eq.1) then
+              npkk=3*npk+7
+            else
+              npkk=npk+3
+            endif
+            if (npkk.gt.npkmax) call error('heatr',&
+              'requested too many kerma mt-s (6+mt301 allowed).',' ')
+            mtk(npk)=443
+         endif
+       else
+         npk=1
+         mtk(npk)=443
+       endif
    endif
    allocate(tmp(maxqbar))
    loc=1
@@ -623,7 +650,7 @@ contains
 
    !--calculate q change for fissionables in mt 458
    if (ifiss.ne.0) then
-      deallocate(scr)
+      if (allocated(scr)) deallocate(scr)
       nw=10000
       allocate(scr(nw))
       if (allocated(c458)) deallocate(c458)
@@ -1659,7 +1686,7 @@ contains
    !     300 + MT for reaction
    ! Special values allowed are
    !     303=nonelastic (all but MT2)
-   !     304=inelastic (MTs1-91)
+   !     304=inelastic (MT51-91)
    !     318=fission (MT18 or MT19-21 and MT38)
    !     401=disappearance (MT102-120)
    !     442=total photon ev-barns in kerma
@@ -5059,6 +5086,7 @@ contains
    real(kr),parameter::zero=0
    integer::mf6flg
    character(len=70)::strng1,strng2
+   integer::mt402,mt301
 
    !--allocate buffers for loada/finda
    allocate(bufo(nbuf))
@@ -5073,6 +5101,14 @@ contains
    e=0
    dame=df(e,z,awr,z,awr)
    mgam=2
+   mt301=0
+   mt402=0
+   if (kkerma.eq.1) then
+      do i=2,npk
+         if (mtp(i).eq.402) mt402=(npk-1)*2+i
+      enddo
+      mt301=(npk-1)*2+2
+   endif
   100 continue
    call contio(nscr,0,0,scr,nb,nw)
    if (mfh.eq.12) mgam=1
@@ -5289,6 +5325,10 @@ contains
          if (mtp(indxx).lt.442) c(indxx)=c(indxx)+h
          if (mtp(indxx).eq.442) c(indxx)=c(indxx)-h
          if (mtp(indxx).eq.443.and.mth.eq.102) c(indxx)=c(indxx)+hk
+         if (kkerma.eq.1.and.mtp(indxx).eq.443.and.mth.eq.102) then
+            c(mt402)=c(mt402)+hk
+            c(mt301)=c(mt301)+hk
+         endif
       enddo
    endif
    if (iprint.eq.0.or.e.ne.elist(ilist)) go to 180
@@ -5663,6 +5703,8 @@ contains
    real(kr)::x,y,xlast,ylo,yhi,thin,rat,elo,test,e
    real(kr)::c(30)
    integer::ncds(30)
+   integer::mt302,mt304,mt318,mt402
+   integer::mtkk
    character(4)::klo(9),khi(9)
    real(kr),dimension(:),allocatable::scr
    real(kr),dimension(:),allocatable::b
@@ -5705,6 +5747,20 @@ contains
          npktd=npktd-1
       endif
    enddo
+   mtkk=0
+   mt302=0
+   mt304=0
+   mt318=0
+   mt402=0
+   if (kkerma.eq.1) then
+      do i=2,npk
+         if (mtp(i).eq.443) mtkk=i
+         if (mtp(i).eq.302) mt302=(npk-1)*2+i
+         if (mtp(i).eq.304) mt304=(npk-1)*2+i
+         if (mtp(i).eq.318) mt318=(npk-1)*2+i
+         if (mtp(i).eq.402) mt402=(npk-1)*2+i
+      enddo
+   endif
    ilist=1
    nsc=0
    math=matd
@@ -5785,6 +5841,11 @@ contains
    i=i+2
    scr(ibase+i-1)=c(1)
    scr(ibase+i)=c(inpk)
+   if (mth.eq.301.and.kkerma.eq.1) scr(ibase+i)=c(mtkk)
+   if (mth.eq.302.and.kkerma.eq.1) scr(ibase+i)=c(mt302)
+   if (mth.eq.304.and.kkerma.eq.1) scr(ibase+i)=c(mt304)
+   if (mth.eq.318.and.kkerma.eq.1) scr(ibase+i)=c(mt318)
+   if (mth.eq.402.and.kkerma.eq.1) scr(ibase+i)=c(mt402)
    if (i.lt.npage.and.nn.ne.ne) go to 110
    if (ibase.eq.0) go to 120
    call tab1io(0,0,nscr,scr,nb,nw)
@@ -5812,6 +5873,8 @@ contains
    call asend(0,nscr)
    ncds(inpk)=3+(n+2)/3
    if (inpk.lt.npk) go to 105
+   if (kkerma.eq.1) write(nsyso,'(/'' total kerma (mt=301) was '',&
+       &''replaced to kinematic kerma (mt=443).'')')
    call afend(0,nscr)
    call repoz(nscr)
 
