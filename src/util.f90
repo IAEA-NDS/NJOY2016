@@ -193,6 +193,8 @@ contains
    if (nun.ge.10.and.nun.le.19) then
       ! scratch units
       age='scratch'
+      inquire(nun,opened=there)
+      if (there) close (nun)
       open(nun,form=for,status=age)
    else
       ! regular units

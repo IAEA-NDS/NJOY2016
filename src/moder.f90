@@ -1441,7 +1441,7 @@ contains
                     call mess('file32','1illegal value of ndigit',&
                               'set default, ndigit=2')
                   else
-                    call error('file32','illegal value of ndigit',' ')
+                    call error('file32','illegal1 value of ndigit',' ')
                   endif
                endif
                do k=1,nn
@@ -1496,7 +1496,7 @@ contains
                     call mess('file32','2illegal value of ndigit',&
                               'set default, ndigit=2')
                   else
-                    call error('file32','illegal value of ndigit',' ')
+                    call error('file32','illegal2 value of ndigit',' ')
                   endif
                endif
                do k=1,nn

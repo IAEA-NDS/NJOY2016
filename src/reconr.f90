@@ -1803,6 +1803,7 @@ contains
    allocate(bufn(nbuf))
    allocate(x(ndim))
    allocate(y(ndim))
+   if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
 
    ! this value fits 1/v to within err
@@ -4646,6 +4647,7 @@ contains
    allocate(bufn(nbuf))
    allocate(bufg(nbufg))
    allocate(bufr(nbufr))
+   if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
    nneg=0
    ntot=nmtr+1
@@ -4966,9 +4968,11 @@ contains
    real(kr),parameter::zero=0
 
    !--initialize.
+   if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
    allocate(bufo(nbuf))
    allocate(bufn(nbuf))
+   if (allocated(bufl)) deallocate(bufl)
    allocate(bufl(nbufl))
    i152=0
    if (nunr.gt.0) i152=1
