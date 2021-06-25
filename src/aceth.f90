@@ -22,7 +22,7 @@ module aceth
    integer::itie,itix,itxe,itce,itcx,itca,jxsd(26)
 
    ! body of the ace data
-   integer,parameter::nxss=9000000
+   integer,parameter::nxss=25000000
    real(kr)::xss(nxss)
    integer::nei
    real(kr),dimension(5000)::wt
@@ -530,7 +530,7 @@ contains
    !-------------------------------------------------------------------
    ! Print and or edit an ACE thermal file.
    !-------------------------------------------------------------------
-   use util  ! provides closz
+   use util ! provides closz
    use acecm ! provides newsuff
    ! externals
    integer::itype,nin,nout,ndir,iprint,nplot,mcnpx,nxtra

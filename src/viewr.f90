@@ -339,8 +339,8 @@ contains
    real(kr)::factx,facty
    real(kr)::xx,yy,zz
    character(80)::text
-   integer,parameter::mmax=20000   !same in plotr and viewr
-   integer,parameter::maxaa=200000
+   integer,parameter::mmax=50000   !same in plotr and viewr
+   integer,parameter::maxaa=500000
    real(kr),dimension(15)::z
    real(kr),dimension(maxaa)::aa
    real(kr),dimension(mmax)::x,y,b,dxm,dxp,dym,dyp
@@ -1273,12 +1273,12 @@ contains
    real(kr)::wt,xlo,xhi,ylo,yhi,zlo,zhi,xn,yn,zn,yy
    real(kr)::top,bot,xop,yop,zop
    integer::lll(400)
-   real(kr)::x(2000),y(2000),z(2000)
+   real(kr)::x(5000),y(5000),z(5000)
    real(kr),parameter::big=1.e10_kr
    real(kr),parameter::d0=.001e0_kr
    real(kr),parameter::d3=.301e0_kr
    real(kr),parameter::d7=.699e0_kr
-   integer::kmax=1999
+   integer::kmax=4999
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
    real(kr),parameter::ten=10

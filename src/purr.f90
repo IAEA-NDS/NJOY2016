@@ -1797,7 +1797,7 @@ contains
    ! internals
    integer::navoid,i,nres,nrest,iladr,ne,ie,itemp,k,nr,jr
    integer::i7,i0,it,i6,i1,i5,i2,is,i4,i3,jj,j,n,ii
-   integer::ixx,l,mfl,nebin,ibin,izeroprob,ibadxs
+   integer::ixx,l,mfl,nebin,ibin,izeroprob,ibadxs,ntot
    real(kr)::rpi,binmin,elow,dmin,erange,ehigh,emin,emax,espan
    real(kr)::dbart,sigx,ctx,chek1,chek2,chekn,delr,elo,ehi
    real(kr)::y,yy,szy,cc2,cs2,ccg,ccf,test,x,a1,rew,aimw,h,g
@@ -2224,16 +2224,23 @@ contains
    elsf=0
    capf=0
    fisf=0
+   ntot=0
+   binmin=spot/10
+   !--if total XS is below binmin data are rejected
    do ie=1,ne
-      totf=totf+els(1,ie)+fis(1,ie)+cap(1,ie)+bkg(1)
-      elsf=elsf+els(1,ie)+bkg(2)
-      capf=capf+cap(1,ie)+bkg(4)
-      fisf=fisf+fis(1,ie)+bkg(3)
+      tot=els(1,ie)+fis(1,ie)+cap(1,ie)+bkg(1)
+      if (tot.ge.binmin) then
+        totf=totf+tot
+        elsf=elsf+els(1,ie)+bkg(2)
+        capf=capf+cap(1,ie)+bkg(4)
+        fisf=fisf+fis(1,ie)+bkg(3)
+        ntot=ntot+1
+      endif
    enddo
-   totf=totf/ne
-   elsf=elsf/ne
-   capf=capf/ne
-   fisf=fisf/ne
+   totf=totf/ntot
+   elsf=elsf/ntot
+   capf=capf/ntot
+   fisf=fisf/ntot
    tav=tav+totf
    tvar=tvar+totf*totf
    eav=eav+elsf
@@ -2245,7 +2252,8 @@ contains
    if (iprint.gt.0) write(nsyso,'(i6,1p,4e12.4)')&
      iladr,totf,elsf,fisf,capf
 
-   !--renormalize reaction cross sections
+   !--this option is not active, because nmode=0.
+   !--renormalize reaction cross sections if nmode=1
    !--compute total cross section
    if (nmode.eq.1) then
       efact=(sigi(2)+bkg(2))/(elsf-spot)
@@ -2267,15 +2275,28 @@ contains
 
    !--choose probability table bounds
    !--and zero accumulators
+   !--if total XS is below binmin data are rejected
    if (iladr.eq.1) then
+      ntot=0
       do ie=1,ne
          es(ie)=els(itemp,ie)+fis(itemp,ie)+cap(itemp,ie)+bkg(1)
+         if (es(ie).lt.binmin) ntot=ntot+1
       enddo
+      if (ntot.gt.0) then
+         write(nsyso,'(1x,a,1pe10.3,a,e10.3,/,6x,i5,a,0pf4.1,a,a,/)') &
+           & '---message from purr--- T=',temp(itemp),' (spot/10)=', &
+           & binmin,ntot,' (',dble(ntot)/dble(ne)*100.,'%)', &
+           & ' values of total XS below spot/10 rejected for binning'
+         write(nsyse,'(/,1x,a,1pe10.3,a,e10.3,/,6x,i5,a,0pf4.1,a,a)') &
+           & '---message from purr--- T=',temp(itemp),' (spot/10)=', &
+           & binmin,ntot,' (',dble(ntot)/dble(ne)*100.,'%)', &
+           & ' values of total XS below spot/10 rejected for binning'
+      endif
       call fsort(es,xs,ne,1)
-      tmin(itemp)=es(1)
+      tmin(itemp)=es(ntot+1)
       tmax(itemp)=es(ne)
-      nebin=nsamp/(nbin-10+1.76)
-      ibin=nebin/200
+      nebin=(nsamp-ntot)/(nbin-10+1.76)
+      ibin=ntot+nebin/200
       if (ibin.le.0) then
          if (mflg1.eq.0) then
             mflg1=1
@@ -2321,29 +2342,32 @@ contains
    endif
 
    !--accumulate cross sections into tables
+   !-- if total XS is below binmin data are rejected
    do ie=1,ne
       tot=els(itemp,ie)+fis(itemp,ie)+cap(itemp,ie)+bkg(1)
-      if (tot.lt.tmin(itemp)) tmin(itemp)=tot
-      if (tot.gt.tmax(itemp)) tmax(itemp)=tot
-      call fsrch(tot,tval(1,itemp),nbin,ii,mfl)
-      if (mfl.ne.2.and.ii.lt.nbin) ii=ii+1
-      if (ii.lt.1) ii=1
-      tsum(itemp)=tsum(itemp)+1
-      tabl(ii,1,itemp)=tabl(ii,1,itemp)+1
-      tabl(ii,2,itemp)=tabl(ii,2,itemp)+tot
-      tabl(ii,3,itemp)=tabl(ii,3,itemp)+els(itemp,ie)+bkg(2)
-      tabl(ii,4,itemp)=tabl(ii,4,itemp)+fis(itemp,ie)+bkg(3)
-      tabl(ii,5,itemp)=tabl(ii,5,itemp)+cap(itemp,ie)+bkg(4)
-      do i=1,nsig0
-         tem=sig0(i)/(sig0(i)+tot)
-         bval(1,i,itemp)=bval(1,i,itemp)+tot*tem
-         bval(2,i,itemp)=bval(2,i,itemp)+(els(itemp,ie)+bkg(2))*tem
-         bval(3,i,itemp)=bval(3,i,itemp)+(fis(itemp,ie)+bkg(3))*tem
-         bval(4,i,itemp)=bval(4,i,itemp)+(cap(itemp,ie)+bkg(4))*tem
-         bval(5,i,itemp)=bval(5,i,itemp)+tot*tem*tem
-         bval(6,i,itemp)=bval(6,i,itemp)+tem
-         bval(7,i,itemp)=bval(7,i,itemp)+tem*tem
-      enddo
+      if (tot.ge.binmin) then
+        if (tot.lt.tmin(itemp)) tmin(itemp)=tot
+        if (tot.gt.tmax(itemp)) tmax(itemp)=tot
+        call fsrch(tot,tval(1,itemp),nbin,ii,mfl)
+        if (mfl.ne.2.and.ii.lt.nbin) ii=ii+1
+        if (ii.lt.1) ii=1
+        tsum(itemp)=tsum(itemp)+1
+        tabl(ii,1,itemp)=tabl(ii,1,itemp)+1
+        tabl(ii,2,itemp)=tabl(ii,2,itemp)+tot
+        tabl(ii,3,itemp)=tabl(ii,3,itemp)+els(itemp,ie)+bkg(2)
+        tabl(ii,4,itemp)=tabl(ii,4,itemp)+fis(itemp,ie)+bkg(3)
+        tabl(ii,5,itemp)=tabl(ii,5,itemp)+cap(itemp,ie)+bkg(4)
+        do i=1,nsig0
+           tem=sig0(i)/(sig0(i)+tot)
+           bval(1,i,itemp)=bval(1,i,itemp)+tot*tem
+           bval(2,i,itemp)=bval(2,i,itemp)+(els(itemp,ie)+bkg(2))*tem
+           bval(3,i,itemp)=bval(3,i,itemp)+(fis(itemp,ie)+bkg(3))*tem
+           bval(4,i,itemp)=bval(4,i,itemp)+(cap(itemp,ie)+bkg(4))*tem
+           bval(5,i,itemp)=bval(5,i,itemp)+tot*tem*tem
+           bval(6,i,itemp)=bval(6,i,itemp)+tem
+           bval(7,i,itemp)=bval(7,i,itemp)+tem*tem
+        enddo
+      endif
    enddo
 
    !--close loop over temperatures
@@ -2404,12 +2428,14 @@ contains
       enddo
    endif
 
-   !--normalize and write probability table
-   if (iprint.gt.0) write(nsyso,'(/'' probability table'')')
-   tnorm=sigi(1)-sigf(1,1,1)
-   enorm=sigi(2)-sigf(2,1,1)
-   fnorm=sigi(3)-sigf(3,1,1)
-   cnorm=sigi(4)-sigf(4,1,1)
+   !--calculate and write probability table
+   write(nsyso,'(/'' probability table'')')
+   ! Next statements were commented because they were superseded
+   ! by the next block of four statements
+   !   tnorm=sigi(1)-sigf(1,1,1)
+   !   enorm=sigi(2)-sigf(2,1,1)
+   !   fnorm=sigi(3)-sigf(3,1,1)
+   !   cnorm=sigi(4)-sigf(4,1,1)
    tnorm=0
    enorm=0
    fnorm=0
@@ -2504,17 +2530,18 @@ contains
    !--sigf contains direct calculations of self shielded cross sections.
    !--sigb contains self shielded cross sections computed from the
    !--probability table.  copy sigb to sigf in order to make the MF152
-   !--values more consistent with the MF153 probability tables (even
+   !--values more consistent with the MT153 probability tables (even
    !--if slightly less accurate).
    !
-   ! do itemp=1,ntemp
-   !    do i=1,nsig0
-   !       do j=1,5
-   !!         sigf(i,j,itemp)=sigb(i,j,itemp)  !(i,j) wrong?!?!?
-   !          sigf(j,i,itemp)=sigb(j,i,itemp)  !(j,i) right? ... check w/Bob
-   !       enddo
-   !    enddo
-   ! enddo
+   ! This option was reactivated on Dec2020
+   !
+   do itemp=1,ntemp
+      do i=1,nsig0
+         do j=1,5
+            sigf(j,i,itemp)=sigb(j,i,itemp)
+         enddo
+      enddo
+   enddo
 
    !--renormalize probability table and bondarenko
    !--cross sections to the computed infinitely-dilute values
@@ -2538,6 +2565,38 @@ contains
          enddo
       enddo
    enddo
+
+   ! Print renormalized probability table
+   write(nsyso,'(/'' renormalized probability table for MT153'')')
+   do itemp=1,ntemp
+      do ixx=1,4
+         if (ixx.eq.1) then
+            write(nsyso,'('' tmin'',1p,e11.3,1p,10e11.3)')&
+              temp(itemp),tmin(itemp)
+            write(nsyso,'('' tmax'',1p,e11.3,1p,10e11.3/(16x,10e11.3))')&
+              temp(itemp),(tval(i,itemp),i=1,nbin)
+            write(nsyso,'('' prob'',1p,e11.3,1p,10e11.3/(16x,10e11.3))')&
+              temp(itemp),(tabl(i,1,itemp),i=1,nbin)
+         endif
+         write(nsyso,'(1x,a,1x,1p,e11.3,10e11.3/(16x,10e11.3))')&
+           nmr(ixx),temp(itemp),(tabl(i,ixx+1,itemp),i=1,nbin)
+      enddo
+   enddo
+
+   ! Print renormalized Bondarenko cross sections
+   if (iprint.gt.0) then
+      write(nsyso,'(/&
+            &'' renormalized bondarenko cross sections for MT152 ''/&
+            &9x,''temp'',6x,''sig0'',4x,''p0 total'',5x,''elastic'',&
+            &5x,''fission'',5x,''capture'',4x,''p1 total'')')
+      do itemp=1,ntemp
+         do i=1,nsig0
+            write(nsyso,'(3x,1p,2e10.3,5e12.4)')&
+              temp(itemp),sig0(i),(sigf(j,i,itemp),j=1,5)
+         enddo
+      enddo
+   endif
+
      !optional printout for plotting probability per barn with viewr
      !uncomment the following lines to activate
      !write(nsyso,'(/'' probability per barn versus total'')')
