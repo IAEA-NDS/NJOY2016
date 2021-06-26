@@ -26,7 +26,7 @@ Instructions for the installation of NJOY2016 are found on our page, [Obtaining 
 +  `MODER` converts ENDF "tapes" back and forth between ASCII format and the special NJOY blocked-binary format.
 +  `DTFR` formats multigroup data for transport codes that accept formats based in the DTF-IV code.
 +  `CCCCR` formats multigroup data for the `CCCC` standard interface files ISOTXS, BRKOXS, and DLAYXS.
-+  `MATXSR` formats multigroup data for the newer `MATXS` material cross-section interface file, which works with the TRANSX code to make libraries for many particle transport codes.
++  `MATXSR` formats multigroup data for the newer `MATXS` material cross-section interface file, which works with the TRANSX code to make libraries for many particle transport codes. 
 +  `RESXSR` prepares pointwise cross sections in a CCCC-like form for thermal flux calculators.
 +  `ACER` prepares libraries in `ACE` format for the Los Alamos continuous-energy Monte Carlo code MCNP.
 +  `POWR` prepares libraries for the EPRI-CELL and EPRI-CPM codes.
@@ -34,9 +34,22 @@ Instructions for the installation of NJOY2016 are found on our page, [Obtaining 
 +  `PLOTR` reads ENDF-format files and prepares plots of cross sections or perspective views of distributions for output using VIEWR.
 +  `VIEWR` takes the output of `PLOTR`, or special graphics from `HEATR`, `COVR`, `DTFR`, or `ACER`, and converts the plots into Postscript format for printing or screen display.
 +  `MIXR` is used to combine cross sections into elements or other mixtures, mainly for plotting.
-+  `PURR` generates unresolved-resonance probability tables for use in representing resonance self-shielding effects in the MCNP Monte Carlo code.
++  `PURR` generates unresolved-resonance probability tables for use in representing resonance self-shielding effects in the MCNP Monte Carlo code.  
 +  `LEAPR` generates ENDF scattering-law files (File 7) for moderator materials in the thermal range. These scattering-law files can be used by `THERMR` to produce the corresponding cross sections.
 +  `GASPR` generates gas-production cross sections in pointwise format from basic reaction data in an ENDF evaluation. These results can be converted to multigroup form using `GROUPR`, passed to `ACER`, or displayed using `PLOTR`.
+
+## NDS/IAEA updates
+The following modules contain modifications:
+  acecm.f90, acedo.f90, acefc.f90, acepa.f90, acepn.f90, acepth.f90, gaspr.f90, groupr.f90, heatr.f90, leapr.f90, matxsr.f90, purr.f90, wimsr.f90
+  endf.f90, locale.f90, main.f90, moder.f90, plotr.f90, reconr.f90, util.f90, vers.f90, viewr.f90, mainio.f90
+  
+Main updates:
++ HEATR: Includes patch for using kinematic kermas.
++ GROUPR & ACER: Include patches for removing problems found in the processing of evaluated nuclear data files from FENDL-3.2 & IRDFF-II projects.
++ MATXSR: Includes a patch for generating MATXS files using ASCII-formatted ouput tapes.
++ WIMSR: Includes patches for correcting the generation of WIMSD- and WIMSE-formatted libraries.
++ PURR: Includes a patch for rejecting samples with total cross section smaller than spot/10 and re-normalizes probability tables to Bondarenko cross sections.
++ GASPR: Includes patch for taking into account the desintegration of residual nucleus Li-8 into two alpha particles.
 
 ## License and Copyright
 This software is distributed and copyrighted according to the [LICENSE](LICENSE) file.
