@@ -45,7 +45,7 @@ The following modules contain modifications:
   
 Main updates:
 + HEATR: Includes patch for using kinematic kermas.
-+ GROUPR & ACER: Include patches for removing problems found in the processing of evaluated nuclear data files from FENDL-3.2 & IRDFF-II projects.
++ GROUPR & ACER: Include patches for removing problems found in the processing of the evaluated nuclear data files from FENDL-3.2, IRDFF-II, and IAEA/PD-2019 libraries.
 + MATXSR: Includes a patch for generating MATXS files using ASCII-formatted ouput tapes.
 + WIMSR: Includes patches for correcting the generation of WIMSD- and WIMSE-formatted libraries.
 + PURR: Includes a patch for rejecting samples with total cross section smaller than spot/10 and re-normalizes probability tables to Bondarenko cross sections.
