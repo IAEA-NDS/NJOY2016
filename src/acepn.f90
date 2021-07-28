@@ -62,10 +62,11 @@ contains
    real(kr)::ee,amass,avadd,avlab,avll,test,rkal,akal
    real(kr)::eavi,avl,avcm,sign,dele,avav,zaid,gl,awp,awr,q
    real(kr)::awprec,awpp
-   integer,parameter::mmax=80
+   integer,parameter::mmax=800
    integer::mfm(mmax),mtm(mmax),nr6(mmax)
    real(kr)::fnubar(300)
    character(8)::hdt
+   character(60)::strng
    real(kr),dimension(:),allocatable::scr
    real(kr),parameter::emev=1.e6_kr
    real(kr),parameter::etop=1.e10_kr
@@ -146,7 +147,7 @@ contains
       mtd=nint(scr(i+3))
       if (mfd.eq.1.and.mtd.eq.452) mt452=1
       if (mfd.eq.1.and.mtd.eq.456) mt456=1
-      if (mfd.ge.3.and.(mtd.lt.3.or.mtd.gt.4)) then
+      if (mfd.ge.3.and.(mtd.eq.2.or.mtd.gt.4)) then
          if (mfd.eq.3) ntr=ntr+1
          if (mtd.eq.2) ielas=1
          if (mfd.eq.3.and.(mtd.ge.600.and.mtd.le.649)) mt103=1
@@ -240,7 +241,7 @@ contains
    do while (mfh.ne.0)
       call contio(nin,0,0,scr,nb,nw)
       if (mfh.ne.0) then
-         if (mth.ne.3.and.mth.ne.4) then
+         if (mth.ne.1.and.mth.ne.3.and.mth.ne.4) then
             if (mth.eq.103.and.mt103.ne.0) go to 99
             if (mth.eq.104.and.mt104.ne.0) go to 99
             if (mth.eq.105.and.mt105.ne.0) go to 99
@@ -322,7 +323,7 @@ contains
 
          !--file 4
          if (mfh.eq.4) then
-            nneut=nneut+1
+            if (mth.ge. 50 .and. mth.le. 91) nneut=nneut+1
             mtt=0
             ir=0
             do while (mtt.ne.mth)
@@ -544,10 +545,15 @@ contains
                      enddo
                      call skip6(nin,0,0,scr,law)
                   enddo
-
+                  
+               else if (law.eq.0) then
+                  write(strng,'(''recoil'',i6,'' in MT'',I4)')izap,mth
+                  call mess('acephn','no heating info for ',strng)
+                  
                !--this law is not currently handled
                else
-                  call mess('acephn','file 6 law not coded',' ')
+                  write(strng,'(''particle '',i5,'' law'',I4)')izap,law
+                  call mess('acephn','file 6 law not coded for ',strng)
                endif
             enddo
          endif
@@ -1479,7 +1485,8 @@ contains
                            enddo
                            scr(llh+6+2*ie)=ee
                            scr(llh+7+2*ie)=avlab
-                           nex=nex+2+(2*na+3)*ng
+!                          nex=nex+2+(2*na+3)*ng  ! Original coding
+                           nex=nex+2+(     3)*ng                           
                         enddo
                         !add in contribution to heating
                         !for this subsection
@@ -3191,7 +3198,9 @@ contains
                   nn=nint(xss(loci+1))
                   if (nn.gt.2) then
                      loci=loci+1
-                     do j=1,nn
+                     !--Skip first two point that may be pseudo-threshold
+                     !-- original do j=1,nn
+                     do j=3,nn                     
                         ep=xss(loci+j)
                         pd=xss(loci+nn+j)
                         if (pd.lt.zmin) zmin=pd
