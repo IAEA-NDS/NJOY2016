@@ -45,7 +45,7 @@ contains
    real(kr)::awn(16)
    character(70)::hk
    ! internals
-   integer::nin,nb,nw,nwscr,nx,mtx,ielas,mf4,mf6,mt452,mt456
+   integer::nin,nb,nw,nwscr,nx,mtx,ielas,mf4,mf6,mt452,mt456,mtxnu
    integer::mt103,mt104,mt105,mt106,mt107
    integer::i,mfd,mtd,l,mttot,idis,nex,ir,j,idone,nnex,n
    integer::nneut,nphot,nprot,ndeut,ntrit,nhe3,nhe4
@@ -170,15 +170,18 @@ contains
    enddo
 
    !--save the nubar tabulation, if present
+   mtxnu=0
    if (mt452.eq.1) then
       call findf(matd,1,452,nin)
       call contio(nin,0,0,scr,nb,nw)
       call tab1io(nin,0,0,fnubar,nb,nw)
+      mtxnu=1
    endif
    if (mt456.eq.1) then
       call findf(matd,1,456,nin)
       call contio(nin,0,0,scr,nb,nw)
       call tab1io(nin,0,0,fnubar,nb,nw)
+      mtxnu=2
    endif
 
    !--locate and store energy grid of total cross section
@@ -323,7 +326,11 @@ contains
 
          !--file 4
          if (mfh.eq.4) then
-            if (mth.ge. 50 .and. mth.le. 91) nneut=nneut+1
+            if ((mth.ge.50.and.mth.le.91).or.&
+                (mth.ge.16.and.mth.le.18).or.&
+                 mth.eq.5.or.mth.eq.37.or.&
+                 mth.eq.152.or.mth.eq.153.or.&
+                 mth.eq.160.or.mth.eq.161) nneut=nneut+1
             mtt=0
             ir=0
             do while (mtt.ne.mth)
@@ -375,6 +382,22 @@ contains
                !--for particles
                !--check for production thresholds
                if (izap.le.2004) then
+                  ! if mt=18, neutron yields are replaced by nubar
+                  if (mth.eq.18.and.izap.eq.1.and.mtxnu.gt.0) then
+                    nrr=nint(fnubar(5))
+                    npp=nint(fnubar(6))
+                    scr(5)=nrr
+                    scr(6)=npp
+                    do i=1,nrr
+                      scr(5+2*i)=fnubar(5+2*i)
+                      scr(6+2*i)=fnubar(6+2*i)
+                    enddo
+                    do i=1,npp
+                      scr(5+2*nrr+2*i)=fnubar(5+2*nrr+2*i)
+                      scr(6+2*nrr+2*i)=fnubar(6+2*nrr+2*i)
+                    enddo
+                    jscr=6+2*nrr+2*npp+1
+                  endif
                   nrr=nint(scr(5))
                   npp=nint(scr(6))
                   y=0
@@ -427,11 +450,12 @@ contains
                      enddo
                      e=c2h
                      heat=0
+                     ncyc=nint(scr(lld+3))+2
                      np=nint(scr(lld+5))
                      call terpa(y,e,en,idis,scr(lly),npp,nrr)
                      do ip=1,np
-                        ep=scr(lld+4+2*ip)
-                        g=scr(lld+5+2*ip)
+                        ep=scr(lld+6+ncyc*(ip-1))
+                        g=scr(lld+7+ncyc*(ip-1))
                         if (ip.gt.1) then
                            heat=heat+(ep-epl)*gl*(ep+epl)/2
                         endif
@@ -507,7 +531,7 @@ contains
                      enddo
                      e=c2h
                      scr(llh+6+2*ie)=e
-                     scr(llh+7+2*ie)=awp*(e+q)/(awr-awp)
+                     scr(llh+7+2*ie)=awp*(e+q*emev)/(awr-awp)
                   enddo
                   mtt=0
                   ir=0
@@ -545,11 +569,11 @@ contains
                      enddo
                      call skip6(nin,0,0,scr,law)
                   enddo
-                  
+
                else if (law.eq.0) then
                   write(strng,'(''recoil'',i6,'' in MT'',I4)')izap,mth
                   call mess('acephn','no heating info for ',strng)
-                  
+
                !--this law is not currently handled
                else
                   write(strng,'(''particle '',i5,'' law'',I4)')izap,law
@@ -744,12 +768,25 @@ contains
                   nex=nex+4+2*ne
                else
                   y=1
-                  if (mt.eq.16) y=2
-                  if (mt.eq.17) y=3
+                  if (mt.eq.16) then
+                    y=2
+                  elseif (mt.eq.17) then
+                    y=3
+                  elseif (mt.eq.37) then
+                    y=4
+                  elseif (mt.eq.152) then
+                    y=5
+                  elseif (mt.eq.153) then
+                    y=6
+                  elseif (mt.eq.160) then
+                    y=7
+                  elseif (mt.eq.152) then
+                    y=8
+                  endif
                   do j=iaa,nes
+                     e=xss(esz+j-1)
                      ss=xss(2+k+j-iaa)
                      tt=xss(pxs+2+j-it)+y*ss
-                     xss(pxs+2+j-it)=sigfig(tt,7,0)
                      xss(pxs+2+j-it)=sigfig(tt,7,0)
                      if (xss(tot+j-1).ne.zero)&
                        xss(thn+j-1)=xss(thn+j-1)&
@@ -811,6 +848,23 @@ contains
                         xss(tyrp+jp-1)=-1
                      endif
 
+                     !-- if mt=18, neutron yields are replaced by nubar
+                     if (mth.eq.18.and.izap.eq.1.and.mtxnu.gt.0) then
+                       nr=nint(fnubar(5))
+                       ne=nint(fnubar(6))
+                       scr(5)=nr
+                       scr(6)=ne
+                       do i=1,nr
+                         scr(5+2*i)=fnubar(5+2*i)
+                         scr(6+2*i)=fnubar(6+2*i)
+                       enddo
+                       do i=1,ne
+                         scr(5+2*nr+2*i)=fnubar(5+2*nr+2*i)
+                         scr(6+2*nr+2*i)=fnubar(6+2*nr+2*i)
+                       enddo
+                       jscr=6+2*nr+2*ne+1
+                     endif
+
                      !--accumulate yield times cross section
                      nrr=1
                      npp=2
@@ -826,11 +880,12 @@ contains
                      xss(nex)=6
                      xss(nex+1)=mth
                      xss(nex+2)=0
+                     nr=nint(scr(5))
                      ne=nint(scr(6))
                      xss(nex+3)=ne
                      do i=1,ne
-                        xss(nex+3+i)=sigfig(scr(7+2*i)/emev,7,0)
-                        xss(nex+3+i+ne)=sigfig(scr(8+2*i),7,0)
+                       xss(nex+3+i)=sigfig(scr(5+2*nr+2*i)/emev,7,0)
+                       xss(nex+3+i+ne)=sigfig(scr(6+2*nr+2*i),7,0)
                      enddo
                      nex=nex+4+2*ne
                   endif
@@ -1087,14 +1142,14 @@ contains
             nex=nex+2+2*2
             xss(last+2)=nex-dlwp+1
             xss(nex)=sigfig(-q,7,0)
-            xss(nex+1)=sigfig(awr/(1+awr),7,0)
+            xss(nex+1)=sigfig((awr-1)/awr,7,0)
             nex=nex+2
             ! neutron ebar for this reaction
             ! and local heating from recoil+photon
             ! neglecting photon momentum.
             do j=iaa,nes
                e=xss(esz+j-1)/emev
-               ebar=awr*(e-abs(q))/(1+awr)
+               ebar=(awr-1)*(e-abs(q))/awr
                hh=ebar*xss(2+k+j-iaa)
                xss(phn+2+j-it)=xss(phn+2+j-it)+hh
                hh=(e-abs(q))*xss(2+k+j-iaa)-hh
@@ -1266,7 +1321,21 @@ contains
                         call terpa(y,e,en,idis,fnubar,ipp,irr)
                      else
                         y=1
-                        if (mth.eq.16) y=2
+                        if (mth.eq.16) then
+                          y=2
+                        elseif (mth.eq.17) then
+                          y=3
+                        elseif (mth.eq.37) then
+                          y=4
+                        elseif (mth.eq.152) then
+                          y=5
+                        elseif (mth.eq.153) then
+                          y=6
+                        elseif (mth.eq.160) then
+                          y=7
+                        elseif (mth.eq.152) then
+                          y=8
+                        endif
                      endif
                      call terpa(theta,e,en,idis,scr,npp,nrr)
                      x=0
@@ -1324,6 +1393,7 @@ contains
                   izap=nint(scr(1))
                   awp=scr(2)
                   law=nint(scr(4))
+                  lly=1
                   jscr=1+nw
                   do while (nb.ne.0)
                      call moreio(nin,0,0,scr(jscr),nb,nw)
@@ -1339,6 +1409,23 @@ contains
                      xss(nex)=0
                      xss(nex+1)=0
                      nex=nex+3
+
+                     ! if mt=18, neutron yields are replaced by nubar
+                     if (mth.eq.18.and.izap.eq.1.and.mtxnu.gt.0) then
+                       nr=nint(fnubar(5))
+                       ne=nint(fnubar(6))
+                       scr(5)=nr
+                       scr(6)=ne
+                       do ii=1,nr
+                         scr(5+2*ii)=fnubar(5+2*ii)
+                         scr(6+2*ii)=fnubar(6+2*ii)
+                       enddo
+                       do ii=1,ne
+                         scr(5+2*nr+2*ii)=fnubar(5+2*nr+2*ii)
+                         scr(6+2*nr+2*ii)=fnubar(6+2*nr+2*ii)
+                       enddo
+                       jscr=6+2*nr+2*ne+1
+                     endif
 
                      !--we can only process law=1, 2, and 4 currently
                      if (law.ne.1.and.law.ne.2.and.law.ne.4) then
@@ -1396,7 +1483,7 @@ contains
                            xss(lle+ne+ie-1)=nex-dlwp+1
                            nd=nint(scr(lld+2))
                            na=nint(scr(lld+3))
-                           if (lang.eq.1) then
+                           if (lang.ne.2) then
                               xss(last+1)=4
                               xss(landp+jp-1)=0
                            endif
@@ -1484,9 +1571,13 @@ contains
                                 sigfig(renorm*xss(nex+1+2*ng+ig),9,0)
                            enddo
                            scr(llh+6+2*ie)=ee
-                           scr(llh+7+2*ie)=avlab
+                           scr(llh+7+2*ie)=avlab*renorm
 !                          nex=nex+2+(2*na+3)*ng  ! Original coding
-                           nex=nex+2+(     3)*ng                           
+                           if (lang.ne.2) then
+                             nex=nex+2+(     3)*ng
+                           else
+                             nex=nex+2+(     5)*ng
+                           endif
                         enddo
                         !add in contribution to heating
                         !for this subsection
@@ -1528,7 +1619,7 @@ contains
                         nex=nex+2+2*2
                         xss(last+2)=nex-dlwp+1
                         xss(nex)=sigfig(-q,7,0)
-                        xss(nex+1)=sigfig(awr/(1+awr),7,0)
+                        xss(nex+1)=sigfig((awr-1)/awr,7,0)
                         nex=nex+2
                         call tab2io(nin,0,0,scr(ll),nb,nw)
                         lep=nint(scr(ll+3))
@@ -1556,7 +1647,7 @@ contains
                         nex=nex+2+2*2
                         xss(last+2)=nex-dlwp+1
                         xss(nex)=sigfig(-q,7,0)
-                        xss(nex+1)=sigfig(awr/(1+awr),7,0)
+                        xss(nex+1)=sigfig((awr-1)/awr,7,0)
                         nex=nex+2
                      endif
                   endif
@@ -3200,7 +3291,7 @@ contains
                      loci=loci+1
                      !--Skip first two point that may be pseudo-threshold
                      !-- original do j=1,nn
-                     do j=3,nn                     
+                     do j=3,nn
                         ep=xss(loci+j)
                         pd=xss(loci+nn+j)
                         if (pd.lt.zmin) zmin=pd
