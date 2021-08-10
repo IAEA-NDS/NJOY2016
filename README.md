@@ -50,6 +50,7 @@ Main updates:
 + WIMSR: Includes patches for correcting the generation of WIMSD- and WIMSE-formatted libraries.
 + PURR: Includes a patch for rejecting samples with total cross section smaller than spot/10 and re-normalizes probability tables to Bondarenko cross sections.
 + GASPR: Includes patch for taking into account the desintegration of residual nucleus Li-8 into two alpha particles.
++ ACEPN: Includes patch to use the correct fission yield from MF1 to compute the neutron production cross section.
 
 ## License and Copyright
 This software is distributed and copyrighted according to the [LICENSE](LICENSE) file.
