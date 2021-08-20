@@ -326,23 +326,34 @@ contains
 
          !--file 4
          if (mfh.eq.4) then
-            if ((mth.ge.50.and.mth.le.91).or.&
+            if (mth.eq.5.or.mth.eq.11.or.&
                 (mth.ge.16.and.mth.le.18).or.&
-                 mth.eq.5.or.mth.eq.37.or.&
-                 mth.eq.152.or.mth.eq.153.or.&
-                 mth.eq.160.or.mth.eq.161) nneut=nneut+1
-            mtt=0
-            ir=0
-            do while (mtt.ne.mth)
-               ir=ir+1
-               mtt=nint(xss(mtr+ir-1))
-               q=xss(lqr+ir-1)
-               k=nint(xss(lsig+ir-1))+sig-1
-               n=nint(xss(k+1))
-               iaa=nint(xss(k))
-            enddo
-            thresh=xss(esz+iaa-1)
-            if (thresh.lt.tneut) tneut=thresh
+                (mth.ge.22.and.mth.le.25).or.&
+                (mth.ge.28.and.mth.le.30).or.&
+                (mth.ge.32.and.mth.le.37).or.&
+                (mth.ge.41.and.mth.le.42).or.&
+                (mth.ge.44.and.mth.le.45).or.&
+                (mth.ge.50.and.mth.le.91).or.&
+                (mth.ge.152.and.mth.le.154).or.&
+                (mth.ge.156.and.mth.le.181).or.&
+                (mth.ge.183.and.mth.le.190).or.&
+                (mth.ge.194.and.mth.le.196).or.&
+                (mth.ge.198.and.mth.le.200).or.&
+                (mth.ge.875.and.mth.le.891)) then
+              nneut=nneut+1
+              mtt=0
+              ir=0
+              do while (mtt.ne.mth)
+                 ir=ir+1
+                 mtt=nint(xss(mtr+ir-1))
+                 q=xss(lqr+ir-1)
+                 k=nint(xss(lsig+ir-1))+sig-1
+                 n=nint(xss(k+1))
+                 iaa=nint(xss(k))
+              enddo
+              thresh=xss(esz+iaa-1)
+              if (thresh.lt.tneut) tneut=thresh
+            endif
 
          !--file 6
          else if (mfh.eq.6) then
@@ -768,19 +779,28 @@ contains
                   nex=nex+4+2*ne
                else
                   y=1
-                  if (mt.eq.16) then
+                  if (mt.eq.11.or.mt.eq.16.or.mt.eq.24.or.mt.eq.30.or.&
+                      mt.eq.41.or.mt.eq.154.or.mt.eq.159.or.&
+                      mt.eq.176.or.mt.eq.190.or.&
+                      (mt.ge.875.and.mt.le.891)) then
                     y=2
-                  elseif (mt.eq.17) then
+                  elseif (mt.eq.17.or.mt.eq.25.or.mt.eq.42.or.&
+                          mt.eq.157.or.mt.eq.172.or.mt.eq.177.or.&
+                          mt.eq.179.or.(mt.ge.181.and.mt.le.199)) then
                     y=3
-                  elseif (mt.eq.37) then
+                  elseif (mt.eq.37.or.mt.eq.156.or.mt.eq.165.or.&
+                          mt.eq.169.or.mt.eq.173.or.mt.eq.178.or.&
+                          (mt.ge.194.and.mt.le.196)) then
                     y=4
-                  elseif (mt.eq.152) then
+                  elseif (mt.eq.152.or.mt.eq.162.or.mt.eq.166.or.&
+                          mt.eq.170.or.mt.eq.174.or.mt.eq.200) then
                     y=5
-                  elseif (mt.eq.153) then
+                  elseif (mt.eq.153.or.mt.eq.163.or.mt.eq.167.or.&
+                          mt.eq.171.or.mt.eq.175) then
                     y=6
-                  elseif (mt.eq.160) then
+                  elseif (mt.eq.160.or.mt.eq.164.or.mt.eq.168) then
                     y=7
-                  elseif (mt.eq.152) then
+                  elseif (mt.eq.161) then
                     y=8
                   endif
                   do j=iaa,nes
@@ -1320,22 +1340,31 @@ contains
                         irr=1
                         call terpa(y,e,en,idis,fnubar,ipp,irr)
                      else
-                        y=1
-                        if (mth.eq.16) then
-                          y=2
-                        elseif (mth.eq.17) then
-                          y=3
-                        elseif (mth.eq.37) then
-                          y=4
-                        elseif (mth.eq.152) then
-                          y=5
-                        elseif (mth.eq.153) then
-                          y=6
-                        elseif (mth.eq.160) then
-                          y=7
-                        elseif (mth.eq.152) then
-                          y=8
-                        endif
+                       y=1
+                       if (mth.eq.11.or.mth.eq.16.or.mth.eq.24.or.&
+                           mth.eq.30.or.mth.eq.41.or.mth.eq.154.or.&
+                           mth.eq.159.or.mth.eq.176.or.mth.eq.190.or.&
+                           (mth.ge.875.and.mth.le.891)) then
+                         y=2
+                       elseif (mth.eq.17.or.mth.eq.25.or.mth.eq.42.or.&
+                               mth.eq.157.or.mth.eq.172.or.mth.eq.177.or.&
+                               mth.eq.179.or.(mth.ge.181.and.mth.le.199)) then
+                         y=3
+                       elseif (mth.eq.37.or.mth.eq.156.or.mth.eq.165.or.&
+                               mth.eq.169.or.mth.eq.173.or.mth.eq.178.or.&
+                              (mth.ge.194.and.mth.le.196)) then
+                         y=4
+                       elseif (mth.eq.152.or.mth.eq.162.or.mth.eq.166.or.&
+                               mth.eq.170.or.mth.eq.174.or.mth.eq.200) then
+                         y=5
+                       elseif (mth.eq.153.or.mth.eq.163.or.mth.eq.167.or.&
+                               mth.eq.171.or.mth.eq.175) then
+                         y=6
+                       elseif (mth.eq.160.or.mth.eq.164.or.mth.eq.168) then
+                         y=7
+                       elseif (mth.eq.161) then
+                         y=8
+                       endif
                      endif
                      call terpa(theta,e,en,idis,scr,npp,nrr)
                      x=0
