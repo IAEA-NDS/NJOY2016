@@ -1527,11 +1527,11 @@ contains
    integer::khm1,i,k,ll,l
    real(kr)::aamin,denom,slope,factor,xp,xm
    real(kr)::sbt(ntt)
-   character(60)::strng   
+   character(60)::strng
    real(kr),dimension(5),parameter::fzero=(/0.5e0_kr,&
      0.2820947917738783e0_kr,0.25e0_kr,&
      0.2820947917738783e0_kr,0.375e0_kr/)
-!-- Next two statements not supported by Lahey Fortran-95 compiler            
+!-- Next two statements not supported by Lahey Fortran-95 compiler
 !     1.e0_kr/(2.e0_kr*sqrt(pi)),0.25e0_kr,&
 !     1.e0_kr/(2.e0_kr*sqrt(pi)),0.375e0_kr/)
    real(kr),parameter::one=1.e0_kr

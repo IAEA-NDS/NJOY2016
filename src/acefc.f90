@@ -1088,7 +1088,7 @@ contains
    inew=iabs(inew)
    nscr=iabs(nscr)
    e1=zero
-   e2=zero   
+   e2=zero
    if (nin.lt.0) nscr=-nscr
    call openz(-inew,1)
    call openz(-iold,1)
@@ -1969,7 +1969,7 @@ contains
    npt=mcoars+1
    nwmax=nwmaxn
    intep=0
-   ne1=0   
+   ne1=0
    call ptinit
    allocate(scr(nwmax))
    write(nsyso,'(/)')
@@ -2677,7 +2677,7 @@ contains
 
    !--work with list record read in topfil
    nord=n1h
-   fl=0   
+   fl=0
    do j=1,nord
       fl(j)=scr(6+j)
    enddo
@@ -3629,7 +3629,7 @@ contains
    i16=0
    ntape=0
    nsave=0
-   nk=0   
+   nk=0
    l=1
    if (mf1x(1).eq.0.and.iopp.ne.0) write(nsyso,&
      '(/'' message from gamsum---file 12 not found.'')')
@@ -4932,7 +4932,7 @@ contains
 
    !--initialize
    inow=0
-   nnex=0   
+   nnex=0
    nwscr=1000000
    allocate(scr(nwscr))
    do i=1,8
@@ -6489,7 +6489,7 @@ contains
    !--allocate scratch storage area
    allocate(xxs(ne))
    allocate(yys(ne))
-   
+
    write(nsyso,'(/'' working on charged-particle elastic'')')
    amass=awr/awp
    llht=1
@@ -6642,7 +6642,7 @@ contains
       xss(esz+4*nes+j)=sigfig(h,7,0)
    enddo
    deallocate(xxs)
-   deallocate(yys)   
+   deallocate(yys)
    return
    end subroutine acecpe
 
@@ -7116,7 +7116,7 @@ contains
    igyl=0
    yield=0
    last=0
-   nexd=0   
+   nexd=0
    do while (idone.eq.0)
       ikk=ikk+1
       call tab1io(nin,0,0,scr(jscr),nb,nw)
@@ -8849,7 +8849,7 @@ contains
                   if (nd.gt.nd0) then
                     kk=6+2*nd
                     jj=6+2*nd0
-                    nn=2*(n-nd)                   
+                    nn=2*(n-nd)
                     do ki=1,nn
                       scr(jj+ki)=scr(kk+ki)
                     enddo
@@ -9198,7 +9198,7 @@ contains
 
    !--count up productions
    ip=0
-   thresh=0   
+   thresh=0
    ntro=ptype+ntype
    ploct=ntro+ntype
    do i=1,ntype
@@ -12215,7 +12215,7 @@ contains
    enddo
 
    !--print energy-dependent photon production yields
-   kl=0   
+   kl=0
    if (nindx.ne.0) then
       if (ipy.gt.0) write(nsyso,'(''1''/&
         &'' photon production yields''/&
@@ -15300,7 +15300,7 @@ contains
    integer::nnf,mt,kf,iif,kc,iic,nofiss,n,k,iaa
    integer::major,minor,mtl,icurv,mtlast,nlev,iflag
    integer::nure,intunr,nurb,lssf,ie,ib,ii,ll,kk,nunu
-   integer,parameter::pltumx=10000
+   integer,parameter::pltumx=50000
    real(kr)::e,tot,abso,elas,gprod,xtag,ytag,thin,abss
    real(kr)::e1,e2,fiss,cap,heat,dam,x,y,xlast
    real(kr)::xmin,xmax,ymin,ymax,xstep,ystep,test
@@ -16909,7 +16909,7 @@ contains
    real(kr),parameter::zero=0
    integer,parameter::nden=4000
    mtlast=0
-   mtl=0   
+   mtl=0
    ilev=0
 
    !--loop over the inelastic levels
@@ -17286,7 +17286,7 @@ contains
    real(kr),parameter::up=1.01e0_kr
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
-   
+
    ! initialise
    it=0
 
@@ -19539,7 +19539,7 @@ contains
    real(kr),parameter::one=1
 
    !--initialize
-   inow=0   
+   inow=0
    if (ep.lt.zero) then
       intmu=nint(a7(loci))
       nmu=nint(a7(loci+1))

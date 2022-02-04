@@ -1823,7 +1823,7 @@ contains
    beta(21)=100
    beta(22)=120
    beta(23)=140
-   beta(24)=160   
+   beta(24)=160
    beta(25)=180
    beta(26)=200
    beta(27)=250

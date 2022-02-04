@@ -657,7 +657,7 @@ contains
 
    indx=10
    if (mcnpx.gt.0) indx=12
- 
+
    if (lenhz.lt.indx) then
       idiff=indx-lenhz
       do i=indx,indx-lenhz+1,-1            !push the string to the right so

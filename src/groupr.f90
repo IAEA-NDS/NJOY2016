@@ -242,7 +242,7 @@ contains
    !     30           ukaea 1025-group structure  (30 MeV)
    !     31           ukaea 1067-group structure (200 MeV)
    !     32           ukaea 1102-group structure   (1 GeV)
-   !     33           ukaea  142-group structure (200 MeV)   
+   !     33           ukaea  142-group structure (200 MeV)
    !     34           lanl 618-group structure
    !
    !     igg          meaning
@@ -632,7 +632,7 @@ contains
        call mess('groupr','no heavy residual with fission',&
                           'skipping this input request')
        go to 365
-   endif     
+   endif
    if (mfd.eq.0) go to 590
    if (mtdp.eq.-1000) go to 382
    read(strng,'(15a4)') (mtname(i),i=1,15)
@@ -1607,8 +1607,8 @@ contains
    !    30      UKAEA 1025-group structure
    !    31      UKAEA 1067-group structure
    !    32      UKAEA 1102-group structure
-   !    33      UKAEA  142-group structure   
-   !    34      LANL 618 group structure   
+   !    33      UKAEA  142-group structure
+   !    34      LANL 618 group structure
    !
    !-------------------------------------------------------------------
    use mainio ! provides nsyso
@@ -3552,7 +3552,7 @@ contains
      1.202264e+08_kr,1.258925e+08_kr,1.318257e+08_kr,1.380384e+08_kr,&
      1.445440e+08_kr,1.513561e+08_kr,1.584893e+08_kr,1.659587e+08_kr,&
      1.737801e+08_kr,1.819701e+08_kr,1.905461e+08_kr,1.995262e+08_kr/)
-   real(kr),dimension(1103),parameter::eg32=(/& 
+   real(kr),dimension(1103),parameter::eg32=(/&
      1.000000e-05_kr,1.047129e-05_kr,1.096478e-05_kr,1.148154e-05_kr,&
      1.202264e-05_kr,1.258925e-05_kr,1.318257e-05_kr,1.380384e-05_kr,&
      1.445440e-05_kr,1.513561e-05_kr,1.584893e-05_kr,1.659587e-05_kr,&
@@ -3829,7 +3829,7 @@ contains
      6.309573e+08_kr,6.606934e+08_kr,6.918310e+08_kr,7.244360e+08_kr,&
      7.585776e+08_kr,7.943282e+08_kr,8.317638e+08_kr,8.709636e+08_kr,&
      9.120108e+08_kr,9.549926e+08_kr,1.000000e+09_kr/)
-   real(kr),dimension(143),parameter::eg33=(/& 
+   real(kr),dimension(143),parameter::eg33=(/&
      5.000000e+03_kr,1.000000e+04_kr,1.500000e+04_kr,2.000000e+04_kr,&
      2.500000e+04_kr,3.000000e+04_kr,3.500000e+04_kr,4.000000e+04_kr,&
      4.500000e+04_kr,5.000000e+04_kr,5.500000e+04_kr,6.000000e+04_kr,&
@@ -3866,7 +3866,7 @@ contains
      5.500000e+07_kr,6.000000e+07_kr,7.000000e+07_kr,8.000000e+07_kr,&
      9.000000e+07_kr,1.000000e+08_kr,1.200000e+08_kr,1.400000e+08_kr,&
      1.600000e+08_kr,1.800000e+08_kr,2.000000e+08_kr/)
-   real(kr),dimension(619),parameter::eg618=(/& 
+   real(kr),dimension(619),parameter::eg618=(/&
      1.00000000000000e-05_kr,2.56901129797510e-05_kr,4.23558357164050e-05_kr,&
      6.98329672839171e-05_kr,1.15135098557100e-04_kr,1.39000000000000e-04_kr,&
      1.89825685995247e-04_kr,2.43741005558083e-04_kr,3.12969646225607e-04_kr,&
@@ -11602,7 +11602,7 @@ contains
   755 continue
    if (mth.eq.18.or.mth.eq.19.or.&
        mth.eq.20.or.mth.eq.21.or.&
-       mth.eq.38) go to 790  !don't include fission  
+       mth.eq.38) go to 790  !don't include fission
    if (imf26.eq.1) go to 756
    if (mth.eq.iabs(mf6p(6,imf26-1))) go to 790
    if (mth.gt.iabs(mf6p(6,imf26-1))+1) go to 756
@@ -11795,7 +11795,7 @@ contains
                   l=l+nw
                enddo
                if (l.gt.ntmp) call error('getsed',&
-                   'exceeded tmp storage',' ')               
+                   'exceeded tmp storage',' ')
                do ip=2,np
                   delta=abs(tmp(ln+2*ip)-tmp(ln+2*ip-2))
                   if (delta.ge.eps*tmp(ln+2*ip-2)) then
@@ -11816,7 +11816,7 @@ contains
                      l=l+nw
                   enddo
                   if (l.gt.ntmp) call error('getsed',&
-                      'exceeded tmp storage',' ')                  
+                      'exceeded tmp storage',' ')
                   !extend lowest delayed bin using sqrt(e) shape
                   if (ismooth.gt.0.and.mtd.eq.455.and.&
                     nint(tmp(l1+7)).eq.1) then
