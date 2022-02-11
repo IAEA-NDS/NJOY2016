@@ -1,3 +1,10 @@
+## Important note by the IAEA-NDS
+
+This repository exists to keep track of modifications of the
+[official NJOY2016 version](https://github.com/njoy/NJOY2016) to ensure
+the proper processing of the nuclear data libraries
+distributed by the Nuclear Data Section of the IAEA.
+
 ![](https://github.com/njoy/NJOY2016/workflows/Continuous%20Integration/badge.svg)
 
 # NJOY2016
