@@ -526,7 +526,7 @@ contains
 
    !--input.
    inin=iabs(nin)
-   rewind inin
+   if (inin.ne.0) rewind inin
    if (nin.lt.0) then
       read(inin) math,mfh,mth,nb,nw,(a(i),i=1,17)
    else if (nin.gt.0) then

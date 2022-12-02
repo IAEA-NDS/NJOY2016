@@ -340,7 +340,7 @@ contains
    real(kr)::xx,yy,zz
    character(80)::text
    integer,parameter::mmax=50000   !same in plotr and viewr
-   integer,parameter::maxaa=500000
+   integer,parameter::maxaa=5000000
    real(kr),dimension(15)::z
    real(kr),dimension(maxaa)::aa
    real(kr),dimension(mmax)::x,y,b,dxm,dxp,dym,dyp

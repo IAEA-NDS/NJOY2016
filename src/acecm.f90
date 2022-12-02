@@ -139,15 +139,21 @@ contains
      '(n,xhe3)  ','(n,xa)    '/)
    character(10)::hndf10(1)='damage    '
 
-   if (iverf.ge.6) then
+   if (iverf.ne.4.and.iverf.ne.5) then
       if (mt.ge.201.and.mt.le.207) then
          name=hndf9(mt-200)
-      else if (mt.eq.444) then
+      elseif (izai.eq.0.and. &
+        ((mt.ge.219.and.mt.le.451).or.(mt.ge.461.and.mt.le.599).or. &
+         (mt.ge.850.and.mt.le.874).or.(mt.ge.892.and.mt.le.999))) then
+         write(name,'(a6,i3,a1)')'(n,mtd',mt,')'
+      elseif (izai.gt.0.and.mt.gt.50000000) then
+         i=mt-(mt/1000000)*1000000
+         write(name,'(a3,i6,a1)')'(n,',i,')'
+      elseif(mt.eq.444) then
          name=hndf10(1)
       else
          i=mt
-         if (i.ge.50000000) i=5
-         if (i.gt.999) i=i-1000*(i/1000)
+         if (i.gt.999) i=i-1000*(i/1000) 
          if (i.ge.600) i=i-399
          name=hndf(i)
       endif
