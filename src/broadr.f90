@@ -1527,7 +1527,7 @@ contains
    integer::khm1,i,k,ll,l
    real(kr)::aamin,denom,slope,factor,xp,xm
    real(kr)::sbt(ntt)
-   character(60)::strng
+   character(60)::strng   
    real(kr),dimension(5),parameter::fzero=(/0.5e0_kr,&
      0.2820947917738783e0_kr,0.25e0_kr,&
      0.2820947917738783e0_kr,0.375e0_kr/)

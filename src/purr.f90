@@ -2435,6 +2435,7 @@ contains
      &''  nres'',i12)')&
      (bkg(i),i=1,4),(sig3(i),i=1,4),&
      tav,eav,fav,cav,tvar,evar,fvar,cvar,nrest
+     
 
 
    !--compute and write bondarenko table

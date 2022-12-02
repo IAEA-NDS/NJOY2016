@@ -49,7 +49,7 @@ contains
    integer::mt103,mt104,mt105,mt106,mt107
    integer::i,mfd,mtd,l,mttot,idis,nex,nexc,ir,j,idone,nnex,n
    integer::nneut,nphot,nprot,ndeut,ntrit,nhe3,nhe4
-   integer::k,ia,iaa,nk,ik,lly,izai,izap,law,jscr,nrr,npp
+   integer::k,ia,iaa,nk,ik,lly,izai,izap,law,jscr,nrr,npp,nrry,nppy
    integer::ll,lll,lep,ne,llh,lld,ie,np,ip,mtt,lct,ii
    integer::icapt,jj,itype,it,jp,nr,il,llht,iie,lang,lleg,ileg
    integer::iint,nn,kk,m,intt,last,lf,jnt,ja,jb,ipp,irr
@@ -60,7 +60,7 @@ contains
    integer::imu,intmu,nmu
    real(kr)::emc2,e,enext,s,y,ynext,heat,en,ep,g,h,epl
    real(kr)::tneut,tphot,tprot,tdeut,ttrit,the3,the4,thresh
-   real(kr)::ss,tt,ubar,sum,renorm,ebar,hh,u,theta,x,anorm
+   real(kr)::ss,tt,ubar,sum,renorm,ebar,hh,u,theta,x,anorm,yylldd
    real(kr)::ee,amass,avadd,avlab,avll,test,rkal,akal
    real(kr)::eavi,avl,avcm,sign,dele,avav,zaid,gl,awp,awr,q
    real(kr)::av,del
@@ -1106,11 +1106,15 @@ contains
                      ! add in contribution to heating
                      nrr=1
                      npp=2
+                     nrry=1
+                     nppy=2
                      do ie=it,nes
                         e=xss(esz+ie-1)/emev
                         call terpa(h,e,en,idis,scr(llht),npp,nrr)
+                        yylldd=1.0
+                        call terpa(yylldd,xss(esz+ie-1),en,idis,scr,nppy,nrry)
                         ss=0
-                        if (ie.ge.iaa) ss=xss(2+k+ie-iaa)
+                        if (ie.ge.iaa) ss=yylldd*xss(2+k+ie-iaa)
                         xss(phn+2+ie-it)=xss(phn+2+ie-it)+h*ss
                         if (xss(tot+ie-1).ne.zero)&
                           xss(thn+ie-1)=xss(thn+ie-1)&
@@ -2043,7 +2047,7 @@ contains
             loc(j)=k
             imx(j)=imn(j)+nint(xss(k))-1
             ib=max0(ib,imx(j))
-            k=iabs(nint(xss(mtr+n-1)))
+            k=nint(xss(mtr+n-1))
             call mtname(k,title(j),0)
             if (title(j)(1:1).eq.'(') then
                title(j)(2:2)='g'
@@ -2304,7 +2308,7 @@ contains
                           xss(j+2*nn+loci)
                      endif
                   enddo
-                  l=l+3*nn
+                  l=l+3*nn+2
                enddo
                l2=l
 
@@ -2329,7 +2333,61 @@ contains
                     e2,intt,nd,nn,(xss(j+loci),xss(j+nn+loci),&
                     xss(j+2*nn+loci),xss(j+3*nn+loci),&
                     xss(j+4*nn+loci),j=1,nn)
-                  l=l+4*nn
+                  l=l+5*nn+2
+               enddo
+               l2=l
+
+            !--law 61
+            else if (law.eq.61) then
+               ne=nint(xss(l3+1))
+               l=l3+2+2*ne
+               do ie=1,ne
+                  e2=xss(l3+2+ie-1)
+                  loci=nint(xss(l3+2+ne+ie-1))+dlwp-1
+                  intt=mod(nint(xss(loci)),10)
+                  nd=nint(xss(loci)/10)
+                  nn=nint(xss(loci+1))
+                  loci=loci+1
+                  l=l+4*nn+2
+                  write(nsyso,'(/6x,'' incident energy = '',1p,e14.6,&
+                    &''   intt ='',i2,''    nd = '',i4,''    np = '',&
+                    &i4)') e2,intt,nd,nn
+                  do ip=1,nn
+                     write(nsyso,'(/&
+                       &6x,'' secondary energy = '',1p,e14.6/&
+                       &6x,''              pdf = '',e14.6/&
+                       &6x,''              cdf = '',e14.6)')&
+                       xss(ip+loci),xss(ip+nn+loci),xss(ip+2*nn+loci)
+                     locj=nint(xss(ip+3*nn+loci)+dlwp-1)
+                     if (locj.ne.0) then
+                        intmu=nint(xss(locj))
+                        nmu=nint(xss(locj+1))
+                        write(nsyso,'(&
+                          &6x,''            intmu = '',i8/&
+                          &6x,''              nmu = '',i8/&
+                          &''         cosine           pdf           cdf'',&
+                          &''        cosine           pdf           cdf''/&
+                          &''   ------------  ------------  ------------'',&
+                          &''  ------------  ------------  ------------'')')&
+                          intmu,nmu
+                        do imu=1,nmu,2
+                           if (imu.eq.nmu) then
+                              write(nsyso,'(1x,1p,3e14.6)')&
+                                xss(locj+1+imu),xss(locj+1+nmu+imu),&
+                                xss(locj+1+2*nmu+imu)
+                           else
+                              write(nsyso,'(1x,1p,6e14.6)')&
+                                xss(locj+1+imu),xss(locj+1+nmu+imu),&
+                                xss(locj+1+2*nmu+imu),xss(locj+1+imu+1),&
+                                xss(locj+1+nmu+imu+1),&
+                                xss(locj+1+2*nmu+imu+1)
+                           endif
+                           l=l+3*nmu+2
+                        enddo
+                      else
+                        write(nsyso,'('' angular distribution is isotropic'')')
+                      endif
+                  enddo
                enddo
                l2=l
 
