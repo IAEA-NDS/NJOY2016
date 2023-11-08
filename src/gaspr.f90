@@ -270,7 +270,7 @@ contains
    idone=0
    do while (idone.eq.0)
       call contio(npend,0,0,b(1),nb,nw)
-      if (mth.gt.200.or.mth.eq.0) then
+      if (mth.gt.202.or.mth.eq.0) then
          idone=1
       else
          call tosend(npend,0,0,a(1))
@@ -824,6 +824,7 @@ contains
    if (izr.eq.2003) y206=y206+1
    if (izr.eq.2004) y207=y207+1
    if (izr.eq.4008) y207=y207+2
+   if (izr.eq.3008) y207=y207+2
    if (y203.eq.zero.and.y204.eq.zero.and.y205.eq.zero&
      .and.y206.eq.zero.and.y207.eq.zero) go to 310
    enext=thrg
@@ -947,7 +948,7 @@ contains
       i=i+1
       j=k-1+6*(i-1)
       if (nint(a(j+3)).gt.3) idone=1
-      if (nint(a(j+3)).eq.3.and.nint(a(j+4)).gt.200) idone=1
+      if (nint(a(j+3)).eq.3.and.nint(a(j+4)).gt.202) idone=1
    enddo
    if (idone.eq.0) then
       j=k-1+6*nx
@@ -1035,7 +1036,7 @@ contains
       call contio(nscr1,0,0,b(1),nb,nw)
       mfb=mfh
       mtb=mth
-      if (mth.gt.200.or.mth.eq.0) then
+      if (mth.gt.202.or.mth.eq.0) then
          idone=1
       else
          call contio(0,noutp,0,b(1),nb,nw)

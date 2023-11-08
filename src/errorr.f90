@@ -1126,7 +1126,7 @@ contains
    if (iread.ne.1) then
       allocate(ak(nmtmax*2,irmax))
    endif
-   nwscr=1400000
+   nwscr=5000000
    allocate(scr(nwscr))
    neki=0
    neni=0
@@ -1832,7 +1832,7 @@ contains
    if (mfcov.eq.35) then
       namx=max(npage+6,ncovl)
    else
-      namx=2000000
+      namx=5000000
    endif
    allocate(scr(namx))
    mfd=3
@@ -7054,7 +7054,7 @@ contains
    integer::n,ngn2,mtl,lmtold,nmtold,itp,ldlst,ldold
    integer::irpc,iupc
    integer,dimension(:),allocatable::lmt1,lmt2
-   real(kr)::egtjg,egtjgp,time,denom
+   real(kr)::egtjg,egtjgp,time,denom,epsvar
    character(60)::strng
    real(kr),dimension(:),allocatable::xmu
    real(kr),dimension(:),allocatable::alp
@@ -7062,6 +7062,7 @@ contains
    real(kr),dimension(:,:),allocatable::cova
    real(kr),dimension(:,:),allocatable::alsig,clflx
    real(kr),parameter::eps=1.e-20_kr
+   real(kr),parameter::epsvar0=5.0e-7_kr
    real(kr),parameter::zero=0
 
    !--allocate storage.
@@ -7563,6 +7564,23 @@ contains
                   scr(ibase+ip)=0
                endif
             endif
+         endif
+         if (mfcov.eq.33.and.mth.eq.mts(ixp).and.(ig.eq.igp).and.&
+           & (mats(ixp).eq.0.or.math.eq.mats(ixp))) then
+           if (scr(ibase+ip).lt.zero) then
+             write(nsyse,*)
+             write(nsyse,'(a,i3,a,i5)') &
+               & ' ---message from covout--- negative variance for mt=',&
+               &  mth,' in group=',ig
+             write(nsyse,'(27x,a,1pe11.3)')'var=',scr(ibase+ip)
+             epsvar=max(abs(scr(ibase+ip)),epsvar0)
+             if (irelco.ne.0) then
+               scr(ibase+ip)=epsvar
+             else
+               scr(ibase+ip)=epsvar*csig(ig,ix)*csig(ig,ix)
+             endif
+             write(nsyse,'(27x,a,1pe10.3)')'reset to ',scr(ibase+ip)
+           endif
          endif
          if (abs(scr(ibase+ip)).le.eps) then
             if (ig2lo.eq.0) ip=ip-1

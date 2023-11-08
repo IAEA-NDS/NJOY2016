@@ -780,30 +780,31 @@ contains
                   enddo
                   nex=nex+4+2*ne
                else
+                  ! get the yield, these reactions produce neutrons
                   y=1
-                  if (mth.eq.11.or.mth.eq.16.or.mth.eq.24.or.&
-                      mth.eq.30.or.mth.eq.41.or.mth.eq.154.or.&
-                      mth.eq.159.or.mth.eq.176.or.mth.eq.190.or.&
-                      (mth.ge.875.and.mth.le.891)) then
-                     y=2
-                  elseif (mth.eq.17.or.mth.eq.25.or.mth.eq.42.or.&
-                          mth.eq.157.or.mth.eq.172.or.mth.eq.177.or.&
-                          mth.eq.179.or.(mth.ge.181.and.mth.le.199)) then
-                     y=3
-                  elseif (mth.eq.37.or.mth.eq.156.or.mth.eq.165.or.&
-                          mth.eq.169.or.mth.eq.173.or.mth.eq.178.or.&
-                          (mth.ge.194.and.mth.le.196)) then
-                     y=4
-                  elseif (mth.eq.152.or.mth.eq.162.or.mth.eq.166.or.&
-                          mth.eq.170.or.mth.eq.174.or.mth.eq.200) then
-                     y=5
-                  elseif (mth.eq.153.or.mth.eq.163.or.mth.eq.167.or.&
-                          mth.eq.171.or.mth.eq.175) then
-                     y=6
-                  elseif (mth.eq.160.or.mth.eq.164.or.mth.eq.168) then
-                     y=7
-                  elseif (mth.eq.161) then
-                     y=8
+                  if (mt.eq.11.or.mt.eq.16.or.mt.eq.24.or.mt.eq.30.or.&
+                      mt.eq.41.or.mt.eq.154.or.mt.eq.159.or.&
+                      mt.eq.176.or.mt.eq.190.or.&
+                      (mt.ge.875.and.mt.le.891)) then
+                    y=2
+                  elseif (mt.eq.17.or.mt.eq.25.or.mt.eq.42.or.&
+                          mt.eq.157.or.mt.eq.172.or.mt.eq.177.or.&
+                          mt.eq.179.or.(mt.ge.181.and.mt.le.199)) then
+                    y=3
+                  elseif (mt.eq.37.or.mt.eq.156.or.mt.eq.165.or.&
+                          mt.eq.169.or.mt.eq.173.or.mt.eq.178.or.&
+                          (mt.ge.194.and.mt.le.196)) then
+                    y=4
+                  elseif (mt.eq.152.or.mt.eq.162.or.mt.eq.166.or.&
+                          mt.eq.170.or.mt.eq.174.or.mt.eq.200) then
+                    y=5
+                  elseif (mt.eq.153.or.mt.eq.163.or.mt.eq.167.or.&
+                          mt.eq.171.or.mt.eq.175) then
+                    y=6
+                  elseif (mt.eq.160.or.mt.eq.164.or.mt.eq.168) then
+                    y=7
+                  elseif (mt.eq.161) then
+                    y=8
                   endif
                   do j=iaa,nes
                      e=xss(esz+j-1)
@@ -905,8 +906,8 @@ contains
                      ne=nint(scr(6))
                      xss(nex+3)=ne
                      do i=1,ne
-                        xss(nex+3+i)=sigfig(scr(7+2*i)/emev,7,0)
-                        xss(nex+3+i+ne)=sigfig(scr(8+2*i),7,0)
+                       xss(nex+3+i)=sigfig(scr(5+2*nr+2*i)/emev,7,0)
+                       xss(nex+3+i+ne)=sigfig(scr(6+2*nr+2*i),7,0)
                      enddo
                      nex=nex+4+2*ne
                   endif
@@ -1196,7 +1197,7 @@ contains
             ! neglecting photon momentum.
             do j=iaa,nes
                e=xss(esz+j-1)/emev
-               ebar=awr*(e-abs(q))/(1+awr)
+               ebar=(awr-awp)*(e-abs(q))/awr
                hh=ebar*xss(2+k+j-iaa)
                xss(phn+2+j-it)=xss(phn+2+j-it)+hh
                hh=(e-abs(q))*xss(2+k+j-iaa)-hh
@@ -1446,11 +1447,14 @@ contains
                do while (ik.lt.nk)
                   ik=ik+1
                   ! read the multiplicity
+                  lly=1
                   call tab1io(nin,0,0,scr,nb,nw)
                   jscr=1+nw
                   do while (nb.ne.0)
                      call moreio(nin,0,0,scr(jscr),nb,nw)
                      jscr=jscr+nw
+                     if (jscr.gt.nwscr) call error('acephn',&
+                         'scr array overflow in file 6 tab1',' ')
                   enddo
                   ! retrieve izap, awp and the law
                   izap=nint(scr(1))
@@ -1617,9 +1621,18 @@ contains
                               endif
                               if (lang.eq.2) then
                                  ! kalbach-mann
-                                 rkal=scr(lld+8+ncyc*(ig-1))
-                                 ep=xss(nex+1+ig)
-                                 akal=bachaa(izai,izap,za,ee,ep)
+                                 if (na.gt.0) then
+                                   rkal=scr(lld+8+ncyc*(ig-1))
+                                   if (na.eq.1) then
+                                     ep=xss(nex+1+ig)
+                                     akal=bachaa(izai,izap,za,ee,ep)
+                                   elseif (na.eq.2) then
+                                     akal=scr(lld+9+ncyc*(ig-1))
+                                   endif
+                                 else
+                                   rkal=0.0d0
+                                   akal=1.0d-20
+                                 endif
                                  xss(nex+1+ig+3*ng)=sigfig(rkal,7,0) ! r
                                  xss(nex+1+ig+4*ng)=sigfig(akal,7,0) ! a
                               else
@@ -1698,11 +1711,11 @@ contains
                                 sigfig(renorm*xss(nex+1+2*ng+ig),9,0)
                            enddo
                            scr(llh+6+2*ie)=ee
-                           scr(llh+7+2*ie)=avlab
+                           scr(llh+7+2*ie)=avlab*renorm
                            if(lang.eq.1)then
                               nex=nexc
                            else
-                              nex=nex+2+(2*na+3)*ng
+                              nex=nex+2+5*ng
                            endif
                         enddo  !end of loop over incident energies
 
@@ -2312,7 +2325,7 @@ contains
                           xss(j+2*nn+loci)
                      endif
                   enddo
-                  l=l+3*nn
+                  l=l+3*nn+2
                enddo
                l2=l
 
@@ -2337,7 +2350,7 @@ contains
                     e2,intt,nd,nn,(xss(j+loci),xss(j+nn+loci),&
                     xss(j+2*nn+loci),xss(j+3*nn+loci),&
                     xss(j+4*nn+loci),j=1,nn)
-                  l=l+4*nn
+                  l=l+5*nn+2
                enddo
                l2=l
 
@@ -2352,6 +2365,7 @@ contains
                   nd=nint(xss(loci)/10)
                   nn=nint(xss(loci+1))
                   loci=loci+1
+                  l=l+4*nn+2
                   write(nsyso,'(/6x,'' incident energy = '',1p,e14.6,&
                     &''   intt ='',i2,''    nd = '',i4,''    np = '',&
                     &i4)') e2,intt,nd,nn
@@ -2385,12 +2399,12 @@ contains
                                 xss(locj+1+nmu+imu+1),&
                                 xss(locj+1+2*nmu+imu+1)
                            endif
+                           l=l+3*nmu+2
                         enddo
                       else
                         write(nsyso,'('' angular distribution is isotropic'')')
                       endif
                   enddo
-                  l=l+4*nn
                enddo
                l2=l
 

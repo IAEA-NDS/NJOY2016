@@ -1,6 +1,6 @@
 module physics
    ! Provides pi and physics constants taken from CODATA'2014 as
-   ! given on the NIST site: 
+   ! given on the NIST site:
    !      https://physics.nist.gov/cuu/Constants
    ! namely, bk (Boltzmann's constant),
    ! amassn (the neutron mass in amu), amu (the amu value itself),

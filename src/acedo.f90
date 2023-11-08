@@ -210,7 +210,11 @@ contains
                   endif
                   scr(1:nw)=tmpscr(1:nw)
                   lfs=l2h
-                  xss(mtr-1+j)=mth+1000*(10+lfs)
+                  if (mth.eq.5) then
+                    xss(mtr-1+j)=1000000*(50+lfs)+l1h   ! l1h=izap
+                  else
+                    xss(mtr-1+j)=mth+1000*(10+lfs)
+                  endif
                   nr=nint(scr(5))
                   ne=nint(scr(6))
                   intr=nint(scr(8))
@@ -441,14 +445,26 @@ contains
       l=l+1
       if (nr.ne.0) then
          lim=2*nr
-         write(nsyso,'(''1''///&
+         if (mt.lt.1000000) then
+           write(nsyso,'(''1''///&
            &'' reaction mt = '',i6,3x,a10/'' interpolation: '',12i6)')&
            mt,name,(nint(xss(l-1+i)),i=1,lim)
+         else
+           write(nsyso,'(''1''///&
+           &'' reaction mt = '',i9,3x,a10/'' interpolation: '',12i6)')&
+           mt,name,(nint(xss(l-1+i)),i=1,lim)
+         endif
          l=l+2*nr
       else
-         write(nsyso,'(''1''///&
+        if (mt.lt.1000000) then
+           write(nsyso,'(''1''///&
            &'' reaction mt = '',i6,3x,a10/'' linear interpolation'')')&
            mt,name
+        else
+           write(nsyso,'(''1''///&
+           &'' reaction mt = '',i9,3x,a10/'' linear interpolation'')')&
+           mt,name
+        endif
       endif
       ne=nint(xss(l))
       l=l+1
@@ -586,11 +602,11 @@ contains
    call openz(ndir,1)
    if (mcnpx.eq.0) then
       write(ndir,&
-        '(a10,f12.6,'' filename route'',i2,'' 1 '',i8,2i6,1p,e10.3)')&
+        '(a10,f12.6,'' filename route'',i2,'' 1 '',i9,2i6,1p,e10.3)')&
         hz(1:10),aw0,itype,len2,lrec,nern,tz
    else
       write(ndir,&
-        '(a13,f12.6,'' filename route'',i2,'' 1 '',i8,2i6,1p,e10.3)')&
+        '(a13,f12.6,'' filename route'',i2,'' 1 '',i9,2i6,1p,e10.3)')&
         hz(1:13),aw0,itype,len2,lrec,nern,tz
    endif
    call closz(ndir)

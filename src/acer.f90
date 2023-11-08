@@ -156,6 +156,9 @@ contains
    !               points above 10 Mev to some fission spectra assuming
    !               an exponential shape.  otherwise, use ismooth=0.
    !               NOTE:  ismooth=0 is the default value in njoy99.
+   !    no7      mf6/law=7 conversion option
+   !               no7=1 convert law=7 to law61 (default)
+   !               no7=0 convert law=7 to law67
    ! card 7
    !  type of thinning is determined by sign of thin(1)
    !  (pos. or zero/neg.=energy skip/integral fraction)
@@ -238,7 +241,7 @@ contains
    integer::iopt,iprint,itype,nxtra,nza
    integer::matd
    real(kr)::tempd
-   integer::newfor,iopp,ismooth
+   integer::newfor,iopp,ismooth,no7
    real(kr)::thin(4)
    integer::iskf,iwtt,npts
    real(kr)::suff
@@ -312,12 +315,14 @@ contains
       iopp=1
       newfor=1
       ismooth=1
-      read(nsysi,*) newfor,iopp,ismooth
+      no7=1
+      read(nsysi,*) newfor,iopp,ismooth,no7
       write(nsyso,'(&
         &'' new formats .......................... '',i10/&
         &'' photon option ........................ '',i10/&
-        &'' smoothing option ..................... '',i10)')&
-        newfor,iopp,ismooth
+        &'' smoothing option ..................... '',i10/&
+        &'' law7 conversion option ............... '',i10)')&
+        newfor,iopp,ismooth,no7
       if (newfor.ne.0.and.newfor.ne.1) then
          call error('acer','illegal newfor.',' ')
       endif
@@ -327,10 +332,18 @@ contains
       if (ismooth.ne.0.and.ismooth.ne.1) then
          call error('acer','illegal ismooth.',' ')
       endif
+      if (no7.ne.0.and.no7.ne.1) then
+         call error('acer','illegal no7.',' ')
+      endif
       if (iopp.eq.0) write(nsyso,&
         '(/'' photons will not be processed'')')
       if (ismooth.eq.0) write(nsyso,&
         '(/'' smoothing operation will not be performed'')')
+      if (no7.eq.0) then
+        write(nsyso,'(/'' mf6/law7 will be converted to law67'')')
+      else
+        write(nsyso,'(/'' mf6/law7 will be converted to law61'')')
+      endif
       mte=0
       z(1)=0
       z(2)=0
@@ -442,7 +455,7 @@ contains
    !--prepare fast ace data
    if (iopt.eq.1) then
       call acetop(nendf,npend,ngend,nace,ndir,iprint,itype,mcnpx,suff,&
-        hk,izn,awn,matd,tempd,newfor,iopp,ismooth,thin)
+        hk,izn,awn,matd,tempd,newfor,iopp,ismooth,no7,thin)
 
    !--prepare thermal ace data
    else if (iopt.eq.2) then

@@ -372,7 +372,7 @@ contains
          call emerge(nscr1,nscr2,ngrid,nscr3,nrtot,iold,inew,nscr4)
 
          !--write output tape.
-         call recout(iold,nscr4,nrtot)
+         call recout(iold,nscr4,nrtot,nsub)
 
          !--deallocate arrays for this material
          deallocate(card)
@@ -551,51 +551,61 @@ contains
          if (mti.eq.151) maxres=12*nint(dict(i+4))
       else if (mfi.eq.3) then
          nxn=nxn+1
-         if (nmtr.eq.0) mtr(1)=1
-         if (nmtr.eq.0) nmtr=1
          mti=nint(dict(i+3))
-         if (mti.eq.19) then
-            nmtr=nmtr+1
-            mtr(nmtr)=18
-            mtr18=1
+         if (nint(zain).le.1) then
+            if (nmtr.eq.0) then
+              mtr(1)=1
+              nmtr=1
+            endif
          endif
-         if (mti.ge.51.and.mti.le.91.and.mtr4.eq.0) then
-            nmtr=nmtr+1
-            mtr(nmtr)=4
-            mtr4=1
-         endif
-         if (mti.ge.mpmin.and.mti.le.mpmax.and.mt103.eq.0) then
-            nmtr=nmtr+1
-            mtr(nmtr)=103
-            mt103=1
-         endif
-         if (mti.ge.mdmin.and.mti.le.mdmax.and.mt104.eq.0) then
-            nmtr=nmtr+1
-            mtr(nmtr)=104
-            mt104=1
-         endif
-         if (mti.ge.mtmin.and.mti.le.mtmax.and.mt105.eq.0) then
-            nmtr=nmtr+1
-            mtr(nmtr)=105
-            mt105=1
-         endif
-         if (mti.ge.m3min.and.mti.le.m3max.and.mt106.eq.0) then
-            nmtr=nmtr+1
-            mtr(nmtr)=106
-            mt106=1
-         endif
-         if (mti.ge.m4min.and.mti.le.m4max.and.mt107.eq.0) then
-            nmtr=nmtr+1
-            mtr(nmtr)=107
-            mt107=1
+         if (nint(zain).eq.1) then
+            if (mti.eq.19) then
+               nmtr=nmtr+1
+               mtr(nmtr)=18
+               mtr18=1
+            endif
+            if (mti.ge.51.and.mti.le.91.and.mtr4.eq.0) then
+               nmtr=nmtr+1
+               mtr(nmtr)=4
+               mtr4=1
+            endif
+            if (mti.ge.mpmin.and.mti.le.mpmax.and.mt103.eq.0) then
+               nmtr=nmtr+1
+               mtr(nmtr)=103
+               mt103=1
+            endif
+            if (mti.ge.mdmin.and.mti.le.mdmax.and.mt104.eq.0) then
+               nmtr=nmtr+1
+               mtr(nmtr)=104
+               mt104=1
+            endif
+            if (mti.ge.mtmin.and.mti.le.mtmax.and.mt105.eq.0) then
+               nmtr=nmtr+1
+               mtr(nmtr)=105
+               mt105=1
+            endif
+            if (mti.ge.m3min.and.mti.le.m3max.and.mt106.eq.0) then
+               nmtr=nmtr+1
+               mtr(nmtr)=106
+               mt106=1
+            endif
+            if (mti.ge.m4min.and.mti.le.m4max.and.mt107.eq.0) then
+               nmtr=nmtr+1
+               mtr(nmtr)=107
+               mt107=1
+            endif
          endif
       else if (mfi.eq.10) then
          nxn=nxn+1
       else if (mfi.eq.12) then
          nxn=nxn+1
          mti=nint(dict(i+3))
-         if (mti.eq.3) nmtr=nmtr+1
-         if (mti.eq.3) mtr(nmtr)=3
+         if (nint(zain).le.1) then
+           if (mti.eq.3) then
+             nmtr=nmtr+1
+             mtr(nmtr)=3
+           endif
+         endif
       else if (mfi.eq.13) then
          nxn=nxn+1
       else if (mfi.eq.23) then
@@ -617,27 +627,39 @@ contains
          endif
       endif
    enddo
-   do i=1,nmtr
-      mtrt(i)=1000000
-   enddo
-   do i=1,nmtr
-      if (mtr(i).eq.1) mtrt(i)=1
-      if (mtr(i).eq.501) mtrt(i)=1
-   enddo
 
-   !--sort reactions into increasing order.
-   if (nmtr.gt.2) then
-      i2=nmtr-1
-      do i=2,i2
-         j1=i+1
-         do j=j1,nmtr
-            if (mtr(j).le.mtr(i)) then
-               mtsave=mtr(i)
-               mtr(i)=mtr(j)
-               mtr(j)=mtsave
-            endif
-         enddo
+   if (nmtr.gt.0) then
+      do i=1,nmtr
+         mtrt(i)=1000000
       enddo
+      do i=1,nmtr
+         if (mtr(i).eq.1) mtrt(i)=1
+         if (mtr(i).eq.501) mtrt(i)=1
+      enddo
+
+      !--sort reactions into increasing order.
+      if (nmtr.gt.2) then
+         i2=nmtr-1
+         do i=2,i2
+            j1=i+1
+            do j=j1,nmtr
+               if (mtr(j).le.mtr(i)) then
+                  mtsave=mtr(i)
+                  mtr(i)=mtr(j)
+                  mtr(j)=mtsave
+               endif
+            enddo
+         enddo
+      elseif (nmtr.eq.2) then
+         if (mtr(2).lt.mtr(1)) then
+            mtsave=mtr(1)
+            mtr(1)=mtr(2)
+            mtr(2)=mtsave
+         endif
+      endif
+   else
+      mtr(1)=0
+      mtrt(1)=0
    endif
 
    !--initialize new dictionary.
@@ -1806,6 +1828,7 @@ contains
    allocate(bufn(nbuf))
    allocate(x(ndim))
    allocate(y(ndim))
+   if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
 
    ! this value fits 1/v to within err
@@ -4655,6 +4678,7 @@ contains
    allocate(bufn(nbuf))
    allocate(bufg(nbufg))
    allocate(bufr(nbufr))
+   if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
    nneg=0
    ntot=nmtr+1
@@ -4773,7 +4797,9 @@ contains
    sn=0
    if (thresh-eg.gt.test*thresh.and.itype.eq.0) go to 370
    call gety1(eg,enext,idis,sn,nin,scr)
-   if (thresh.gt.one.and.abs(thresh-eg).lt.test*thresh) sn=0
+   ! set zero cross section at threshold, but mt2 for charge particles
+   if ((mth.ne.2.or.(mth.eq.2.and.nint(zain).le.1)).and.&
+     & thresh.gt.one.and.abs(thresh-eg).lt.test*thresh) sn=0
    ! backgrounds in a range of unresolved-smooth overlap
    ! are arbitrarily assigned to the unresolved component
    if (eg.ge.eresr.and.eg.lt.eresh.and.itype.gt.0) sn=0
@@ -4810,7 +4836,7 @@ contains
    endif
    sn=sigfig(sn,7,0)
    tot(2)=sn
-   if (ith.eq.0.and.sn.gt.zero) ith=in
+   if (ith.eq.0.and.(sn.gt.zero.or.(nint(zain).gt.1.and.mth.eq.2))) ith=in
    inn=in
    if (ig.eq.ngo) inn=-in
    call loada(inn,tot,2,ngrid,bufg,nbufg)
@@ -4960,18 +4986,18 @@ contains
    return
    end subroutine emerge
 
-   subroutine recout(iold,nscr,nrtot)
+   subroutine recout(iold,nscr,nrtot,nsub)
    !-------------------------------------------------------------------
    ! Add a new material to the output pendf tape.
    !-------------------------------------------------------------------
    use endf   ! provides endf routines and variable
    use util   ! provides error,closz,repoz
    ! externals
-   integer::iold,nscr,nrtot
+   integer::iold,nscr,nrtot,nsub
    ! internals
    integer::i152,nb,nw,nwd,i,j,nc,no2,no3,imtr,np,nxcc
    integer::l,ntot,lis3,lfs,mtl,istart,k,last,iend,ib,mtd
-   integer::mfl,n1l,n2l
+   integer::mfl,n1l,n2l,mt3
    integer::iang,imt,idone
    real(kr)::resl(1+ncoef*nmtres)
    real(kr),dimension(:),allocatable::bufo,bufn,bufl
@@ -4985,9 +5011,11 @@ contains
    real(kr),parameter::zero=0
 
    !--initialize.
+   if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
    allocate(bufo(nbuf))
    allocate(bufn(nbuf))
+   if (allocated(bufl)) deallocate(bufl)
    allocate(bufl(nbufl))
    i152=0
    if (nunr.gt.0) i152=1
@@ -5029,12 +5057,17 @@ contains
       if (iverf.eq.6) scr(6)=6
       call contio(0,nout,0,scr,nb,nw)
    endif
+   if (awin.eq.0.and.nsub.ne.0) then
+      nsub=3
+   else
+      nsub=10*nint(zain)
+   endif
    if (iverf.eq.6) then
       scr(1)=awin
       scr(2)=efmax
       scr(3)=lrel
       scr(4)=0
-      scr(5)=int(10*zain)
+      scr(5)=nsub
       scr(6)=nver
       call contio(0,nout,0,scr,nb,nw)
    endif
@@ -5086,10 +5119,13 @@ contains
                dict(j+1)=0
                dict(j+2)=0
                dict(j+3)=mfs(i)
-               if (mfs(i).eq.3.and.mtr(imtr).eq.1.and.awin.eq.0) then
+               if (mfs(i).eq.3.and.mtr(imtr).eq.1.and.awin.eq.0.and.&
+                   mts(i).ge.3) then
                   dict(j+4)=3
+                  mt3=3
                else
                   dict(j+4)=mtr(imtr)
+                  mt3=1
                endif
                np=ngo-mtrt(imtr)+1
                dict(j+5)=3+int((np+2)/3)
@@ -5236,8 +5272,9 @@ contains
       if(mfl.eq.0) go to 272
       goto 270
    endif
+   if (nint(zain).gt.1) goto 270
    mth=1
-   if (awin.eq.0) then
+   if (awin.eq.0.and.mt3.eq.3) then
       mth=3
    endif
    if (mfh.eq.23) mth=501

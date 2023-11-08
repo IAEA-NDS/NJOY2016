@@ -19,6 +19,7 @@ module heatm
    ! global variables
    integer::matd,mgam,npk,mtp(28),nqa,mta(nqamax),mt303,mt19
    integer::ne,kchk,iprint,lqs(nqamax)
+   integer::kkerma
    real(kr),dimension(:),allocatable::qbar
    real(kr)::qa(nqamax),efirst,elast,za,awr,elist(ilmax)
    real(kr)::break
@@ -96,6 +97,8 @@ contains
    !    iprint   print (0 min, 1 max, 2 check) (default=0)
    !    ed       displacement energy for damage
    !             (default from built-in table)
+   !    kkerma   0/1=total (mt301) is energy balance / kinematic
+   !             (default=0)
    ! card 3      for npk gt 0 only
    !    mtk      mt numbers for partial kermas desired
    !             total (mt301) will be provided automatically.
@@ -141,6 +144,7 @@ contains
    real(kr),parameter::qflag=-1.e-9_kr
    real(kr),parameter::zero=0
    integer,parameter::maxqbar=10000
+   integer::mtkk,mtkchk
 
    !--start
    call timer(time)
@@ -161,7 +165,8 @@ contains
    local=0
    iprint=0
    break=0
-   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break
+   kkerma=0
+   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break,kkerma
    kchk=0
    if (iprint.eq.2) kchk=1
    if (iprint.eq.2) iprint=1
@@ -173,6 +178,28 @@ contains
      call error('heatr','requested too many q values.',' ')
    if (npk.gt.0) then
       read(nsysi,*) (mtk(i),i=1,npk)
+   endif
+   if (kkerma.eq.1) then
+      if (npk.gt.0) then
+         mtkk=0
+         do i=1,npk
+            if (mtk(i).eq.443) mtkk=i
+         enddo
+         if (mtkk.eq.0) then
+            npk=npk+1
+            if (kchk.eq.1) then
+              npkk=3*npk+7
+            else
+              npkk=npk+3
+            endif
+            if (npkk.gt.npkmax) call error('heatr',&
+              'requested too many kerma mt-s (6+mt301 allowed).',' ')
+            mtk(npk)=443
+         endif
+       else
+         npk=1
+         mtk(npk)=443
+       endif
    endif
    allocate(tmp(maxqbar))
    loc=1
@@ -218,6 +245,16 @@ contains
          if (mtk(i).eq.443.and.kchk.eq.0) kchk=2
          if (mtk(i).eq.301) isave=i
       enddo
+      mtkchk=0
+      do i=1,npk
+        if (mtk(i).eq.443) then
+          mtkchk=1
+          exit
+        endif
+      enddo
+      if (kkerma.eq.1.and.mtkchk.eq.0) then
+        call error('heatr',' no mt=443 in input for kkerma=1!',' ')
+      endif
       if (isave.gt.0) then
          call mess('heatr','mt301 always calculated',&
            '--you do not need to ask for it.')
@@ -624,7 +661,7 @@ contains
 
    !--calculate q change for fissionables in mt 458
    if (ifiss.ne.0) then
-      deallocate(scr)
+      if (allocated(scr)) deallocate(scr)
       nw=10000
       allocate(scr(nw))
       if (allocated(c458)) deallocate(c458)
@@ -1670,7 +1707,7 @@ contains
    !     300 + MT for reaction
    ! Special values allowed are
    !     303=nonelastic (all but MT2)
-   !     304=inelastic (MTs1-91)
+   !     304=inelastic (MT51-91)
    !     318=fission (MT18 or MT19-21 and MT38)
    !     401=disappearance (MT102-120)
    !     442=total photon ev-barns in kerma
@@ -2770,8 +2807,8 @@ contains
    real(kr)::c(ncmax),b(nbmax)
    ! internals
    integer::matd,mfd,mtd,l,nb,nw,ik,nnt,nmu,imu,mf1,mt1,idis
-   integer::ip,ir,idisc,iraw,nne,ne,law,lang,lep,intl
-   real(kr)::disc102,zp,zt,ap,at,ztt,pe,eihi,f,d,s,enext
+   integer::ip,ir,idisc,iraw,nne,ne,law,lang,lep,intl,ll
+   real(kr)::disc102,zp,zt,ap,at,ztt,pe,eihi,f,d,s,enext,ygam102(5000)
    real(kr)::elo,ehi,flo,fhi,dlo,dhi
    character(60)::strng
    real(kr),parameter::small=1.e-10_kr
@@ -2779,7 +2816,7 @@ contains
    real(kr),parameter::zero=0
    save iraw,nne,ne,law,lang,lep,intl
    save elo,ehi,flo,fhi,dlo,dhi
-   save disc102,zp,ap,zt,at
+   save disc102,zp,ap,zt,at,ygam102
 
    !--initialize for this subsection when e=0.
    if (e.gt.zero) go to 300
@@ -2835,10 +2872,14 @@ contains
 
    iflag=0
    disc102=0
-   if (zap.eq.zero) then
+   if (zap.eq.zero.and.law.eq.2.and.mth.eq.102.and.awp.ne.zero) then
       iflag=1
       disc102=awp
       awp=0
+      nw=6+2*nint(c(5))+2*nint(c(6))
+      do ll=1,nw
+        ygam102(ll)=c(ll)
+      enddo
    endif
    ebar=0
    yld=0
@@ -2965,12 +3006,16 @@ contains
 
    !--normal entry
   300 continue
-      if (disc102.gt.zero) go to 430
+   !--discrete relativistic capture gamma (mf6/mt102)
+   !--treatment for H-1 in ENDF/B-VII.0, ENDF/B-VII.1 and ENDF/B-VIII.0
+   if (disc102.gt.zero) go to 430
 
    !--interpolate for particle yield
    ip=2
    ir=1
    call terpa(pe,e,eihi,idisc,c(1),ip,ir)
+
+   !--recoil treatment
    if (irec.gt.0) pe=1
 
    !--is desired energy in current panel
@@ -3029,6 +3074,7 @@ contains
    else
       ztt=int(zat/1000)
       call tabsq6(fhi,dhi,c(iraw),law,ztt,awrt,ehi,c(1))
+      pe=1.0
    endif
    go to 305
 
@@ -3059,8 +3105,8 @@ contains
    return
 
    !--discrete relativistic capture gamma
-  430 call hgam102(e,ebar,dame,disc102,c,irec,zp,ap,zt,at)
-   yld=1
+  430 call hgam102(e,ebar,dame,disc102,ygam102,irec,zp,ap,zt,at,pe)
+   yld=pe
    return
 
    !--return zeros outside range of table
@@ -4206,8 +4252,8 @@ contains
    endif
 
    !--finished
-   g=yield*g/s
-   h=yield*h/s
+   g=yield*yield*g/s
+   h=yield*yield*h/s
    return
    end subroutine tabsq6
 
@@ -5043,17 +5089,26 @@ contains
    return
    end subroutine hconvr
 
-   subroutine hgam102(e,ebar,dame,disc102,c,irec,zp,ap,zt,at)
+   subroutine hgam102(e,ebar,dame,disc102,c,irec,zp,ap,zt,at,yld)
    !-------------------------------------------------------------------
-   ! Process the relativistic discrete gamma or its recoil as
-   ! given in mf6/mt102 for ENDF/B-VII neutron + H-1.
+   ! Process the relativistic discrete gamma or its recoil as given in
+   ! mf6/mt102 for H-1 in the ENDF/B-VII.1 & ENDF/B-VIII.0 using
+   ! law2/law4 for the primary photon/recoil in the ground state
+   ! n + 1-H-1 --> 1-H-2 + gamma
    !-------------------------------------------------------------------
+   use endf ! terpa
    ! externals
    integer::irec
-   real(kr)::e,ebar,dame,disc102,zp,ap,zt,at
+   real(kr)::e,ebar,dame,disc102,zp,ap,zt,at,yld
    real(kr)::c(*)
    ! internals
-   real(kr)::er,eg2
+   real(kr)::er,eg2,enext
+   integer::idisc,ip,ir
+
+   !--interpolate yield
+   ip=2
+   ir=1
+   call terpa(yld,e,enext,idisc,c(1),ip,ir)
 
    if (irec.eq.0) then
       ebar=disc102+e*awr/(1+awr)
@@ -5061,9 +5116,10 @@ contains
    else
       !--include recoil energy plus photon "kick" energy
       er=e/(awr+1)
-      eg2=disc102*disc102*rtm/2
+      eg2=yld*yld*disc102*disc102*rtm/2
       ebar=er+eg2
       dame=df(ebar,zp,ap,zt,at)
+      yld=1.0
    endif
    return
    end subroutine hgam102
@@ -5085,7 +5141,7 @@ contains
    real(kr)::cerr,enxt,el,elow,ehigh,test,thresh
    real(kr)::egkr,ebar,egam,edam,damn,enext,enx,egk
    real(kr)::h,hk,cfix,eava,ebarp,xp,yp,hp,egamp,edamp
-   real(kr)::damep,hx,hxp,subtot,elo,ehi,x,y
+   real(kr)::damep,hx,hxp,subtot,elo,ehi,x,y,ydum
    real(kr)::c(30)
    integer::imt(30)
    real(kr),dimension(:),allocatable::scr
@@ -5098,6 +5154,7 @@ contains
    real(kr),parameter::qtest=99.e6_kr
    real(kr),parameter::zero=0
    integer::mf6flg
+   integer::mt402,mt301
    character(len=70)::strng1,strng2
 
    !--allocate buffers for loada/finda
@@ -5114,6 +5171,14 @@ contains
    dame=df(e,z,awr,z,awr)
    mgam=2
    hk=0
+   mt301=0
+   mt402=0
+   if (kkerma.eq.1) then
+      do i=2,npk
+         if (mtp(i).eq.402) mt402=(npk-1)*2+i
+      enddo
+      mt301=(npk-1)*2+2
+   endif
   100 continue
    call contio(nscr,0,0,scr,nb,nw)
    if (mfh.eq.12) mgam=1
@@ -5214,7 +5279,7 @@ contains
    egkr=c1h
    nwd=nd
    if (egkr.eq.zero)&
-     call gambar(e,ebar,egam,edam,nendf,matd,mtx,d,nwd)
+     call gambar(e,ebar,egam,edam,nendf,matd,mtx,d,nwd,ydum)
    lp=l1h
    ik=ik+1
    if (iprint.eq.1.and.egkr.eq.zero) write(nsyso,&
@@ -5237,7 +5302,7 @@ contains
          enddo
       endif
       call capdam(e,damn,q,za,awr,mth)
-      call disgam(e,egam,edam,z,awr)
+      call disgam(e,egam,edam,z,awr,ydum)
       ipx=2
       irx=1
    endif
@@ -5273,16 +5338,16 @@ contains
    dame=0
    if (ik.eq.1) c(npkk)=0
    if (egkr.eq.zero)&
-     call gambar(e,ebar,egam,edam,nendf,matd,mtx,d,nwd)
+     call gambar(e,ebar,egam,edam,nendf,matd,mtx,d,nwd,y)
    if (mfd.eq.13) go to 170
    if (mth.ne.102) go to 164
    ! photon recoil correction
-   if (egkr.ne.zero) call disgam(egkr,egam,edam,z,awr)
-   h=egam*x*y
+   if (egkr.ne.zero) call disgam(egkr,egam,edam,z,awr,y)
+   h=egam*x
    hk=h
    c(npkk-1)=c(npkk-1)+x*y*ebar
    c(npkk)=c(npkk)+y*ebar
-   dame=edam*x*y
+   dame=edam*x
    if (ik.eq.nk) then
       if (idame.gt.0) then
          call capdam(e,damn,q,za,awr,mth)
@@ -5330,6 +5395,10 @@ contains
          if (mtp(indxx).lt.442) c(indxx)=c(indxx)+h
          if (mtp(indxx).eq.442) c(indxx)=c(indxx)-h
          if (mtp(indxx).eq.443.and.mth.eq.102) c(indxx)=c(indxx)+hk
+         if (kkerma.eq.1.and.mtp(indxx).eq.443.and.mth.eq.102) then
+            c(mt402)=c(mt402)+hk
+            c(mt301)=c(mt301)+hk
+         endif
       enddo
    endif
    if (iprint.eq.0.or.e.ne.elist(ilist)) go to 180
@@ -5447,7 +5516,7 @@ contains
    return
    end subroutine gheat
 
-   subroutine gambar(e,ebar,esqb,esqd,nin,matd,mtd,a,nwamax)
+   subroutine gambar(e,ebar,esqb,esqd,nin,matd,mtd,a,nwamax,yld)
    !-------------------------------------------------------------------
    ! Calculate ebar for continuous spectra and the photon
    ! recoil correction for capture.
@@ -5456,7 +5525,7 @@ contains
    use endf ! provides endf routines and variables
    ! externals
    integer::nin,matd,mtd,nwamax
-   real(kr)::e,ebar,esqb,esqd,a(*)
+   real(kr)::e,ebar,esqb,esqd,a(*),yld
    ! internals
    integer::nb,nw,mfd,l,iz,lf,iend,j,il
    integer::jstart,jend,istart,ilo,ihi,nnt,ne,nne,inn,nbt
@@ -5561,10 +5630,10 @@ contains
    !--integrate at high and low energies.
    if (ilo.le.0) then
       call tabbar(flo,a(istart),lf)
-      if (mtd.eq.102) call tabsqr(glo,hlo,a(istart),lf,z,awr)
+      if (mtd.eq.102) call tabsqr(glo,hlo,a(istart),lf,z,awr,yld)
    endif
    call tabbar(fhi,a(jstart),lf)
-   if (mtd.eq.102) call tabsqr(ghi,hhi,a(jstart),lf,z,awr)
+   if (mtd.eq.102) call tabsqr(ghi,hhi,a(jstart),lf,z,awr,yld)
    ihi=1
 
    !--yes.  interpolate for mean energy.
@@ -5581,8 +5650,13 @@ contains
        ehi=sigfig(ehi,7,+1)
    endif
    call terp1(elo,flo,ehi,fhi,e,sen,inn)
-   if (mtd.eq.102) call terp1(elo,glo,ehi,ghi,e,esqb,inn)
-   if (mtd.eq.102) call terp1(elo,hlo,ehi,hhi,e,esqd,inn)
+   if (mtd.eq.102) then
+      call terp1(elo,glo,ehi,ghi,e,esqb,inn)
+      call terp1(elo,hlo,ehi,hhi,e,esqd,inn)
+   else
+     esqb=0
+     esqd=0
+   endif
    ebar=sen
    return
 
@@ -5607,7 +5681,7 @@ contains
    return
    end subroutine gambar
 
-   subroutine tabsqr(g,h,a,law,z,awr)
+   subroutine tabsqr(g,h,a,law,z,awr,yld)
    !-------------------------------------------------------------------
    ! Compute average of photon recoil energy from capture and
    ! corresponding damage energy for a tabulated section of File 15.
@@ -5615,7 +5689,7 @@ contains
    use endf ! provides terp1
    ! externals
    integer::law
-   real(kr)::g,h,a(*),z,awr
+   real(kr)::g,h,a(*),z,awr,yld
    ! internals
    integer::nr,np,ibase,ir,nbt,inn,i,j
    real(kr)::ein,rein,xl,yl,xh,yh,dx,x,y,xr,s
@@ -5663,17 +5737,17 @@ contains
          enddo
       endif
    enddo
-   g=g/s
-   h=h/s
+   g=yld*yld*g/s
+   h=yld*yld*h/s
    return
    end subroutine tabsqr
 
-   subroutine disgam(e,egam,edam,z,awr)
+   subroutine disgam(e,egam,edam,z,awr,y)
    !-------------------------------------------------------------------
    ! Compute recoil and damage energy of discrete capture photons.
    !-------------------------------------------------------------------
    ! externals
-   real(kr)::e,egam,edam,z,awr
+   real(kr)::e,egam,edam,z,awr,y
    ! internals
    real(kr),parameter::zero=0
 
@@ -5682,6 +5756,8 @@ contains
    else
       egam=e*e*rtm/2
       edam=df(egam,z,awr+1,z,awr)
+      egam=y*y*egam
+      edam=y*y*edam
    endif
    return
    end subroutine disgam
@@ -5704,6 +5780,7 @@ contains
    real(kr)::x,y,xlast,ylo,yhi,thin,rat,elo,test,e
    real(kr)::c(30)
    integer::ncds(30)
+   integer::mt302,mt304,mt318,mt402,mtkk
    character(4)::klo(9),khi(9)
    real(kr),dimension(:),allocatable::scr
    real(kr),dimension(:),allocatable::b
@@ -5747,6 +5824,20 @@ contains
          npktd=npktd-1
       endif
    enddo
+   mtkk=0
+   mt302=0
+   mt304=0
+   mt318=0
+   mt402=0
+   if (kkerma.eq.1) then
+      do i=2,npk
+         if (mtp(i).eq.443) mtkk=i
+         if (mtp(i).eq.302) mt302=(npk-1)*2+i
+         if (mtp(i).eq.304) mt304=(npk-1)*2+i
+         if (mtp(i).eq.318) mt318=(npk-1)*2+i
+         if (mtp(i).eq.402) mt402=(npk-1)*2+i
+      enddo
+   endif
    ilist=1
    nsc=0
    math=matd
@@ -5827,6 +5918,13 @@ contains
    i=i+2
    scr(ibase+i-1)=c(1)
    scr(ibase+i)=c(inpk)
+   if (kkerma.eq.1) then
+     if (mth.eq.301) scr(ibase+i)=c(mtkk)
+     if (mth.eq.302) scr(ibase+i)=c(mt302)
+     if (mth.eq.304) scr(ibase+i)=c(mt304)
+     if (mth.eq.318) scr(ibase+i)=c(mt318)
+     if (mth.eq.402) scr(ibase+i)=c(mt402)
+   endif
    if (i.lt.npage.and.nn.ne.ne) go to 110
    if (ibase.eq.0) go to 120
    call tab1io(0,0,nscr,scr,nb,nw)
@@ -5854,6 +5952,30 @@ contains
    call asend(0,nscr)
    ncds(inpk)=3+(n+2)/3
    if (inpk.lt.npk) go to 105
+   if (kkerma.eq.1) then
+     write(nsyso,'(/'' total kerma (mt=301) '',&
+       &''replaced by the kinematic kerma (mt=443).'')')
+     write(nsyse,'(/'' total kerma (mt=301) '',&
+       &''replaced by the kinematic kerma (mt=443).'')')
+     if (mt302.ne.0) then
+       write(nsyso,'(/'' partial kerma mt=302 '',&
+         &''replaced by the kinematic limit.'')')
+       write(nsyse,'(/'' partial kerma mt=302 '',&
+         &''replaced by the kinematic limit.'')')
+     endif
+     if (mt318.ne.0) then
+       write(nsyso,'(/'' partial kerma mt=318 '',&
+         &''replaced by the kinematic limit.'')')
+       write(nsyse,'(/'' partial kerma mt=318 '',&
+         &''replaced by the kinematic limit.'')')
+     endif
+     if (mt402.ne.0) then
+       write(nsyso,'(/'' partial kerma mt=402 '',&
+         &''replaced by the kinematic limit.'')')
+       write(nsyse,'(/'' partial kerma mt=402 '',&
+         &''replaced by the kinematic limit.'')')
+     endif
+   endif
    call afend(0,nscr)
    call repoz(nscr)
 
