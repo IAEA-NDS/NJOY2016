@@ -17,7 +17,7 @@ module endf
 
    !--Public variables
    integer,public::npage=306
-   integer,public::iverf
+   integer,public::iverf=-1
    real(kr),public::c1h,c2h
    integer,public::l1h,l2h,n1h,n2h,math,mfh,mth,nsh,nsp,nsc
    real(kr),public::thr6
@@ -525,9 +525,8 @@ contains
    integer::inin,inout,inscr,i
 
    !--input.
-   inin=iabs(nin)
-   if (inin.ne.0) rewind inin
    if (nin.lt.0) then
+      inin=iabs(nin)
       read(inin) math,mfh,mth,nb,nw,(a(i),i=1,17)
    else if (nin.gt.0) then
       read(nin,'(16a4,a2,i4,i2,i3,i5)') (hb(i),i=1,17),math,mfh,mth
@@ -2147,4 +2146,3 @@ contains
    end subroutine gety2
 
 end module endf
-

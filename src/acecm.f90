@@ -6,8 +6,15 @@ module acecm
    implicit none
    private
 
+   ! main ace container array
+   integer,parameter,public::nxss=50000000
+   real(kr),dimension(:),allocatable,public::xss
+
    !--Public routines
    public mtname,ptleg2,pttab2,bachaa,eavl,newsuff
+   public advance_to_locator
+   public write_integer,write_real,write_integer_list,write_real_list
+   public typen
 
 contains
 
@@ -30,7 +37,7 @@ contains
      '(n,2n)iso ','(n,abs)   ','(n,n*)p   ','(n,n*)2a  ','(n,2n)2a  ',&
      '(n,x)     ','(n,n*)d   ','(n,n*)t   ','(n,n*)he3 ','(n,n*)d2a ',&
      '(n,n*)t2a ','(n,4n)    ','(n,3nf)   ','(n,x)     ','(n,x)     ',&
-     '(n,2np)   ','(n,3np)   ','(n,x)     ','(n,2np)   ','(n,npa)   ',&
+     '(n,2np)   ','(n,3np)   ','(n,x)     ','(n,n2p)   ','(n,npa)   ',&
      '(n,2/2*1) ','(n,2/2*2) ','(n,2/2*3) ','(n,2/2*4) ','(n,n*0)   ',& !50
      '(n,n*1)   ','(n,n*2)   ','(n,n*3)   ','(n,n*4)   ','(n,n*5)   ',&
      '(n,n*6)   ','(n,n*7)   ','(n,n*8)   ','(n,n*9)   ','(n,n*10)  ',&
@@ -60,7 +67,7 @@ contains
      '(n,2nhe3) ','(n,3nhe3) ','(n,4nhe3) ','(n,3n2p)  ','(n,3n2a)  ',&
      '(n,3npa)  ','(n,dt)    ','(n,npd)   ','(n,npt)   ','(n,ndt)   ',&
      '(n,nphe3) ','(n,ndhe3) ','(n,nthe3) ','(n,nta)   ','(n,2n2p)  ',&
-     '(n,phe3)  ','(n,dhe3)  ','(n,he3a)  ','(n,4n2p)  ','(n,2n2a)  ',&
+     '(n,phe3)  ','(n,dhe3)  ','(n,he3a)  ','(n,4n2p)  ','(n,4n2a)  ',&
      '(n,4npa)  ','(n,3p)    ','(n,n3p)   ','(n,3n2pa) ','(n,5n2p)  ',& !200
      '(n,p*0)   ',&
      '(n,p*1)   ','(n,p*2)   ','(n,p*3)   ','(n,p*4)   ','(n,p*5)   ',&
@@ -139,21 +146,22 @@ contains
      '(n,xhe3)  ','(n,xa)    '/)
    character(10)::hndf10(1)='damage    '
 
-   if (iverf.ne.4.and.iverf.ne.5) then
+   !-- default name value is blank unless reset below.
+   name=''
+
+   !--when iverf=-1 the endf version used to create this file is
+   !  unknown.  we assume it comes from version 6 but if the file
+   !  originated from version 5 or earlier the name assigned here
+   !  might be incorrect.
+
+   if (iverf.ge.6.or.iverf.eq.-1) then
       if (mt.ge.201.and.mt.le.207) then
          name=hndf9(mt-200)
-      elseif (izai.eq.0.and. &
-        ((mt.ge.219.and.mt.le.451).or.(mt.ge.461.and.mt.le.599).or. &
-         (mt.ge.850.and.mt.le.874).or.(mt.ge.892.and.mt.le.999))) then
-         write(name,'(a6,i3,a1)')'(n,mtd',mt,')'
-      elseif (izai.gt.0.and.mt.gt.50000000) then
-         i=mt-(mt/1000000)*1000000
-         write(name,'(a3,i6,a1)')'(n,',i,')'
-      elseif(mt.eq.444) then
+      else if (mt.eq.444) then
          name=hndf10(1)
       else
          i=mt
-         if (i.gt.999) i=i-1000*(i/1000) 
+         if (i.gt.999) i=i-1000*(i/1000)
          if (i.ge.600) i=i-399
          name=hndf(i)
       endif
@@ -674,5 +682,116 @@ contains
 
    return
    end subroutine newsuff
+
+   subroutine advance_to_locator(nout,l,locator)
+   !-------------------------------------------------------------------
+   ! Advance to the next locator position from the current position l.
+   ! If the current position is not equal to the locator position, the
+   ! function will advance l until it is equal to the locator position.
+   ! It will write the values in the xss array while advancing to the
+   ! new position.
+   !-------------------------------------------------------------------
+   use util
+   ! externals
+   integer::nout,l,locator
+   ! internals
+   character(66)::text
+   if (l.lt.locator) then
+      write(text,'(''expected xss index ('',i6,'') greater than '',&
+                   &''current index ('',i6,'')'')') locator, l
+      call mess('advance',text,'xss array was padded accordingly')
+      do while (l.lt.locator)
+         call typen(l,nout,1)
+         l=l+1
+      enddo
+   else if (l.gt.locator) then
+      write(text,'(''expected xss index ('',i6,'') less than '',&
+                   &''current index ('',i6,'')'')') locator, l
+      call error('advance',text,'this may be a serious problem')
+   endif
+   return
+   end subroutine advance_to_locator
+
+   subroutine write_integer(nout,l)
+   !-------------------------------------------------------------------
+   ! Write an integer value at the position l, and advance l to the
+   ! next position
+   !-------------------------------------------------------------------
+   ! externals
+   integer::nout,l
+   call typen(l,nout,1)
+   l=l+1
+   return
+   end subroutine write_integer
+
+   subroutine write_real(nout,l)
+   !-------------------------------------------------------------------
+   ! Write a real value at the position l, and advance l to the
+   ! next position
+   !-------------------------------------------------------------------
+   ! externals
+   integer::nout,l
+   call typen(l,nout,2)
+   l=l+1
+   return
+   end subroutine write_real
+
+   subroutine write_integer_list(nout,l,n)
+   !-------------------------------------------------------------------
+   ! Write n integer values from position l, and advance l to the
+   ! next position
+   !-------------------------------------------------------------------
+   ! externals
+   integer::nout,l,n
+   ! internals
+   integer::i
+   do i=1,n
+      call typen(l,nout,1)
+      l=l+1
+   enddo
+   return
+   end subroutine write_integer_list
+
+   subroutine write_real_list(nout,l,n)
+   !-------------------------------------------------------------------
+   ! Write n real values from position l, and advance l to the
+   ! next position
+   !-------------------------------------------------------------------
+   ! externals
+   integer::nout,l,n
+   ! internals
+   integer::i
+   do i=1,n
+      call typen(l,nout,2)
+      l=l+1
+   enddo
+   return
+   end subroutine write_real_list
+
+   subroutine typen(l,nout,iflag)
+   !-------------------------------------------------------------------
+   ! Write an integer or a real number to a Type-1 ACE file,
+   ! using either a floating-point or an integer print style.
+   ! Use iflag.eq.1 to write an integer (i20).
+   ! Use iflag.eq.2 to write a real number (1pe20.11).
+   ! Use iflag.eq.3 to write partial line at end of file.
+   !-------------------------------------------------------------------
+   ! externals
+   integer::l,nout,iflag
+   ! internals
+   integer::i,j
+   character(20)::hl(4)
+   save hl,i
+
+   if (iflag.eq.3.and.nout.gt.1.and.i.lt.4) then
+      write(nout,'(4a20)') (hl(j),j=1,i)
+   else
+      i=mod(l-1,4)+1
+      if (iflag.eq.1) write(hl(i),'(i20)') nint(xss(l))
+      if (iflag.eq.2) write(hl(i),'(1p,e20.11)') xss(l)
+      if (i.eq.4) write(nout,'(4a20)') (hl(j),j=1,i)
+   endif
+   return
+   end subroutine typen
 
 end module acecm

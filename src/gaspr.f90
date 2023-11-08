@@ -824,7 +824,6 @@ contains
    if (izr.eq.2003) y206=y206+1
    if (izr.eq.2004) y207=y207+1
    if (izr.eq.4008) y207=y207+2
-   if (izr.eq.3008) y207=y207+2
    if (y203.eq.zero.and.y204.eq.zero.and.y205.eq.zero&
      .and.y206.eq.zero.and.y207.eq.zero) go to 310
    enext=thrg

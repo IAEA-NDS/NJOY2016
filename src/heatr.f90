@@ -19,7 +19,6 @@ module heatm
    ! global variables
    integer::matd,mgam,npk,mtp(28),nqa,mta(nqamax),mt303,mt19
    integer::ne,kchk,iprint,lqs(nqamax)
-   integer::kkerma
    real(kr),dimension(:),allocatable::qbar
    real(kr)::qa(nqamax),efirst,elast,za,awr,elist(ilmax)
    real(kr)::break
@@ -97,8 +96,6 @@ contains
    !    iprint   print (0 min, 1 max, 2 check) (default=0)
    !    ed       displacement energy for damage
    !             (default from built-in table)
-   !    kkerma   0/1=total (mt301) is energy balance / kinematic
-   !             (default=0)
    ! card 3      for npk gt 0 only
    !    mtk      mt numbers for partial kermas desired
    !             total (mt301) will be provided automatically.
@@ -144,7 +141,6 @@ contains
    real(kr),parameter::qflag=-1.e-9_kr
    real(kr),parameter::zero=0
    integer,parameter::maxqbar=10000
-   integer::mtkk
 
    !--start
    call timer(time)
@@ -165,8 +161,7 @@ contains
    local=0
    iprint=0
    break=0
-   kkerma=0
-   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break,kkerma
+   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break
    kchk=0
    if (iprint.eq.2) kchk=1
    if (iprint.eq.2) iprint=1
@@ -178,28 +173,6 @@ contains
      call error('heatr','requested too many q values.',' ')
    if (npk.gt.0) then
       read(nsysi,*) (mtk(i),i=1,npk)
-   endif
-   if (kkerma.eq.1) then
-      if (npk.gt.0) then
-         mtkk=0
-         do i=1,npk
-            if (mtk(i).eq.443) mtkk=i
-         enddo
-         if (mtkk.eq.0) then
-            npk=npk+1
-            if (kchk.eq.1) then
-              npkk=3*npk+7
-            else
-              npkk=npk+3
-            endif
-            if (npkk.gt.npkmax) call error('heatr',&
-              'requested too many kerma mt-s (6+mt301 allowed).',' ')
-            mtk(npk)=443
-         endif
-       else
-         npk=1
-         mtk(npk)=443
-       endif
    endif
    allocate(tmp(maxqbar))
    loc=1
@@ -519,6 +492,7 @@ contains
    call contio(nendf,0,0,c(1),nb,nw)
    n6=n2h
    call contio(nendf,0,0,c(1),nb,nw)
+   nx=0
    if (n1h.ne.0) then
       iverf=4
       nx=n6
@@ -650,7 +624,7 @@ contains
 
    !--calculate q change for fissionables in mt 458
    if (ifiss.ne.0) then
-      if (allocated(scr)) deallocate(scr)
+      deallocate(scr)
       nw=10000
       allocate(scr(nw))
       if (allocated(c458)) deallocate(c458)
@@ -670,7 +644,13 @@ contains
          ifc4=0
          ifc5=0
          ifc6=0
-         call listio(nendf,0,0,scr,nb,nw)
+         l=1
+         call listio(nendf,0,0,scr(l),nb,nw)
+         l=l+nw
+         do while (nb.ne.0)
+            call moreio(nendf,0,0,scr(l),nb,nw)
+            l=l+nw
+         enddo
          nply=nint(scr(4))
          if (lfc.eq.0) then
             allocate(cpoly(0:nply))
@@ -685,14 +665,14 @@ contains
          ! correction.
          write(nsyso,'(/,&
            &'' fission energy components''/)')
-         c458(1:18)=scr(7:24)
+         c458(1:18)=scr(7:24)    ! scr is a list record
          if (lfc.eq.0) then      ! thermal point or polynomial
             qdel=c458(5)+c458(9)+c458(11) ! delayed fission Q at 0 eV
             if (nply.ge.1) then
                c458(19:36)=scr(25:42)
                if (nply.gt.1) then
                   do n=2,nply
-                     if (nmod.ne.7.or.lrel.ne.1) then
+                     if (nmod.ne.7.or.lrel.ne.1) then ! endf/b-vii.1 correction
                         efix=1
                      else
                         efix=mevev**(n-1)
@@ -719,7 +699,7 @@ contains
             qdel=0
             do i=1,nfc
                l=1
-               call tab1io(nendf,0,0,scr,nb,nw)
+               call tab1io(nendf,0,0,scr(l),nb,nw)
                do while (nb.ne.0)
                   l=l+nw
                   call moreio(nendf,0,0,scr(l),nb,nw)
@@ -745,17 +725,17 @@ contains
                   anp(1:nl)=scr(1:nl)
                else if (ifc.eq.3) then ! END is tabulated
                   ifc3=1
-                  qdel=qdel+scr(7)
+                  qdel=qdel+scr(6+2*n1h+2)
                else if (ifc.eq.4) then ! EGP is tabulated
                   ifc4=1
                   allocate(agp(1:nl))
                   agp(1:nl)=scr(1:nl)
                else if (ifc.eq.5) then ! EGD is tabulated
                   ifc5=1
-                  qdel=qdel+scr(7)
+                  qdel=qdel+scr(6+2*n1h+2)
                else if (ifc.eq.6) then ! EB is tabulated
                   ifc6=1
-                  qdel=qdel+scr(7)
+                  qdel=qdel+scr(6+2*n1h+2)
                endif
             enddo
             if (ifc3.eq.0) qdel=qdel+c458(5)
@@ -836,9 +816,16 @@ contains
             awrr=c2h+1
             ielem=mod(nint(c1h),1000)
             do ik=1,nk
-               call tab1io(nendf,nend6,0,scr,nb,nw)
+               l=1
+               call tab1io(nendf,nend6,0,scr(l),nb,nw)
+               l=l+nw
+               do while (nb.ne.0)
+                  call moreio(nendf,nend6,0,scr(l),nb,nw)
+                  l=l+nw
+               enddo
                nr=n1h
                zap=c1h
+               law=l2h
                if (nint(zap).eq.0) then
                   i6p=i6p+1
                   mt6yp(i6p)=mth
@@ -879,10 +866,6 @@ contains
                   mt6no(ii6)=nk
                endif
                if (zap.eq.zero) mgam=10+mod(mgam,10)
-               law=l2h
-               do while (nb.ne.0)
-                  call moreio(nendf,nend6,0,scr,nb,nw)
-               enddo
                if (law.eq.6) then
                   call contio(nendf,nend6,0,scr,nb,nw)
                else if (law.eq.1.or.law.eq.2.or.law.eq.5) then
@@ -1045,7 +1028,6 @@ contains
    real(kr),parameter::step4=5.e6_kr
    real(kr),parameter::up=1.1e0_kr
    real(kr),parameter::zero=0
-   real(kr),parameter::qsmall=1e-6_kr
    real(kr),parameter::tol=1.e-5_kr
 
    !--allocate storage
@@ -1081,6 +1063,8 @@ contains
    jrec=0
    last6=0
    new6=0
+   qsave=0
+   pnue=0
 
    !--loop over non-redundant mt-s in file 3.
   105 continue
@@ -1387,7 +1371,7 @@ contains
    elst=elst-elst/10000000
   193 continue
    if (e.lt.thresh) go to 290
-   call gety1(e,enext,idis,y,nin,b)
+   call gety1(e,enext,idis,y,nin,b) ! y is the reaction cross section
    ! check for energy-dependent q
    if (iimt.gt.0) then
       if (qa(iimt).ge.qtest) then
@@ -1686,7 +1670,7 @@ contains
    !     300 + MT for reaction
    ! Special values allowed are
    !     303=nonelastic (all but MT2)
-   !     304=inelastic (MT51-91)
+   !     304=inelastic (MTs1-91)
    !     318=fission (MT18 or MT19-21 and MT38)
    !     401=disappearance (MT102-120)
    !     442=total photon ev-barns in kerma
@@ -2336,7 +2320,13 @@ contains
       call contio(itape,0,0,a,nb,nw)
       lnu=nint(a(4))
       if (mth.eq.455) then
-         call listio(itape,0,0,a,nb,nw)
+         loc=1
+         call listio(itape,0,0,a(loc),nb,nw)
+         loc=loc+nw
+         do while (nb.ne.0)
+            call moreio(itape,0,0,a(loc),nb,nw)
+            loc=loc+nw
+         enddo
          lnd=nint(a(5))
          if (lnd.ne.6.and.lnd.ne.8)&
            call error('hgtyld','illegal lnd, must be 6 or 8',' ')
@@ -2372,8 +2362,15 @@ contains
             nr=nint(a(5))
             enext=a(7+2*nr)
          else
-            call listio(itape,0,0,a,nb,nw)
+            loc=1
+            call listio(itape,0,0,a(loc),nb,nw)
+            loc=loc+nw
             na=nw
+            do while (nb.ne.0)
+               call moreio(itape,0,0,a(loc),nb,nw)
+               loc=loc+nw
+               na=na+nw
+            enddo
             enext=emax
          endif
       endif
@@ -2632,6 +2629,7 @@ contains
    real(kr)::alxl,alxh,alyl,alyh
 
    !--initialize.
+   nbt=0
    if (law.gt.0.and.law.ne.1.and.law.ne.5)&
      call error('tabbar','coded for lf=1 and lf=5 only.',' ')
    if (law.ge.0) then
@@ -2665,8 +2663,8 @@ contains
       yh=a(ibase+ncyc*(i-1)+2)
       if (law.gt.0.and.i.gt.nbt) then
          ir=ir+1
-         nbt=nint(a(ibase+2*ir-1))
-         inn=nint(a(ibase+2*ir))
+         nbt=nint(a(6+2*ir-1))
+         inn=nint(a(6+2*ir))
       endif
       if (xl.ne.xh) then
 
@@ -2802,6 +2800,11 @@ contains
    do while (ik.lt.irec-1)
       ik=ik+1
       call tab1io(nin,0,0,c(l),nb,nw)
+      l=l+nw
+      do while (nb.ne.0)
+         call moreio(nin,0,0,c(l),nb,nw)
+         l=l+nw
+      enddo
       law=l2h
       call skip6(nin,0,0,c(l),law)
    enddo
@@ -2814,10 +2817,14 @@ contains
   110 continue
    l=1
    call tab1io(nin,0,0,c(l),nb,nw)
+   l=l+nw
+   do while (nb.ne.0)
+      call moreio(nin,0,0,c(l),nb,nw)
+      l=l+nw
+   enddo
    zap=c1h
    awp=c2h
    law=l2h
-   l=l+nw
 
    !--error for awp=0. for non photons
    if (zap.ne.0.and.awp.eq.0) then
@@ -2826,10 +2833,6 @@ contains
      call error('sixbar',strng,' ')
    endif
 
-   do while (nb.ne.0)
-      call moreio(nin,0,0,c(l),nb,nw)
-      l=l+nw
-   enddo
    iflag=0
    disc102=0
    if (zap.eq.zero) then
@@ -2941,7 +2944,7 @@ contains
       call getsix(elo,flo,dlo,c(iraw),law,lang,lep,irec)
    else
       ztt=int(zat/1000)
-      call tabsq6(flo,dlo,c(iraw),law,ztt,awrt)
+      call tabsq6(flo,dlo,c(iraw),law,ztt,awrt,elo,c(1))
    endif
    if ((mth.ge.18.and.mth.le.21).or.mth.eq.38) then
       matd=math
@@ -3025,7 +3028,7 @@ contains
       call getsix(ehi,fhi,dhi,c(iraw),law,lang,lep,irec)
    else
       ztt=int(zat/1000)
-      call tabsq6(fhi,dhi,c(iraw),law,ztt,awrt)
+      call tabsq6(fhi,dhi,c(iraw),law,ztt,awrt,ehi,c(1))
    endif
    go to 305
 
@@ -3252,7 +3255,7 @@ contains
    fl=0
    do i=1,nep
       l=7+ncyc*(i-1)
-      xx=c(l)
+      xx=abs(c(l))
       yy=c(l+1)
       x2=xx
       if (irec.eq.0) then
@@ -3704,7 +3707,6 @@ contains
    real(kr),parameter::up=1.00001e0_kr
    real(kr),parameter::dn=.99999e0_kr
    real(kr),parameter::off=.999995e0_kr
-   real(kr),parameter::step=0.05e0_kr
    real(kr),parameter::emax=1.e10_kr
    real(kr),parameter::small=1.e-10_kr
    real(kr),parameter::zero=0
@@ -3911,6 +3913,7 @@ contains
    !--select desired discrete line
    inow=7+(i-1)*ncnow
    epnext=cnow(inow)
+   t=0.
 
    !--legendre coefficients
    if (lang.eq.1) then
@@ -4129,7 +4132,7 @@ contains
    return
    end function h6psp
 
-   subroutine tabsq6(g,h,a,law,z,awr)
+   subroutine tabsq6(g,h,a,law,z,awr,e,yld)
    !-------------------------------------------------------------------
    ! Compute average of photon recoil energy from capture and
    ! corresponding damage energy for File 6 capture photons
@@ -4137,10 +4140,10 @@ contains
    use endf ! provides terp1
    ! externals
    integer::law
-   real(kr)::g,h,a(*),z,awr
+   real(kr)::g,h,a(*),z,awr,e,yld(*)
    ! internals
-   integer::nd,np,ncyc,ibase,inn,nc,i,j
-   real(kr)::ein,rein,x,y,xr,awc,xh,yh,xl,yl,dx,s
+   integer::nd,np,ncyc,ibase,inn,nc,i,j,ip,ir,idis
+   real(kr)::ein,rein,x,y,xr,awc,xh,yh,xl,yl,dx,s,yield,enext
    integer,parameter::nq=4
    real(kr),dimension(nq),parameter::qp=(/&
      -.86114e0_kr,-.33998e0_kr,.33998e0_kr,.86114e0_kr/)
@@ -4158,6 +4161,11 @@ contains
    ncyc=nint(a(5))/np
    ibase=6
    inn=2
+
+   !--interpolate the photon yield
+   ip=2
+   ir=1
+   call terpa(yield,e,enext,idis,yld(1),ip,ir)
 
    !--accumulate contributions from discrete levels
    if (nd.ne.0) then
@@ -4198,8 +4206,8 @@ contains
    endif
 
    !--finished
-   g=g/s
-   h=h/s
+   g=yield*g/s
+   h=yield*h/s
    return
    end subroutine tabsq6
 
@@ -4220,7 +4228,6 @@ contains
    character(60)::strng
    real(kr)::flo(65),fhi(65)
    real(kr),parameter::small=1.e-10_kr
-   real(kr),parameter::emax=1.e10_kr
    real(kr),parameter::zero=0
    save iso,iraw,ir,nne,ne,inn
    save elo,ehi,nlo,nhi,flo,fhi,ltt,ltt3,lttn
@@ -4746,7 +4753,13 @@ contains
    lg=l2h
    g=1
    l2flg=1
-   call listio(nin,0,0,scr,nb,nw)
+   l=1
+   call listio(nin,0,0,scr(l),nb,nw)
+   l=l+nw
+   do while (nb.ne.0)
+      call moreio(nin,0,0,scr(l),nb,nw)
+      l=l+nw
+   enddo
 
    !--set base value for mt0
    if (mth.ge.51.and.mth.le.91.and.mt0.ne.49) mt0=49
@@ -5086,7 +5099,6 @@ contains
    real(kr),parameter::zero=0
    integer::mf6flg
    character(len=70)::strng1,strng2
-   integer::mt402,mt301
 
    !--allocate buffers for loada/finda
    allocate(bufo(nbuf))
@@ -5101,14 +5113,7 @@ contains
    e=0
    dame=df(e,z,awr,z,awr)
    mgam=2
-   mt301=0
-   mt402=0
-   if (kkerma.eq.1) then
-      do i=2,npk
-         if (mtp(i).eq.402) mt402=(npk-1)*2+i
-      enddo
-      mt301=(npk-1)*2+2
-   endif
+   hk=0
   100 continue
    call contio(nscr,0,0,scr,nb,nw)
    if (mfh.eq.12) mgam=1
@@ -5325,10 +5330,6 @@ contains
          if (mtp(indxx).lt.442) c(indxx)=c(indxx)+h
          if (mtp(indxx).eq.442) c(indxx)=c(indxx)-h
          if (mtp(indxx).eq.443.and.mth.eq.102) c(indxx)=c(indxx)+hk
-         if (kkerma.eq.1.and.mtp(indxx).eq.443.and.mth.eq.102) then
-            c(mt402)=c(mt402)+hk
-            c(mt301)=c(mt301)+hk
-         endif
       enddo
    endif
    if (iprint.eq.0.or.e.ne.elist(ilist)) go to 180
@@ -5647,8 +5648,8 @@ contains
       yh=a(ibase+2*i)
       if (i.gt.nbt) then
          ir=ir+1
-         nbt=nint(a(ibase+2*ir-1))
-         inn=nint(a(ibase+2*ir))
+         nbt=nint(a(6+2*ir-1))
+         inn=nint(a(6+2*ir))
       endif
       if (xl.ne.xh) then
          dx=xh-xl
@@ -5703,8 +5704,6 @@ contains
    real(kr)::x,y,xlast,ylo,yhi,thin,rat,elo,test,e
    real(kr)::c(30)
    integer::ncds(30)
-   integer::mt302,mt304,mt318,mt402
-   integer::mtkk
    character(4)::klo(9),khi(9)
    real(kr),dimension(:),allocatable::scr
    real(kr),dimension(:),allocatable::b
@@ -5727,6 +5726,7 @@ contains
    allocate(buf(nbuf))
 
    !--construct tab1 records for the kerma factors
+   n=0
    nscr=15
    if (nout.lt.0) nscr=-nscr
    call openz(nscr,1)
@@ -5747,20 +5747,6 @@ contains
          npktd=npktd-1
       endif
    enddo
-   mtkk=0
-   mt302=0
-   mt304=0
-   mt318=0
-   mt402=0
-   if (kkerma.eq.1) then
-      do i=2,npk
-         if (mtp(i).eq.443) mtkk=i
-         if (mtp(i).eq.302) mt302=(npk-1)*2+i
-         if (mtp(i).eq.304) mt304=(npk-1)*2+i
-         if (mtp(i).eq.318) mt318=(npk-1)*2+i
-         if (mtp(i).eq.402) mt402=(npk-1)*2+i
-      enddo
-   endif
    ilist=1
    nsc=0
    math=matd
@@ -5841,11 +5827,6 @@ contains
    i=i+2
    scr(ibase+i-1)=c(1)
    scr(ibase+i)=c(inpk)
-   if (mth.eq.301.and.kkerma.eq.1) scr(ibase+i)=c(mtkk)
-   if (mth.eq.302.and.kkerma.eq.1) scr(ibase+i)=c(mt302)
-   if (mth.eq.304.and.kkerma.eq.1) scr(ibase+i)=c(mt304)
-   if (mth.eq.318.and.kkerma.eq.1) scr(ibase+i)=c(mt318)
-   if (mth.eq.402.and.kkerma.eq.1) scr(ibase+i)=c(mt402)
    if (i.lt.npage.and.nn.ne.ne) go to 110
    if (ibase.eq.0) go to 120
    call tab1io(0,0,nscr,scr,nb,nw)
@@ -5873,8 +5854,6 @@ contains
    call asend(0,nscr)
    ncds(inpk)=3+(n+2)/3
    if (inpk.lt.npk) go to 105
-   if (kkerma.eq.1) write(nsyso,'(/'' total kerma (mt=301) was '',&
-       &''replaced to kinematic kerma (mt=443).'')')
    call afend(0,nscr)
    call repoz(nscr)
 
@@ -6341,4 +6320,3 @@ contains
    end subroutine hout
 
 end module heatm
-

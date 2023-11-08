@@ -1,6 +1,7 @@
 module acepa
    ! provides ACE photo-atomic routines for acer
    use locale
+   use acecm, only: xss,nxss
    implicit none
    private
 
@@ -21,10 +22,8 @@ module acepa
    ! parameters for photoatomic jxs block
    integer::eszg,jinc,jcoh,jflo,lhnm,jxsd(27)
 
-   ! main container array for ace data
-   real(kr),dimension(:),allocatable::xss
-   integer,parameter::nxss=999000
-   integer,parameter::nwscr=250000
+   ! parameter for scratch array
+   integer,parameter::nwscr=50000
 
 contains
 
@@ -69,12 +68,10 @@ contains
 
    nxsd=0
    jxsd=0
+   xss=0
 
    !--allocate scratch storage
    allocate(scr(nwscr))
-
-   !--allocate main container array
-   allocate(xss(nxss))
 
    !--assign input file
    call openz(nin,0)
@@ -531,6 +528,7 @@ contains
    iz=matd/100
 
    !--read in the atomic relaxation file for the desired material
+   call repoz(nin)
    call openz(nlax,0)
    call tpidio(nlax,0,0,a,nb,nw)
   110 call contio(nlax,0,0,a,nb,nw)
@@ -806,6 +804,7 @@ contains
    !-------------------------------------------------------------------
    ! Print ACE photon interaction data from memory.
    !-------------------------------------------------------------------
+   use endf   ! provides iverf
    use mainio ! provides nsyso
    ! externals
    character(70)::hk
@@ -842,6 +841,11 @@ contains
    iabs=icoh+nes
    ipair=iabs+nes
    ihtng=lhnm-1
+
+   !--if this is a stand-alone acer iopt=7 job then iverf retains
+   !  its default -1 value and the values written as natural logs
+   !  need to be converted back to real numbers prior to printing.
+
    do i=1,nes
       if (mod(i,57).eq.1) write(nsyso,'(''1''/&
         &''     i'',8x,''energy'',4x,''incoherent'',&
@@ -851,18 +855,23 @@ contains
         &4x,''----------'',4x,''----------'')')
       col(1)=blank
       x=xss(ieg+i)
+      if (iverf.eq.-1.and.x.ne.zero) x=exp(x)
       if (x.ne.zero) write(col(1),'(1p,e14.4)') x
       col(2)=blank
       x=xss(iinc+i)
+      if (iverf.eq.-1.and.x.ne.zero) x=exp(x)
       if (x.ne.zero) write(col(2),'(1p,e14.4)') x
       col(3)=blank
       x=xss(icoh+i)
+      if (iverf.eq.-1.and.x.ne.zero) x=exp(x)
       if (x.ne.zero) write(col(3),'(1p,e14.4)') x
       col(4)=blank
       x=xss(iabs+i)
+      if (iverf.eq.-1.and.x.ne.zero) x=exp(x)
       if (x.ne.zero) write(col(4),'(1p,e14.4)') x
       col(5)=blank
       x=xss(ipair+i)
+      if (iverf.eq.-1.and.x.ne.zero) x=exp(x)
       if (x.ne.zero) write(col(5),'(1p,e14.4)') x
       col(6)=blank
       x=xss(ihtng+i)
@@ -908,7 +917,9 @@ contains
    !-------------------------------------------------------------------
    ! Write photo-atomic ACE data to output and directory files.
    !-------------------------------------------------------------------
-   use util ! provides openz,closz
+   use endf  ! provides iverf
+   use util  ! provides openz,closz,error
+   use acecm ! provides write routines
    ! externals
    integer::itype,nout,ndir,mcnpx
    integer::izn(16)
@@ -942,11 +953,12 @@ contains
         len2,z,nes,nflo,nxsd(1:12),&
         eszg,jinc,jcoh,jflo,lhnm,jxsd(1:27)
 
-      !--eszg block
+      !--eszg block.
+      !  convert to natural log, if not already done, prior to writing
       l=eszg
       n=5*nes
       do i=1,n
-         if (xss(l).ne.0.) xss(l)=log(xss(l))
+         if (xss(l).ne.0..and.iverf.ne.-1) xss(l)=log(xss(l))
          call typen(l,nout,2)
          l=l+1
       enddo
@@ -1008,43 +1020,15 @@ contains
    call openz(ndir,1)
    if (mcnpx.eq.0) then
       write(ndir,&
-        '(a10,f12.6,'' filename route'',i2,'' 1 '',i9,2i6,1p,e10.3)')&
+        '(a10,f12.6,'' filename route'',i2,'' 1 '',i8,2i6,1p,e10.3)')&
         hz(1:10),aw0,itype,len2,lrec,nern,tz
    else
       write(ndir,&
-        '(a13,f12.6,'' filename route'',i2,'' 1 '',i9,2i6,1p,e10.3)')&
+        '(a13,f12.6,'' filename route'',i2,'' 1 '',i8,2i6,1p,e10.3)')&
         hz(1:13),aw0,itype,len2,lrec,nern,tz
    endif
    call closz(ndir)
    return
    end subroutine phoout
 
-   subroutine typen(l,nout,iflag)
-   !-------------------------------------------------------------------
-   ! Write an integer or a real number to a Type-1 ACE file,
-   ! or (if nout=0) convert real to integer for type-3 output,
-   ! or (if nout=1) convert integer to real for type-3 input.
-   ! Use iflag.eq.1 to write an integer (i20).
-   ! Use iflag.eq.2 to write a real number (1pe20.11).
-   ! Use iflag.eq.3 to write partial line at end of file.
-   !-------------------------------------------------------------------
-   ! externals
-   integer::l,nout,iflag
-   ! internals
-   integer::i,j
-   character(20)::hl(4)
-   save hl,i
-
-   if (iflag.eq.3.and.nout.gt.1.and.i.lt.4) then
-      write(nout,'(4a20)') (hl(j),j=1,i)
-   else
-      i=mod(l-1,4)+1
-      if (iflag.eq.1) write(hl(i),'(i20)') nint(xss(l))
-      if (iflag.eq.2) write(hl(i),'(1p,e20.11)') xss(l)
-      if (i.eq.4) write(nout,'(4a20)') (hl(j),j=1,i)
-   endif
-   return
-   end subroutine typen
-
 end module acepa
-

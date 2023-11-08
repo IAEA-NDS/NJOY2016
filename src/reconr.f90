@@ -289,6 +289,8 @@ contains
                     if (mmtres(i).eq.106) mmtres(i)=750
                     if (mmtres(i).eq.107) mmtres(i)=800
                  enddo
+              else
+                 call desammy
               endif
               call repoz(nin)
               call findf(mata,2,0,nin)
@@ -1773,7 +1775,7 @@ contains
    ! internals
    integer::ndim,iold,inew,i,j,mfl,nb,nw,nss,iss
    integer::l,lsave,in,ig,ir,jr,lr,ibase,nbta,inta,intn
-   integer::ipwr,inx,ngn,isave,ngneg,jg,igt,ngpos,npr
+   integer::ipwr,inx,ngn,isave,ngneg,jg,igt,ngpos,npr,nmf12
    character(40)::text
    real(kr)::stpmax,awrx,eg,qx,thrx,thrxx,et
    real(kr)::er,sr,ernext,srnext,enl,test,snl,erl,srl
@@ -1799,11 +1801,11 @@ contains
    !--initialize.
    if (eresr.lt.elim) elim=eresr
    ndim=50
+   nmf12=0
    allocate(bufo(nbuf))
    allocate(bufn(nbuf))
    allocate(x(ndim))
    allocate(y(ndim))
-   if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
 
    ! this value fits 1/v to within err
@@ -1842,14 +1844,19 @@ contains
    go to 410
   120 continue
    if (mfh.gt.0) go to 130
-   if (mfl.eq.3.or.mfl.eq.10.or.mfl.eq.12.or.mfl.eq.13.or.mfl.eq.23)&
+   ! always add a fend record for MF3, MF10, MF13 and MF23
+   if (mfl.eq.3.or.mfl.eq.10.or.mfl.eq.13.or.mfl.eq.23) then
      call afend(nout,0)
+   endif
+   ! only add a fend record for MF12 if we have written sections to nout
+   if (mfl.eq.12.and.nmf12.ne.0) then
+     call afend(nout,0)
+   endif
    mfl=0
    go to 110
-   ! process mf3, mf10, mf13, and mf23 only.
+   ! process mf3, mf10, mf12, mf13 and mf23 only.
   130 continue
-   if (mfh.eq.3.or.mfh.eq.10.or.mfh.eq.13.or.mfh.eq.23) go to 140
-   if (mfh.eq.12) go to 140
+   if (mfh.eq.3.or.mfh.eq.10.or.mfh.eq.12.or.mfh.eq.13.or.mfh.eq.23) go to 140
    call tofend(nin,0,0,scr)
    go to 110
    ! skip redundant reactions and non-cross-sections in n files
@@ -1890,6 +1897,7 @@ contains
 
    !--process this reaction
   180 continue
+   if (mfh.eq.12) nmf12=nmf12+1
    call contio(0,nout,0,scr,nb,nw)
    if (mfh.ne.23.and.awin.ne.zero) awrx=c2h/awin
   181 continue
@@ -4631,7 +4639,7 @@ contains
    ! internals
    integer::nneg,ntot,i,in,ig,inn,nss,iss,nb,nw,idis,it
    integer::imtr,itt,k,istart,iend,j,ib,isave,ir,ith
-   real(kr)::er,eg,en,e,thresh,sn,sg,enext
+   real(kr)::er,eg,en,e,thresh,sn,sg,enext,awrx,qx
    real(kr)::res(nsig+1),tot(10)
    real(kr)::aa(1)
    real(kr),dimension(:),allocatable::bufo,bufn,bufg,bufr
@@ -4647,7 +4655,6 @@ contains
    allocate(bufn(nbuf))
    allocate(bufg(nbufg))
    allocate(bufr(nbufr))
-   if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
    nneg=0
    ntot=nmtr+1
@@ -4713,6 +4720,16 @@ contains
    go to 510
   220 continue
    if (mth.eq.0) go to 210
+   if (iss.eq.nss) then ! needed for MF10
+      if (mfh.ne.23.and.awin.ne.zero) awrx=c2h/awin
+      qx=c2h
+      if (awin.ne.0) then
+          thr6=-qx*(awrx+1)/awrx
+      else
+          thr6=-qx
+      endif
+      if (thr6.lt.zero) thr6=0
+   endif
    e=0
    call gety1(e,thresh,idis,sn,nin,scr)
    thresh=sigfig(thresh,7,0)
@@ -4968,11 +4985,9 @@ contains
    real(kr),parameter::zero=0
 
    !--initialize.
-   if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
    allocate(bufo(nbuf))
    allocate(bufn(nbuf))
-   if (allocated(bufl)) deallocate(bufl)
    allocate(bufl(nbufl))
    i152=0
    if (nunr.gt.0) i152=1
@@ -5709,4 +5724,3 @@ contains
    end subroutine w
 
 end module reconm
-

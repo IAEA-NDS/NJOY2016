@@ -37,12 +37,12 @@ module purm
    real(kr),dimension(:),allocatable::sb
 
    ! probability table globals
-   real(kr),dimension(:,:,:),allocatable::bval,sigb
+   real(kr),dimension(:,:,:),allocatable::bval
    real(kr),dimension(:),allocatable::tmin,tmax,tsum
 
    ! storage array for unresolved resonance parameters
    integer,parameter::jx=10000
-   real(kr)::arry(jx)
+   real(kr),dimension(:),allocatable::arry
 
    ! optional plots
    integer ipl
@@ -147,7 +147,7 @@ contains
    call openz(nout,1)
    nscr=10
    call openz(-nscr,1)
-   maxscr=50000
+   maxscr=20000
    allocate(a(maxscr))
    iscr=1
    write(nsyso,'(&
@@ -205,6 +205,7 @@ contains
    if (nbin.lt.15) call error('purr','nbin should be 15 or more',' ')
 
    !--allocate storage for ladders and tables
+   allocate(arry(jx))
    if (allocated(tabl)) then
       deallocate(tabl)
       deallocate(tval)
@@ -214,17 +215,18 @@ contains
    endif
    allocate(tabl(nbin,5,ntemp))
    allocate(tval(nbin,ntemp))
-   if (.not.allocated(er)) allocate(er(nermax))
-   if (.not.allocated(gnr)) allocate(gnr(nermax))
-   if (.not.allocated(gfr)) allocate(gfr(nermax))
-   if (.not.allocated(ggr)) allocate(ggr(nermax))
-   if (.not.allocated(gxr)) allocate(gxr(nermax))
-   if (.not.allocated(gt)) allocate(gt(nermax))
-   if (.not.allocated(es)) allocate(es(nsamp))
-   if (.not.allocated(xs)) allocate(xs(nsamp))
+   allocate(er(nermax))
+   allocate(gnr(nermax))
+   allocate(gfr(nermax))
+   allocate(ggr(nermax))
+   allocate(gxr(nermax))
+   allocate(gt(nermax))
+   allocate(es(nsamp))
+   allocate(xs(nsamp))
    allocate(fis(ntemp,nsamp))
    allocate(cap(ntemp,nsamp))
    allocate(els(ntemp,nsamp))
+   arry=0.
    xs=0
 
    !--process this material
@@ -267,6 +269,7 @@ contains
    h=0
    allocate(heat(4,nunr,ntemp))
    heat(:,:,:)=zero
+   ihave=0
    call rdheat(a,heat,eunr,temp,ntemp,nunr,ihave,matd)
    if (ihave.eq.0) call mess('purr',&
      'no heating found on pendf',&
@@ -277,6 +280,7 @@ contains
 
    !--compute unresolved resonance cross-sections
    !--for all grid points, temperatures, and sigma zero values.
+   if ((nunx.eq.0).or.(nunx.gt.nunr)) nunx=nunr
    if (nunx.eq.1) nunx=2
    nstep=nunr/(nunx-1)
    if (nstep.lt.1) nstep=1
@@ -301,7 +305,7 @@ contains
       call timer(time)
       write(nsyse,'(2x,i5," of ",i5,&
             &" loops done for all temps & sig0s.",19x,f8.1,"s")')&
-            &ie,nunr,time
+            &ie,nunx,time
 
       !--write bondarenko data and probability table to scratch file.
       write(nscr) ez
@@ -358,9 +362,9 @@ contains
    call dictio(nin,0,0,d,nb,nw)
    j=0
    newmat=0
-   ncds=nsigz+nunr*(1+5*nsigz)
+   ncds=nsigz+nunx*(1+5*nsigz)
    ncds=2+(ncds-1)/6
-   nc153=(1+6*nbin)*nunr
+   nc153=(1+6*nbin)*nunx
    nc153=2+(nc153-1)/6
    do 240 i=1,nw,6
    if (newmat.gt.0) go to 220
@@ -424,15 +428,18 @@ contains
    a(l+7)=0
    a(l+8)=5
    a(l+9)=nsigz
-   a(l+10)=nsigz+nunr*(1+5*nsigz)
-   a(l+11)=nunr
+   a(l+10)=nsigz+nunx*(1+5*nsigz)
+   a(l+11)=nunx
    l=l+11
    do i=1,nsigz
       l=l+1
       a(l)=sigz(i)
    enddo
    call repoz(-nscr)
-   do ie=1,nunr
+   ie=1-nstep
+   do while (ie.lt.nunr)
+      ie=ie+nstep
+      if (ie.gt.nunr) ie=nunr
       read(nscr) ez
       read(nscr) (((tabl(i,j,k),i=1,nbin),j=1,5),k=1,ntemp)
       read(nscr) (((sigu(i,j,k),i=1,5),j=1,nsigz),k=1,ntemp)
@@ -478,79 +485,82 @@ contains
    a(n+7)=0
    a(n+8)=lssf
    a(n+9)=0
-   a(n+10)=(1+6*nbin)*nunr
-   a(n+11)=nunr
+   a(n+10)=(1+6*nbin)*nunx
+   a(n+11)=nunx
    n=n+11
    call repoz(-nscr)
-   do 320 ie=1,nunr
-   read(nscr) ez
-   read(nscr) (((tabl(i,j,k),i=1,nbin),j=1,5),k=1,ntemp)
-   read(nscr) (((sigu(i,j,k),i=1,5),j=1,nsigz),k=1,ntemp)
-   n=n+1
-   a(n)=sigfig(eunr(ie),7,0)
-   n1=n
-   do i=1,5
+   ie=1-nstep
+   do while (ie.lt.nunr)
+      ie=ie+nstep
+      if (ie.gt.nunr) ie=nunr
+      read(nscr) ez
+      read(nscr) (((tabl(i,j,k),i=1,nbin),j=1,5),k=1,ntemp)
+      read(nscr) (((sigu(i,j,k),i=1,5),j=1,nsigz),k=1,ntemp)
+      n=n+1
+      a(n)=sigfig(eunr(ie),7,0)
+      n1=n
+      do i=1,5
+         do j=1,nbin
+            n=n+1
+            a(n)=sigfig(tabl(j,i,it),7,0)
+         enddo
+      enddo
       do j=1,nbin
          n=n+1
-         a(n)=sigfig(tabl(j,i,it),7,0)
+         a(n)=0
       enddo
-   enddo
-   do j=1,nbin
-      n=n+1
-      a(n)=0
-   enddo
-   do i=2,5
+      do i=2,5
+         do j=1,nbin
+            l=n1+j+nbin*(i-1)
+            if (lssf.eq.1) then
+               if (sigu(i-1,1,1).ne.0) then
+                  a(l)=a(l)/sigu(i-1,1,1)
+               else
+                  a(l)=1
+               endif
+            endif
+            a(l)=sigfig(a(l),7,0)
+         enddo
+      enddo
       do j=1,nbin
-         l=n1+j+nbin*(i-1)
-         if (lssf.eq.1) then
-            if (sigu(i-1,1,1).ne.0) then
-               a(l)=a(l)/sigu(i-1,1,1)
-            else
+         l=n1+j+5*nbin
+         if (ihave.eq.1) then
+            if (lssf.eq.1) then
                a(l)=1
+            else
+               a(l)=heat(1,ie,it)/sigu(1,1,1)
+               endif
+         else if (ihave.eq.2) then
+            a(l)=a(l)+(heat(1,ie,it)-heat(2,ie,it)-heat(3,ie,it)-heat(4,ie,it))
+            h=heat(2,ie,it)
+            if (lssf.eq.1) then
+               h=h*a(n1+j+2*nbin)
+            else if (sigu(2,1,1).ne.zero) then
+               h=h*a(n1+j+2*nbin)/sigu(2,1,1)
             endif
+            a(l)=a(l)+h
+            h=heat(3,ie,it)
+            if (lssf.eq.1) then
+               h=h*a(n1+j+3*nbin)
+            else if (sigu(3,1,1).ne.zero) then
+               h=h*a(n1+j+3*nbin)/sigu(3,1,1)
+            endif
+            a(l)=a(l)+h
+            h=heat(4,ie,it)
+            if (lssf.eq.1) then
+               h=h*a(n1+j+4*nbin)
+            elseif (sigu(4,1,1).ne.zero) then
+               h=h*a(n1+j+4*nbin)/sigu(4,1,1)
+            endif
+            a(l)=a(l)+h
+            if (a(n1+j+nbin).ne.zero) a(l)=a(l)/a(n1+j+nbin)
+            if (lssf.eq.1) a(l)=a(l)/heat(1,ie,it)
          endif
-         a(l)=sigfig(a(l),7,0)
       enddo
    enddo
-   do j=1,nbin
-      l=n1+j+5*nbin
-      if (ihave.eq.1) then
-         if (lssf.eq.1) then
-            a(l)=1
-         else
-            a(l)=heat(1,ie,it)/sigu(1,1,1)
-            endif
-      else if (ihave.eq.2) then
-         a(l)=a(l)+(heat(1,ie,it)-heat(2,ie,it)-heat(3,ie,it)-heat(4,ie,it))
-         h=heat(2,ie,it)
-         if (lssf.eq.1) then
-            h=h*a(n1+j+2*nbin)
-         else if (sigu(2,1,1).ne.zero) then
-            h=h*a(n1+j+2*nbin)/sigu(2,1,1)
-         endif
-         a(l)=a(l)+h
-         h=heat(3,ie,it)
-         if (lssf.eq.1) then
-            h=h*a(n1+j+3*nbin)
-         else if (sigu(3,1,1).ne.zero) then
-            h=h*a(n1+j+3*nbin)/sigu(3,1,1)
-         endif
-         a(l)=a(l)+h
-         h=heat(4,ie,it)
-         if (lssf.eq.1) then
-            h=h*a(n1+j+4*nbin)
-         elseif (sigu(4,1,1).ne.zero) then
-            h=h*a(n1+j+4*nbin)/sigu(4,1,1)
-         endif
-         a(l)=a(l)+h
-         if (a(n1+j+nbin).ne.zero) a(l)=a(l)/a(n1+j+nbin)
-         if (lssf.eq.1) a(l)=a(l)/heat(1,ie,it)
-      endif
-   enddo
-  320 continue
    call contio(0,nout,0,a(iscr),nb,nw)
    lstart=iscr+6
-   nwds=6*nbin*nunr
+   nwds=6*nbin*nunx
    nw=nwds
    if (nw.gt.npage+6) nw=npage+6
    call listio(0,nout,0,a(lstart),nb,nw)
@@ -574,7 +584,7 @@ contains
    !--write report of calculation
    call timer(time)
    write(nsyso,'(/'' generated cross sections at '',i3,&
-     &'' points'',30x,f8.1,''s'')') nunr,time
+     &'' points'',30x,f8.1,''s'')') nunx,time
    deallocate(sb)
    go to 110
 
@@ -626,13 +636,13 @@ contains
     !   enddo
     !enddo
 
+   deallocate(arry)
    deallocate(temp)
    deallocate(sigz)
    deallocate(sigu)
    deallocate(sigpl)
    if (allocated(bval)) then
       deallocate(bval)
-      deallocate(sigb)
       deallocate(tmin)
       deallocate(tmax)
       deallocate(tsum)
@@ -1091,7 +1101,7 @@ contains
 
    !--allocate storage
    iscr=1
-   nthr=140
+   nthr=1000
    nw=2*nthr
    allocate(thr(nw))
    nw=nunr*4
@@ -1182,12 +1192,12 @@ contains
         &'' absorption competition flag set to '',i3)') iinel,iabso
    endif
 
-   !--sanity check for lssf=1
+   !--sanity check for lssf=1, derive corresponding sb(i) array
    if (lssf.gt.0) then
       do ie=1,nunr
          total=sb(ie)
-         sigx=sb(ie)-sb(ie+nunr)-sb(ie+2*nunr)-sb(ie+3*nunr)
-         if (sigx.gt.tol*total) then
+         sb(ie)=sb(ie)-sb(ie+nunr)-sb(ie+2*nunr)-sb(ie+3*nunr)
+         if (sb(ie).gt.tol*total) then
             !--this can only happen if there is competition and above ecomp
             if (iinel.lt.0.and.iabso.lt.0) then
                write(strng1,&
@@ -1195,26 +1205,29 @@ contains
                  &,1p,e12.4)') eunr(ie)
                write(strng2,'(''check evaluation file'')')
                call mess('purr',strng1,strng2)
-               sb(ie)=total-sigx
+               sb(ie)=0
             elseif (eunr(ie).lt.ecomp) then
                write(strng1,&
                  '(''total xs greater than its components at e=''&
                  &,1p,e12.4)') eunr(ie)
                write(strng2,'(''check evaluation file below competition'')')
                call mess('purr',strng1,strng2)
-               sb(ie)=total-sigx
+               sb(ie)=0
             endif
          else
             !--either roundoff or total is smaller than its components
-            if (sigx.lt.-tol*total) then
+            if (sb(ie).lt.-tol*total) then
                write(strng1,&
                  '(''total xs less than its components at e=''&
                  &,1p,e12.4)') eunr(ie)
                write(strng2,'(''check evaluation file'')')
                call mess('purr',strng1,strng2)
             endif
-            sb(ie)=total-sigx
+            sb(ie)=0
          endif
+         sb(ie+nunr)=0
+         sb(ie+2*nunr)=0
+         sb(ie+3*nunr)=0
       enddo
    endif
 
@@ -1308,6 +1321,11 @@ contains
    sigi(3)=0
    sigi(4)=0
    lfw=0
+   vl=0.
+   ps=0.
+   ne=0
+   iest=0
+   aa=0.
 
    !--find sections of resonance parameters which contribute
    do i=1,nsect
@@ -1778,7 +1796,7 @@ contains
    use util ! provides timer
    ! externals
    integer::nsig0,ntemp,nbin,nsamp
-   real(kr)::bkg(4),sig0(nsig0),tval(nbin,ntemp),sig3(4)
+   real(kr)::bkg(4),sig0(nsig0),tval(nbin,ntemp)
    real(kr)::sigf(5,nsig0,ntemp),tabl(nbin,5,ntemp)
    real(kr)::er(*),gnr(*),gfr(*),ggr(*),gxr(*),gt(*)
    real(kr)::es(nsamp),xs(nsamp)
@@ -1787,10 +1805,10 @@ contains
    ! internals
    integer::navoid,i,nres,nrest,iladr,ne,ie,itemp,k,nr,jr
    integer::i7,i0,it,i6,i1,i5,i2,is,i4,i3,jj,j,n,ii
-   integer::ixx,l,mfl,nebin,ibin,izeroprob,ibadxs,ntot
+   integer::ixx,l,mfl,nebin,ibin,izeroprob,ibadxs
    real(kr)::rpi,binmin,elow,dmin,erange,ehigh,emin,emax,espan
    real(kr)::dbart,sigx,ctx,chek1,chek2,chekn,delr,elo,ehi
-   real(kr)::y,yy,szy,cc2,cs2,ccg,ccf,test,x,a1,rew,aimw,h,g
+   real(kr)::y,yy,szy,cc2,cs2,ccg,ccf,test,x,a1,rew,aimw
    real(kr)::a2,a3,temp1,temp2,a4,a5,f1,f2,a6,e1,e2,e3
    real(kr)::tempor,q,q2,hq,hq2,ax,aki,p,p2,hp,hp2,pq,tav
    real(kr)::tvar,eav,evar,fav,fvar,cav,cvar,totf,elsf,capf,fisf
@@ -1820,7 +1838,6 @@ contains
    real(kr),parameter::break2=3.9e0_kr
    real(kr),parameter::tref=300.e0_kr
    real(kr),parameter::big=1.e6_kr
-   real(kr),parameter::sigmin=1.0e-5_kr
    real(kr),parameter::zero=0
    save navoid,binmin,elow
    rpi=sqrt(pi)
@@ -1834,17 +1851,15 @@ contains
    if (init.eq.0) then
       init=1
       navoid=300
-      binmin=spot/20
+      binmin=spot/10
       elow=10
       if (allocated(bval)) then
          deallocate(bval)
-         deallocate(sigb)
          deallocate(tmin)
          deallocate(tmax)
          deallocate(tsum)
       endif
       allocate(bval(8,nsig0,ntemp))
-      allocate(sigb(5,nsig0,ntemp))
       allocate(tmin(ntemp))
       allocate(tmax(ntemp))
       allocate(tsum(ntemp))
@@ -1865,22 +1880,6 @@ contains
    endif
    dbart=1/dbarin
    sigx=bkg(1)-bkg(2)-bkg(3)-bkg(4)
-   if (sigx.lt.sigmin) sigx=0.0
-   if (lssf.ne.0) then
-     sig3(1)=bkg(1)
-     sig3(2)=bkg(2)
-     sig3(3)=bkg(3)
-     sig3(4)=bkg(4)
-     bkg(1)=sigx
-     bkg(2)=0.0
-     bkg(3)=0.0
-     bkg(4)=0.0
-   else
-     sig3(1)=sigi(2)+sigi(3)+sigi(4)+spot+bkg(1)
-     sig3(2)=sigi(2)+spot+bkg(2)
-     sig3(3)=sigi(3)+bkg(3)
-     sig3(4)=sigi(4)+bkg(4)
-   endif
    do itemp=1,ntemp
       do i=nsig0,1,-1
          do j=1,8
@@ -2212,24 +2211,7 @@ contains
    !--eliminate negative elastic cross sections; reset to 1 microbarn
    do itemp=1,ntemp
       do ie=1,ne
-        if (els(itemp,ie).lt.-bkg(2)) els(itemp,ie)=-bkg(2)+1/big
-        if (lssf.ne.0) then
-          if ((sigi(2)+spot).ne.0.0d0) then
-            els(itemp,ie)=els(itemp,ie)/(sigi(2)+spot)*sig3(2)
-          else
-            els(itemp,ie)=sig3(2)
-          endif
-          if (sigi(3).ne.0.0d0) then
-            fis(itemp,ie)=fis(itemp,ie)/sigi(3)*sig3(3)
-          else
-            fis(itemp,ie)=sig3(3)
-          endif
-          if (sigi(4).ne.0.0d0) then
-            cap(itemp,ie)=cap(itemp,ie)/sigi(4)*sig3(4)
-          else
-            cap(itemp,ie)=sig3(4)
-          endif
-        endif
+         if (els(itemp,ie).lt.-bkg(2)) els(itemp,ie)=-bkg(2)+1/big
       enddo
    enddo
 
@@ -2248,23 +2230,16 @@ contains
    elsf=0
    capf=0
    fisf=0
-   ntot=0
-   binmin=spot/20
-   !--if total XS is below binmin data are rejected
    do ie=1,ne
-      tot=els(1,ie)+fis(1,ie)+cap(1,ie)+bkg(1)
-      if (tot.ge.binmin) then
-        totf=totf+tot
-        elsf=elsf+els(1,ie)+bkg(2)
-        capf=capf+cap(1,ie)+bkg(4)
-        fisf=fisf+fis(1,ie)+bkg(3)
-        ntot=ntot+1
-      endif
+      totf=totf+els(1,ie)+fis(1,ie)+cap(1,ie)+bkg(1)
+      elsf=elsf+els(1,ie)+bkg(2)
+      capf=capf+cap(1,ie)+bkg(4)
+      fisf=fisf+fis(1,ie)+bkg(3)
    enddo
-   totf=totf/ntot
-   elsf=elsf/ntot
-   capf=capf/ntot
-   fisf=fisf/ntot
+   totf=totf/ne
+   elsf=elsf/ne
+   capf=capf/ne
+   fisf=fisf/ne
    tav=tav+totf
    tvar=tvar+totf*totf
    eav=eav+elsf
@@ -2276,8 +2251,7 @@ contains
    if (iprint.gt.0) write(nsyso,'(i6,1p,4e12.4)')&
      iladr,totf,elsf,fisf,capf
 
-   !--this option is not active, because nmode=0.
-   !--renormalize reaction cross sections if nmode=1
+   !--renormalize reaction cross sections
    !--compute total cross section
    if (nmode.eq.1) then
       efact=(sigi(2)+bkg(2))/(elsf-spot)
@@ -2299,30 +2273,15 @@ contains
 
    !--choose probability table bounds
    !--and zero accumulators
-   !--if total XS is below binmin data are rejected
    if (iladr.eq.1) then
-      ntot=0
       do ie=1,ne
          es(ie)=els(itemp,ie)+fis(itemp,ie)+cap(itemp,ie)+bkg(1)
-         if (es(ie).lt.binmin) ntot=ntot+1
       enddo
-      if (ntot.gt.0) then
-         write(nsyso,*)
-         write(nsyso,'(1x,a,1pe10.3,a,e10.3,/,6x,i5,a,0pf4.1,a,a,/)') &
-           & '---message from purr--- T=',temp(itemp), &
-           & ' (spot/20)=',binmin,ntot,' (',dble(ntot)/dble(ne)*100.,&
-           & '%)',' samples with total<spot/20 rejected for binning'
-         write(nsyse,*)
-         write(nsyse,'(1x,a,1pe10.3,a,e10.3,/,6x,i5,a,0pf4.1,a,a,/)') &
-           & '---message from purr--- T=',temp(itemp), &
-           & ' (spot/20)=',binmin,ntot,' (',dble(ntot)/dble(ne)*100.,&
-           & '%)',' samples with total<spot/20 rejected for binning'
-      endif
       call fsort(es,xs,ne,1)
-      tmin(itemp)=es(ntot+1)
+      tmin(itemp)=es(1)
       tmax(itemp)=es(ne)
-      nebin=(nsamp-ntot)/(nbin-10+1.76)
-      ibin=ntot+nebin/200
+      nebin=int(nsamp/(nbin-10+1.76))
+      ibin=nebin/200
       if (ibin.le.0) then
          if (mflg1.eq.0) then
             mflg1=1
@@ -2368,32 +2327,29 @@ contains
    endif
 
    !--accumulate cross sections into tables
-   !-- if total XS is below binmin data are rejected
    do ie=1,ne
       tot=els(itemp,ie)+fis(itemp,ie)+cap(itemp,ie)+bkg(1)
-      if (tot.ge.binmin) then
-        if (tot.lt.tmin(itemp)) tmin(itemp)=tot
-        if (tot.gt.tmax(itemp)) tmax(itemp)=tot
-        call fsrch(tot,tval(1,itemp),nbin,ii,mfl)
-        if (mfl.ne.2.and.ii.lt.nbin) ii=ii+1
-        if (ii.lt.1) ii=1
-        tsum(itemp)=tsum(itemp)+1
-        tabl(ii,1,itemp)=tabl(ii,1,itemp)+1
-        tabl(ii,2,itemp)=tabl(ii,2,itemp)+tot
-        tabl(ii,3,itemp)=tabl(ii,3,itemp)+els(itemp,ie)+bkg(2)
-        tabl(ii,4,itemp)=tabl(ii,4,itemp)+fis(itemp,ie)+bkg(3)
-        tabl(ii,5,itemp)=tabl(ii,5,itemp)+cap(itemp,ie)+bkg(4)
-        do i=1,nsig0
-           tem=sig0(i)/(sig0(i)+tot)
-           bval(1,i,itemp)=bval(1,i,itemp)+tot*tem
-           bval(2,i,itemp)=bval(2,i,itemp)+(els(itemp,ie)+bkg(2))*tem
-           bval(3,i,itemp)=bval(3,i,itemp)+(fis(itemp,ie)+bkg(3))*tem
-           bval(4,i,itemp)=bval(4,i,itemp)+(cap(itemp,ie)+bkg(4))*tem
-           bval(5,i,itemp)=bval(5,i,itemp)+tot*tem*tem
-           bval(6,i,itemp)=bval(6,i,itemp)+tem
-           bval(7,i,itemp)=bval(7,i,itemp)+tem*tem
-        enddo
-      endif
+      if (tot.lt.tmin(itemp)) tmin(itemp)=tot
+      if (tot.gt.tmax(itemp)) tmax(itemp)=tot
+      call fsrch(tot,tval(1,itemp),nbin,ii,mfl)
+      if (mfl.ne.2.and.ii.lt.nbin) ii=ii+1
+      if (ii.lt.1) ii=1
+      tsum(itemp)=tsum(itemp)+1
+      tabl(ii,1,itemp)=tabl(ii,1,itemp)+1
+      tabl(ii,2,itemp)=tabl(ii,2,itemp)+tot
+      tabl(ii,3,itemp)=tabl(ii,3,itemp)+els(itemp,ie)+bkg(2)
+      tabl(ii,4,itemp)=tabl(ii,4,itemp)+fis(itemp,ie)+bkg(3)
+      tabl(ii,5,itemp)=tabl(ii,5,itemp)+cap(itemp,ie)+bkg(4)
+      do i=1,nsig0
+         tem=sig0(i)/(sig0(i)+tot)
+         bval(1,i,itemp)=bval(1,i,itemp)+tot*tem
+         bval(2,i,itemp)=bval(2,i,itemp)+(els(itemp,ie)+bkg(2))*tem
+         bval(3,i,itemp)=bval(3,i,itemp)+(fis(itemp,ie)+bkg(3))*tem
+         bval(4,i,itemp)=bval(4,i,itemp)+(cap(itemp,ie)+bkg(4))*tem
+         bval(5,i,itemp)=bval(5,i,itemp)+tot*tem*tem
+         bval(6,i,itemp)=bval(6,i,itemp)+tem
+         bval(7,i,itemp)=bval(7,i,itemp)+tem*tem
+      enddo
    enddo
 
    !--close loop over temperatures
@@ -2419,24 +2375,16 @@ contains
    evar=100*sqrt(arge)/eav
    if (fav.ne.zero) fvar=100*sqrt(argf)/fav
    cvar=100*sqrt(argc)/cav
-!   sigi(1)=sigi(2)+sigi(3)+sigi(4)+spot+bkg(1)
-!   sigi(2)=sigi(2)+spot+bkg(2)
-!   sigi(3)=sigi(3)+bkg(3)
-!   sigi(4)=sigi(4)+bkg(4)
-!   if (iprint.gt.0) write(nsyso,'(&
-!     &''  bkgd'',1p,4e12.4/''  infd'',1p,4e12.4/&
-!     &''  aver'',1p,4e12.4/''  pcsd'',0p,4f12.2/&
-!     &''  nres'',i12)')&
-!     (bkg(i),i=1,4),(sigi(i),i=1,4),&
-!     tav,eav,fav,cav,tvar,evar,fvar,cvar,nrest
+   sigi(1)=sigi(2)+sigi(3)+sigi(4)+spot+bkg(1)
+   sigi(2)=sigi(2)+spot+bkg(2)
+   sigi(3)=sigi(3)+bkg(3)
+   sigi(4)=sigi(4)+bkg(4)
    if (iprint.gt.0) write(nsyso,'(&
      &''  bkgd'',1p,4e12.4/''  infd'',1p,4e12.4/&
      &''  aver'',1p,4e12.4/''  pcsd'',0p,4f12.2/&
      &''  nres'',i12)')&
-     (bkg(i),i=1,4),(sig3(i),i=1,4),&
+     (bkg(i),i=1,4),(sigi(i),i=1,4),&
      tav,eav,fav,cav,tvar,evar,fvar,cvar,nrest
-     
-
 
    !--compute and write bondarenko table
    if (iprint.gt.0) write(nsyso,'(/&
@@ -2462,14 +2410,12 @@ contains
       enddo
    endif
 
-   !--calculate and write probability table
-   write(nsyso,'(/'' probability table'')')
-   ! Next statements were commented because they were superseded
-   ! by the next block of four statements
-   !   tnorm=sigi(1)-sigf(1,1,1)
-   !   enorm=sigi(2)-sigf(2,1,1)
-   !   fnorm=sigi(3)-sigf(3,1,1)
-   !   cnorm=sigi(4)-sigf(4,1,1)
+   !--normalize and write probability table
+   if (iprint.gt.0) write(nsyso,'(/'' probability table'')')
+   tnorm=sigi(1)-sigf(1,1,1)
+   enorm=sigi(2)-sigf(2,1,1)
+   fnorm=sigi(3)-sigf(3,1,1)
+   cnorm=sigi(4)-sigf(4,1,1)
    tnorm=0
    enorm=0
    fnorm=0
@@ -2544,38 +2490,21 @@ contains
                bval(7,i,itemp)=bval(7,i,itemp)+ttt*den*den
             endif
          enddo
-         sigb(1,i,itemp)=bval(1,i,itemp)/bval(6,i,itemp)
-         sigb(2,i,itemp)=bval(2,i,itemp)/bval(6,i,itemp)
-         sigb(3,i,itemp)=bval(3,i,itemp)/bval(6,i,itemp)
-         sigb(4,i,itemp)=bval(4,i,itemp)/bval(6,i,itemp)
-         sigb(5,i,itemp)=bval(5,i,itemp)/bval(7,i,itemp)
+         sigf(1,i,itemp)=bval(1,i,itemp)/bval(6,i,itemp)
+         sigf(2,i,itemp)=bval(2,i,itemp)/bval(6,i,itemp)
+         sigf(3,i,itemp)=bval(3,i,itemp)/bval(6,i,itemp)
+         sigf(4,i,itemp)=bval(4,i,itemp)/bval(6,i,itemp)
+         sigf(5,i,itemp)=bval(5,i,itemp)/bval(7,i,itemp)
       enddo
    enddo
    if (iprint.gt.0) then
       do itemp=1,ntemp
          do i=1,nsig0
             write(nsyso,'(3x,1p,2e10.3,5e12.4)')&
-              temp(itemp),sig0(i),(sigb(j,i,itemp),j=1,5)
+              temp(itemp),sig0(i),(sigf(j,i,itemp),j=1,5)
          enddo
       enddo
    endif
-
-   !--NOTE
-   !--sigf contains direct calculations of self shielded cross sections.
-   !--sigb contains self shielded cross sections computed from the
-   !--probability table.  copy sigb to sigf in order to make the MF152
-   !--values more consistent with the MT153 probability tables (even
-   !--if slightly less accurate).
-   !
-   ! This option was reactivated on Dec2020
-   !
-   do itemp=1,ntemp
-      do i=1,nsig0
-         do j=1,5
-            sigf(j,i,itemp)=sigb(j,i,itemp)
-         enddo
-      enddo
-   enddo
 
    !--renormalize probability table and bondarenko
    !--cross sections to the computed infinitely-dilute values
@@ -2584,7 +2513,7 @@ contains
          do j=1,nbin
             l=4*(itemp-1)
             if (sigf(i-1,1,itemp).ne.0)&
-              tabl(j,i,itemp)=tabl(j,i,itemp)*sig3(i-1)/sigf(i-1,1,itemp)
+              tabl(j,i,itemp)=tabl(j,i,itemp)*sigi(i-1)/sigf(i-1,1,itemp)
          enddo
       enddo
    enddo
@@ -2594,43 +2523,11 @@ contains
             k=j
             if (j.eq.5) k=1
             if (sigf(j,1,itemp).ne.0)&
-              sigf(j,i,itemp)=sigf(j,i,itemp)*sig3(k)/sigf(j,1,itemp)
+              sigf(j,i,itemp)=sigf(j,i,itemp)*sigi(k)/sigf(j,1,itemp)
             sigpl(ipl,j,i)=sigf(j,i,1)
          enddo
       enddo
    enddo
-
-   ! Print renormalized probability table
-   write(nsyso,'(/'' renormalized probability table for MT153'')')
-   do itemp=1,ntemp
-      do ixx=1,4
-         if (ixx.eq.1) then
-            write(nsyso,'('' tmin'',1p,e11.3,1p,10e11.3)')&
-              temp(itemp),tmin(itemp)
-            write(nsyso,'('' tmax'',1p,e11.3,1p,10e11.3/(16x,10e11.3))')&
-              temp(itemp),(tval(i,itemp),i=1,nbin)
-            write(nsyso,'('' prob'',1p,e11.3,1p,10e11.3/(16x,10e11.3))')&
-              temp(itemp),(tabl(i,1,itemp),i=1,nbin)
-         endif
-         write(nsyso,'(1x,a,1x,1p,e11.3,10e11.3/(16x,10e11.3))')&
-           nmr(ixx),temp(itemp),(tabl(i,ixx+1,itemp),i=1,nbin)
-      enddo
-   enddo
-
-   ! Print renormalized Bondarenko cross sections
-   if (iprint.gt.0) then
-      write(nsyso,'(/&
-            &'' renormalized bondarenko cross sections for MT152 ''/&
-            &9x,''temp'',6x,''sig0'',4x,''p0 total'',5x,''elastic'',&
-            &5x,''fission'',5x,''capture'',4x,''p1 total'')')
-      do itemp=1,ntemp
-         do i=1,nsig0
-            write(nsyso,'(3x,1p,2e10.3,5e12.4)')&
-              temp(itemp),sig0(i),(sigf(j,i,itemp),j=1,5)
-         enddo
-      enddo
-   endif
-
      !optional printout for plotting probability per barn with viewr
      !uncomment the following lines to activate
      !write(nsyso,'(/'' probability per barn versus total'')')
@@ -2995,4 +2892,3 @@ contains
    end function rann
 
 end module purm
-

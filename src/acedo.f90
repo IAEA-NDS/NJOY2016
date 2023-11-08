@@ -1,6 +1,7 @@
 module acedo
    ! provides ace dosimetry formats for acer
    use locale
+   use acecm, only: xss,nxss
    implicit none
    private
 
@@ -25,10 +26,6 @@ module acedo
    ! parameters for dosimetry jxs block
    integer::lone,jxs2,mtr,jxs4,jxs5,lsig,sigd,jxsd(14),end,jxsd2(10)
 
-   ! main ace container array
-   integer,parameter::nxss=4999000
-   real(kr)::xss(nxss)
-
 contains
 
    subroutine acedos(matd,tempd,nin,nace,ndir,itype,iprint,mcnpx,&
@@ -49,7 +46,6 @@ contains
    ! internals
    integer::nwscr,nb,nw,j,l,nr,i,ne,k,nmax,jscr,intr
    integer::l1,nn,n,is,ns,lfs
-   integer::izap
    real(kr)::temp,awr,zaid
    character(8)::hdt
    real(kr),dimension(:),allocatable::scr,tmpscr
@@ -62,6 +58,7 @@ contains
    jxs4=0
    jxs5=0
    jxsd2=0
+   xss=0
 
    !--allocate scratch storage
    nwscr=250000
@@ -213,9 +210,7 @@ contains
                   endif
                   scr(1:nw)=tmpscr(1:nw)
                   lfs=l2h
-                  izap=l1h
-                  xss(mtr-1+j)=1000*(10+lfs)+mth
-                  if(mth.eq.5) xss(mtr-1+j)=1000000*(50+lfs)+izap
+                  xss(mtr-1+j)=mth+1000*(10+lfs)
                   nr=nint(scr(5))
                   ne=nint(scr(6))
                   intr=nint(scr(8))
@@ -339,7 +334,7 @@ contains
       read(nin,'(8i9)')&
         len2,za,nxs3,ntr,nxsd(1:12),&
         lone,jxs2,mtr,jxs4,jxs5,lsig,sigd,jxsd(1:14),end,jxsd2(1:10)
-      n=(lone+3)/4
+      n=(len2+3)/4
       l=0
       do i=1,n
          read (nin,'(4e20.0)') (xss(l+j),j=1,4)
@@ -446,26 +441,14 @@ contains
       l=l+1
       if (nr.ne.0) then
          lim=2*nr
-         if (mt.lt.1000000) then
-           write(nsyso,'(''1''///&
+         write(nsyso,'(''1''///&
            &'' reaction mt = '',i6,3x,a10/'' interpolation: '',12i6)')&
            mt,name,(nint(xss(l-1+i)),i=1,lim)
-         else
-           write(nsyso,'(''1''///&
-           &'' reaction mt = '',i9,3x,a10/'' interpolation: '',12i6)')&
-           mt,name,(nint(xss(l-1+i)),i=1,lim)
-         endif
          l=l+2*nr
       else
-        if (mt.lt.1000000) then
-           write(nsyso,'(''1''///&
+         write(nsyso,'(''1''///&
            &'' reaction mt = '',i6,3x,a10/'' linear interpolation'')')&
            mt,name
-        else
-           write(nsyso,'(''1''///&
-           &'' reaction mt = '',i9,3x,a10/'' linear interpolation'')')&
-           mt,name
-        endif
       endif
       ne=nint(xss(l))
       l=l+1
@@ -499,7 +482,8 @@ contains
    !-------------------------------------------------------------------
    ! Write out the dosimetry file.
    !-------------------------------------------------------------------
-   use util ! provides openz,closz
+   use util  ! provides openz,closz,error
+   use acecm ! provides write routines
    ! externals
    integer::itype,nout,ndir,mcnpx
    integer::izn(16)
@@ -602,43 +586,15 @@ contains
    call openz(ndir,1)
    if (mcnpx.eq.0) then
       write(ndir,&
-        '(a10,f12.6,'' filename route'',i2,'' 1 '',i9,2i6,1p,e10.3)')&
+        '(a10,f12.6,'' filename route'',i2,'' 1 '',i8,2i6,1p,e10.3)')&
         hz(1:10),aw0,itype,len2,lrec,nern,tz
    else
       write(ndir,&
-        '(a13,f12.6,'' filename route'',i2,'' 1 '',i9,2i6,1p,e10.3)')&
+        '(a13,f12.6,'' filename route'',i2,'' 1 '',i8,2i6,1p,e10.3)')&
         hz(1:13),aw0,itype,len2,lrec,nern,tz
    endif
    call closz(ndir)
    return
    end subroutine dosout
 
-   subroutine typen(l,nout,iflag)
-   !-------------------------------------------------------------------
-   ! Write an integer or a real number to a Type-1 ACE file,
-   ! or (if nout=0) convert real to integer for type-3 output,
-   ! or (if nout=1) convert integer to real for type-3 input.
-   ! Use iflag.eq.1 to write an integer (i20).
-   ! Use iflag.eq.2 to write a real number (1pe20.11).
-   ! Use iflag.eq.3 to write partial line at end of file.
-   !-------------------------------------------------------------------
-   ! externals
-   integer::l,nout,iflag
-   ! internals
-   integer::i,j
-   character(20)::hl(4)
-   save hl,i
-
-   if (iflag.eq.3.and.nout.gt.1.and.i.lt.4) then
-      write(nout,'(4a20)') (hl(j),j=1,i)
-   else
-      i=mod(l-1,4)+1
-      if (iflag.eq.1) write(hl(i),'(i20)') nint(xss(l))
-      if (iflag.eq.2) write(hl(i),'(1p,e20.11)') xss(l)
-      if (i.eq.4) write(nout,'(4a20)') (hl(j),j=1,i)
-   endif
-   return
-   end subroutine typen
-
 end module acedo
-
