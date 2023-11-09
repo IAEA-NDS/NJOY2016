@@ -6528,7 +6528,7 @@ contains
                xss(il+j)=-xss(il+j)
                iso=0
                iint=nint(scr(8))
-               iint=mod(iint,10)
+               iint=min(mod(iint,10),2)
                xss(next)=iint
                xss(next+1)=n
                if (next+2+3*n.gt.nxss) call error('acensd',&
@@ -6544,7 +6544,7 @@ contains
                        *(xss(next+1+i)-xss(next+1+i-1))
                      xss(next+1+2*n+i)=sigfig(sum,7,0)
                   endif
-                  if (i.gt.1.and.iint.ge.2) then
+                  if (i.gt.1.and.iint.eq.2) then
                      sum=xss(next+1+2*n+i-1)&
                        +(xss(next+1+n+i)+xss(next+1+n+i-1))&
                        *(xss(next+1+i)-xss(next+1+i-1))/2
@@ -8049,7 +8049,7 @@ contains
             jscr=1
             call tab1io(nin,0,0,scr(jscr),nb,nw)
             intmu=scr(jscr+7)
-            intmu=mod(intmu,10)
+            intmu=min(mod(intmu,10),2)
             nmu=l2h
             ee=c2h/emev
             xss(next+j)=sigfig(ee,7,0)
@@ -8067,7 +8067,7 @@ contains
                call tab1io(nin,0,0,scr(jscr),nb,nw)
                npep=n2h
                intep=nint(scr(jscr+7))
-               intep=mod(intep,10)
+               intep=min(mod(intep,10),2)
                jscr=jscr+nw
                do while (nb.ne.0)
                   call moreio(nin,0,0,scr(jscr),nb,nw)
@@ -9722,6 +9722,7 @@ contains
                amass=awr/awi
                do ie=1,ne
                   int=nint(xss(loce))
+                  int=min(mod(int,10),2)
                   n=nint(xss(loce+1))
                   xss(nb+ie)=-(next-andh+1)
                   xss(next)=int
@@ -9761,7 +9762,7 @@ contains
                      xss(next+1+n+i)= &
                        sigfig(renorm*xss(next+1+n+i),7,0)
                      xss(next+1+2*n+i)=&
-                        sigfig(renorm*xss(next+1+2*n+i),9,0)
+                       sigfig(renorm*xss(next+1+2*n+i),9,0)
                   enddo
                   next=next+2+3*n
                   loce=loce+2+3*n
@@ -9851,6 +9852,7 @@ contains
                      xss(il+iie)=next-andh+1
                      xss(il+iie)=-xss(il+iie)
                      int=nint(scr(lld+7))
+                     int=min(mod(int,10),2)
                      xss(next)=int
                      xss(next+1)=n
                      if (next+2+3*n.gt.nxss) call error('acelcp',&
@@ -9955,6 +9957,7 @@ contains
                      xss(il+iie)=next-andh+1
                      xss(il+iie)=-xss(il+iie)
                      int=nint(scr(lld+7))
+                     int=min(mod(int,10),2)
                      xss(next)=int
                      xss(next+1)=n
                      if (next+2+3*n.gt.nxss) call error('acelcp',&
@@ -10128,6 +10131,7 @@ contains
                         xss(il+iie)=next-andh+1
                         xss(il+iie)=-xss(il+iie)
                         int=nint(scr(lld+7))
+                        int=min(mod(int,10),2)
                         xss(next)=int
                         xss(next+1)=n
                         if (next+2+3*n.gt.nxss) call error('acelcp',&
@@ -10218,7 +10222,7 @@ contains
                         llx=max(2*(nint(scr(lld+4)))+4,6)
                         nx=nint(scr(lld+5))
                         intx=nint(scr(lld+7))
-                        intx=mod(intx,10)
+                        intx=min(mod(intx,10),2)
                         xss(na+ie)=scr(lld+1)/emev
                         xss(nc+ie)=-(next-andh+1)
                         xss(next)=intx
@@ -10234,11 +10238,17 @@ contains
                              xss(next+1+nx+ix)=0
                            if (ix.eq.1) xss(next+1+2*nx+ix)=0
                            if (ix.gt.1) then
-                              sum=xss(next+1+2*nx+ix-1)&
-                                +(xss(next+1+nx+ix)&
-                                +xss(next+1+nx+ix-1))&
-                                *(xss(next+1+ix)-xss(next+1+ix-1))/2
-                              xss(next+1+2*nx+ix)=sigfig(sum,7,0)
+                             if (intx.eq.1) then
+                               sum=xss(next+1+2*nx+ix-1)&
+                                   +xss(next+1+nx+ix-1)&
+                                   *(xss(next+1+ix)-xss(next+1+ix-1))
+                             else
+                               sum=xss(next+1+2*nx+ix-1)&
+                                   +(xss(next+1+nx+ix)&
+                                   +xss(next+1+nx+ix-1))&
+                                   *(xss(next+1+ix)-xss(next+1+ix-1))/2
+                             endif
+                             xss(next+1+2*nx+ix)=sigfig(sum,7,0)
                            endif
                         enddo
                         renorm=1.0
@@ -10941,7 +10951,7 @@ contains
                         enddo
                         lld=ll
                         intmu=nint(scr(llad+7))
-                        intmu=mod(intmu,10)
+                        intmu=min(mod(intmu,10),2)
                         nmu=l2h
                         e=c2h
                         ee=c2h/emev
@@ -10969,7 +10979,7 @@ contains
                            llx=max(2*n1h+6,8)
                            npep=n2h
                            intep=nint(scr(ll+7))
-                           intep=mod(intep,10)
+                           intep=min(mod(intep,10),2)
                            ll=ll+nw
                            do while (nb.ne.0)
                               call moreio(nin,0,0,scr(ll),nb,nw)
@@ -11042,8 +11052,13 @@ contains
                            eav=ad*eav
                            chk=ad*chk
                            if (imu.gt.1) then
-                              ebar=ebar+(amuu-amulst)*(eav+eavlst)/2
-                              chek=chek+(amuu-amulst)*(chk+chklst)/2
+                             if (intmu.eq.1) then
+                               ebar=ebar+(amuu-amulst)*eavlst
+                               chek=chek+(amuu-amulst)*chklst
+                             else
+                               ebar=ebar+(amuu-amulst)*(eav+eavlst)/2
+                               chek=chek+(amuu-amulst)*(chk+chklst)/2
+                             endif
                            endif
                            eavlst=eav
                            amulst=amuu
