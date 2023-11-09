@@ -1,6 +1,7 @@
 module acefc
    ! provides fast continuous options for acer
    use locale
+   use acecm, only: xss,nxss
    implicit none
    private
 
@@ -24,7 +25,7 @@ module acefc
      iurpt,nud,dndat,ldnd,dnd,jxsd(2),ptype,ntro,ploct
 
    ! index of sections
-   integer,parameter::nxcmax=500
+   integer,parameter::nxcmax=1000
    integer::nxc,mfs(nxcmax),mts(nxcmax),ncs(nxcmax)
 
    ! scratch units
@@ -81,14 +82,10 @@ module acefc
    ! storage for ptleg data
    real(kr),dimension(:),allocatable::xat
 
-   ! main container array for fast continuous data
-   integer,parameter::nxss=20000000
-   real(kr)::xss(nxss)
-
 contains
 
    subroutine acetop(nendf,npend,ngend,nace,ndir,iprint,itype,mcnpx,&
-     suff,hk,izn,awn,matd,tempd,newfor,iopp,ismooth,thin)
+     suff,hk,izn,awn,matd,tempd,newfor,iopp,ismooth,no7,thin)
    !--------------------------------------------------------------------
    ! Prepare an ACE fast continuous file.
    !--------------------------------------------------------------------
@@ -96,7 +93,7 @@ contains
    use util   ! provides openz,mess,closz
    use endf   ! provides endf routines and variables
    ! externals
-   integer::nendf,npend,ngend,nace,ndir,iprint,itype,matd,newfor,iopp,ismooth,i
+   integer::nendf,npend,ngend,nace,ndir,iprint,itype,matd,newfor,iopp,ismooth,no7,i
    integer::mcnpx
    real(kr)::suff
    character(70)::hk
@@ -195,7 +192,7 @@ contains
    call unionx(nendf,npend,mscr,matd,nedis,nethr,thin)
 
    !--prepare new files 4, 5, and 6.
-   call topfil(nendf,mscr,matd,newfor)
+   call topfil(nendf,mscr,matd,newfor,no7)
 
    !--prepare new file 13 on unionized grid.
    if (ngmt.ne.0) call gamsum(npend,mscr,nscr2,matd,iopp)
@@ -324,6 +321,7 @@ contains
    call asend(nout,0)
 
    !--process dictionary from endf tape.
+
    call contio(nendf,0,0,scr,nb,nw)
    nx=n2h
    if (iverf.ge.5) call contio(nendf,0,0,scr,nb,nw)
@@ -338,15 +336,43 @@ contains
    ! read dictionary.
    nw=nx*6
    allocate(dict(nw))
+   if (iverf .ge. 6) then
+       mpmin=600
+       mpmax=649
+       mdmin=650
+       mdmax=699
+       mtmin=700
+       mtmax=749
+       m3min=750
+       m3max=799
+       m4min=800
+       m4max=849
+   else
+       mpmin=700
+       mpmax=718
+       mdmin=720
+       mdmax=738
+       mtmin=740
+       mtmax=758
+       m3min=760
+       m3max=768
+       m4min=780
+       m4max=798
+   endif
    mt5n=1   !default is no neutron production in mt5
    mt5p=1   !  "           proton
    mt5d=1   !  "           deuteron
    mt5t=1   !  "           triton
    mt5he3=1 !  "           3He
    mt5a=1   !  "           alpha
-   mt16=0
-   mt455=0
+   mt16=-1
+   mt103=-1
+   mt104=-1
+   mt105=-1
+   mt106=-1
+   mt107=-1
    mt19=0
+   mt455=0
    mf1x(1)=0
    mf1x(2)=0
    mf1x(3)=0
@@ -367,9 +393,36 @@ contains
          mfd=nint(dict(i+2))
          mtd=nint(dict(i+3))
          if (mfd.ge.3) then
-            if (mtd.ge.875.and.mtd.le.891) mt16=1
+            if (mfd.ge.4.and.mfd.le.6) then
+               if (mtd.eq.16) then
+                  mt16=0
+               elseif (mtd.eq.19) then
+                  mt19=1
+               elseif (mtd.eq.103) then
+                  mt103=0
+               elseif (mtd.eq.104) then
+                  mt104=0
+               elseif (mtd.eq.105) then
+                  mt105=0
+               elseif (mtd.eq.106) then
+                  mt106=0
+               elseif (mtd.eq.107) then
+                  mt107=0
+               elseif (mtd.ge.875.and.mtd.le.899) then
+                  mt16=1
+               elseif (mtd.ge.mpmin.and.mtd.le.mpmax) then
+                  mt103=1
+               elseif (mtd.ge.mdmin.and.mtd.le.mdmax) then
+                  mt104=1
+               elseif (mtd.ge.mtmin.and.mtd.le.mtmax) then
+                  mt105=1
+               elseif (mtd.ge.m3min.and.mtd.le.m3min) then
+                  mt106=1
+               elseif (mtd.ge.m4min.and.mtd.le.m4max) then
+                  mt107=1
+               endif
+            endif
             if (mfd.eq.5.and.mtd.eq.455) mt455=1
-            if (mfd.ge.4.and.mfd.le.6.and.mtd.eq.19) mt19=1
             if (mfd.eq.6) nsix=nsix+1
             if (mfd.eq.12.and.iopp.ne.0) mf1x(1)=mf1x(1)+1
             if (mfd.eq.12.and.(mtd.lt.5.or.mtd.gt.600)) then
@@ -597,6 +650,8 @@ contains
    enddo
    if (jethr.gt.1) call aordr(jethr,nethr,ethr)
    nethr=jethr
+   ! we're on a fend record, go back one line (this avoids the next findf
+   ! call to see a mend record if the pendf tape only contains mf3)
    call skiprz(npend,-2)
 
    !--for new format...
@@ -1061,6 +1116,7 @@ contains
    integer::limit,ii,k,nc,nen,ll,nee,iee,mtn,itest
    integer::kbase,np,ifrst,it,ibase,idis,nold,nxcs
    integer::nins
+   integer::nt103,nt104,nt105,nt106,nt107
    real(kr)::rsigz,e1,e2,e,enext,y,test,egl,egh,egd
    real(kr)::eet,edl,edh,s,q,el,rsum,r,rl,csum,rmin,ee
    real(kr)::eg,es,rs,cl,cs,rtot,ctot,sum,cap
@@ -1088,7 +1144,7 @@ contains
    inew=iabs(inew)
    nscr=iabs(nscr)
    e1=zero
-   e2=zero   
+   e2=zero
    if (nin.lt.0) nscr=-nscr
    call openz(-inew,1)
    call openz(-iold,1)
@@ -1102,6 +1158,7 @@ contains
    allocate(buf(nbuf))
    allocate(bufn(nbuf))
    ithopt=nint(thin(4))
+   npts=0
    if (ithopt.eq.2) iwtt=nint(thin(1))
    if (ithopt.eq.2) npts=nint(thin(2))
    if (ithopt.eq.2) rsigz=thin(3)
@@ -1113,34 +1170,11 @@ contains
    c(2)=0
    c(3)=0
    ethrr=0
-   mt103=0
-   mt104=0
-   mt105=0
-   mt106=0
-   mt107=0
-   if (iverf .ge. 6) then
-       mpmin=600
-       mpmax=649
-       mdmin=650
-       mdmax=699
-       mtmin=700
-       mtmax=749
-       m3min=750
-       m3max=799
-       m4min=800
-       m4max=849
-   else
-       mpmin=700
-       mpmax=718
-       mdmin=720
-       mdmax=738
-       mtmin=740
-       mtmax=758
-       m3min=760
-       m3max=768
-       m4min=780
-       m4max=798
-   endif
+   nt103=0
+   nt104=0
+   nt105=0
+   nt106=0
+   nt107=0
 
    !--check for mt4 overlap in probability tables
    mtcomp=0
@@ -1531,7 +1565,7 @@ contains
    !--generate a union grid for incident charged particles
    !--first get the union grid of file 3
    else
-      call findf(matd,3,0,nin)
+      call findf(matd,3,2,nin)
       lt=0
       lr=0
       nold=0
@@ -1655,7 +1689,7 @@ contains
       do while (k.lt.nold)
          k=k+1
          call finda(k,c,2,iold,bufn,nbuf)
-         if (k.lt.nold) then
+         if (k.le.nold) then
             er=c(1)
             egrid=0
             do while (egrid.lt.er)
@@ -1670,6 +1704,8 @@ contains
          endif
       enddo
       j=j+1
+      c(1)=eg
+      c(2)=0
       jt=-j
       call loada(jt,c,2,inew,buf,nbuf)
       isave=iold
@@ -1681,7 +1717,7 @@ contains
       elast=c(1)
       !--switch back to original nin tape
       nin=nins
-      call findf(matd,3,0,nin)
+      call findf(matd,3,2,nin)
    endif
 
    !--write other desired reactions on this grid.
@@ -1690,12 +1726,12 @@ contains
       call contio(nin,0,0,scr,nb,nw)
       if (mfh.ne.0) then
 
-      !--eliminate redundant reactions
-      if (mth.eq.3.or.(mth.eq.4.and.izai.eq.1)) then
-         idone=0
-         if (nf12s.ne.0) then
-            i=0
-            do while (i.lt.nf12s.and.idone.eq.0)
+        !--eliminate redundant reactions
+         if (mth.eq.3.or.(mth.eq.4.and.izai.eq.1)) then
+            idone=0
+            if (nf12s.ne.0) then
+               i=0
+               do while (i.lt.nf12s.and.idone.eq.0)
                   i=i+1
                   if (mth.eq.mf12s(i)) idone=1
                enddo
@@ -1713,7 +1749,7 @@ contains
          else
             idone=1
             if ((mt19.eq.1.and.mth.eq.18).or.&
-              (mt19.eq.0.and.&
+              (mt19.ne.1.and.&
               (mth.eq.19.or.mth.eq.20.or.mth.eq.21.or.mth.eq.38)).or.&
               (mth.eq.26.or.mth.eq.27).or.&
               (mth.eq.101.or.mth.eq.120).or.&
@@ -1743,24 +1779,23 @@ contains
          !--include this section
          else
             mtn=mth
-            if (mth.eq.103) mt103=1
-            if (mth.eq.104) mt104=1
-            if (mth.eq.105) mt105=1
-            if (mth.eq.106) mt106=1
-            if (mth.eq.107) mt107=1
+            if (mth.eq.103) nt103=1
+            if (mth.eq.104) nt104=1
+            if (mth.eq.105) nt105=1
+            if (mth.eq.106) nt106=1
+            if (mth.eq.107) nt107=1
             call contio(0,0,nscr,scr,nb,nw)
             e=0
             call gety1(e,thresh,idis,y,nin,scr)
             thrx=(awr+awi)*(-c2h)/awr
-            if (thrx.lt.zero) thrx=0
+            if (thrx.le.zero) thrx=0
             test=0
             if (thrx.ne.zero) test=thresh/thrx
             write(messs,'(i6,1p,3e15.7)') mth,thresh,thrx,test
             if (test.lt.one.and.test.ne.zero)&
               call mess('unionx','threshold error',messs)
-            if (mth.eq.2.or.mth.eq.3.or.mth.eq.102.or.mth.eq.301)&
-               thresh=elow
-            if (mth.eq.444) thresh=elow
+            if (mth.eq.2.or.mth.eq.3.or.mth.eq.102.or.&
+              & mth.eq.301.or.mth.eq.444) thresh=elow
             k=8
             kbase=k
             scr2(1)=scr(1)
@@ -1777,18 +1812,19 @@ contains
                call finda(i,c,nc,iold,buf,nbuf)
                if (c(1).ge.(1-eps)*thresh) then
                   e=c(1)
-                  if (i.eq.1) e=e*(1+eps)
+                  if (i.eq.1.and.&
+                     (mth.ne.2.or.(mth.eq.2.and.izai.le.1))) e=e*(1+eps)
                   call gety1(e,enext,idis,y,nin,scr)
                   if (mth.eq.2.and.e.lt.ethrr) y=0
                   if (i.gt.1.and.ifrst.eq.0) y=0
                   ifrst=1
                   if (mth.le.45.or.mth.ge.50) then
                      if ((mth.le.120)&
-                       .or.(mt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax)&
-                       .or.(mt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax)&
-                       .or.(mt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax)&
-                       .or.(mt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max)&
-                       .or.(mt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max)) then
+                       .or.(nt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax)&
+                       .or.(nt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax)&
+                       .or.(nt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax)&
+                       .or.(nt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max)&
+                       .or.(nt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max)) then
                         if (mth.eq.2) c(2)=0
                         c(2)=c(2)+y
                      endif
@@ -1916,7 +1952,7 @@ contains
    return
    end function awt
 
-   subroutine topfil(nin,nout,matd,newfor)
+   subroutine topfil(nin,nout,matd,newfor,no7)
    !-------------------------------------------------------------------
    ! Prepare Files 4, 5, and 6 for further processing.  For the old
    ! format, angular distributions are converted to equally probable
@@ -1933,7 +1969,9 @@ contains
    use util ! provides repoz,error,openz,closz
    use endf ! provides endf routines and variables
    ! externals
-   integer::nin,nout,matd,newfor
+   integer::nin,nout,matd,newfor,no7
+   ! the flag no7 defines if law=7 is converted to law=61(n07=1) or
+   ! law=67(no7=0) for newfor=1
    ! internals
    integer::iso,ltt,lf,lvt,ltt3,lttn,nwb,no,ne,idone,ie
    integer::now,ne1,nk,new6,ik,mtd,l,l2,nmu,l3,imu,l1,ir,ip
@@ -1946,13 +1984,10 @@ contains
    real(kr)::b(50)
    real(kr),dimension(:),allocatable::tab1
    real(kr),dimension(:),allocatable::scr
-   integer,parameter::nwmaxn=1000000
-   real(kr),parameter::big=1.e9_kr
+   integer,parameter::nwmaxn=10000000
+   real(kr),parameter::big=1.e10_kr
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
-
-   !--this flag says convert law=7 to law=1
-   integer::no7=1
 
    !--initialize and compute coefficients.
    jp=0
@@ -1969,7 +2004,7 @@ contains
    npt=mcoars+1
    nwmax=nwmaxn
    intep=0
-   ne1=0   
+   ne1=0
    call ptinit
    allocate(scr(nwmax))
    write(nsyso,'(/)')
@@ -1999,6 +2034,7 @@ contains
       else if ((mt19.eq.1.and.mth.eq.18).or.(mt19.eq.0.and.&
         (mth.eq.19.or.mth.eq.20.or.mth.eq.21.or.mth.eq.38)).or.&
         (mfh.eq.6.and.mth.eq.10).or.&
+        (mfh.eq.6.and.(mth.gt.207.and.mth.lt.221)).or.&
         (mfh.eq.5.and.mth.gt.900)) then
          call tosend(nin,0,0,scr)
 
@@ -2070,8 +2106,6 @@ contains
                         call moreio(nin,0,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
-                     if (now.gt.nwmax) call error('topfil',&
-                         'scratch storage exceeded',' ')
                      now=now-1
                      call ptleg(no,scr)
                   else
@@ -2081,8 +2115,6 @@ contains
                         call moreio(nin,0,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
-                     if (now.gt.nwmax) call error('topfil',&
-                         'scratch storage exceeded',' ')
                      call pttab(ltt,scr,no)
                   endif
                enddo
@@ -2132,8 +2164,6 @@ contains
             endif
             call moreio(nin,0,0,tab1(loct1),nb,nw)
          enddo
-         if (loct1+nw.gt.nt1w) call error('topfil',&
-             'tab1 allocation is too small',' ')
          lf=nint(tab1(4))
          ! move this tab1 to nout (all the time).
          loct1=1
@@ -2164,8 +2194,6 @@ contains
                   endif
                   call moreio(nin,0,0,tab1(loct1),nb,nw)
                enddo
-               if (loct1+nw.gt.nt1w) call error('topfil',&
-                   'tab1 allocation is too small',' ')
                nr=nint(tab1(5))
                nf=nint(tab1(6))
                ! check tab1 for multiple f(e)=0 data.
@@ -2231,7 +2259,7 @@ contains
                call tab1io(nin,0,0,scr,nb,nw)
                zap=c1h
                lf=l2h
-               dzap=abs(zap-1)
+               dzap=abs(zap-izai)
                do while(nb.ne.0)
                   call moreio(nin,0,0,scr,nb,nw)
                enddo
@@ -2319,32 +2347,42 @@ contains
             else if (lf.eq.7.and.newfor.eq.1.and.no7.eq.1) then
                ! law=7 for newfor=1 -- convert the law7
                ! data into law1 format.
-               call tab2io(nin,0,0,b,nb,nw)
+               call tab2io(nin,0,0,b,nb,nwb)
                ne=nint(b(6))
                do ie=1,ne
                   ! read in the data
                   call tab2io(nin,0,0,scr,nb,nw)
                   ei=scr(2)
                   intmu=nint(scr(8))
+                  intmu=mod(intmu,10)
+                  if (n1h.ne.1) then
+                    call mess('topfil',&
+                    ' warning nr>1 for cosines',&
+                    ' check law7 to law1 conversion')
+                  endif
                   nmu=n2h
                   loc=1+nmu
                   do imu=1,nmu
                      scr(imu)=loc
                      call tab1io(nin,0,0,scr(loc),nb,nw)
                      intep=nint(scr(loc+7))
+                     intep=mod(intep,10)
+                     if (nint(scr(loc+4)).ne.1) then
+                       call mess('topfil',&
+                       ' warning nr>1 for ep',&
+                       ' check law7 to law1 conversion')
+                     endif
                      loc=loc+nw
                      do while (nb.ne.0)
                         call moreio(nin,0,0,scr(loc),nb,nw)
                         loc=loc+nw
                      enddo
                   enddo
-                  if (loc.gt.nwmax) call error('topfil',&
-                      'scratch storage exceeded',' ')
                   ! fix up the tab2 for law1
                   if (ie.eq.1) then
                      b(3)=10+intmu
                      b(4)=intep
-                     call tab2io(0,nout,0,b,nb,nw)
+                     call tab2io(0,nout,0,b,nb,nwb)
                      ncs(nxc)=ncs(nxc)+2
                   endif
                   ! construct a union grid for eprime
@@ -2359,11 +2397,7 @@ contains
                         scr(igrd+ngrd-1)=scr(loc+4+2*m+2*iep)
                      enddo
                   enddo
-                  if (igrd+ngrd.gt.nwmax) call error('topfil',&
-                      'scratch storage exceeded',' ')
                   call ordr(scr(igrd),ngrd)
-                  if ((igrd+6+ngrd*(3+2*nmu)).gt.nwmax) call error('topfil',&
-                      'scratch storage exceeded',' ')
                   ! interpolate for angular distributions
                   ! on the union eprime grid to construct
                   ! the law1 distribution.
@@ -2430,8 +2464,6 @@ contains
                         call moreio(nin,0,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
-                     if (now.gt.nwmax) call error('topfil',&
-                         'scratch storage exceeded',' ')
                      call cptab(nout,scr)
                   ! law=2 for newfor=1 - copy the subsection
                   else if (lf.eq.2.and.newfor.eq.1) then
@@ -2441,8 +2473,6 @@ contains
                         call moreio(nin,nout,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
-                     if (now.gt.nwmax) call error('topfil',&
-                         'scratch storage exceeded',' ')
                   ! law=2 for newfor=0 - convert to probability bins
                   else if (lf.eq.2.and.newfor.eq.0) then
                      call listio(nin,0,0,scr,nb,nw)
@@ -2451,8 +2481,6 @@ contains
                         call moreio(nin,0,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
-                     if (now.gt.nwmax) call error('topfil',&
-                         'scratch storage exceeded',' ')
                      now=now-1
                      lang=nint(scr(3))
                      if (lang.eq.0) then
@@ -2482,8 +2510,6 @@ contains
                         call moreio(nin,nout,0,scr(now),nb,nw)
                         now=now+nw
                      enddo
-                     if (now.gt.nwmax) call error('topfil',&
-                         'scratch storage exceeded',' ')
                   ! law=7 -- the tab2 is converted to a special tab1
                   ! containing the overall angular distribution and
                   ! the angle-energy data are copied
@@ -2493,7 +2519,7 @@ contains
                      l=l+nw
                      l2=l
                      nmu=n2h
-                     l=l+66
+                     l=l+2*nmu
                      l3=l
                      do imu=1,nmu
                         l1=l
@@ -2503,8 +2529,6 @@ contains
                            call moreio(nin,0,0,scr(l),nb,nw)
                            l=l+nw
                         enddo
-                        if (l.gt.nwmax) call error('topfil',&
-                            'scratch storage exceeded',' ')
                         e1=0
                         e2=big
                         ir=1
@@ -2523,7 +2547,13 @@ contains
                      if (newfor.eq.0) then
                         call pttab(3,scr,nout)
                      else
-                        call tab1io(0,nout,0,scr,nb,nw)
+                        l=1
+                        call tab1io(0,nout,0,scr(l),nb,nw)
+                        l=l+nw
+                        do while (nb.ne.0)
+                           call moreio(0,nout,0,scr(l),nb,nw)
+                           l=l+nw
+                        enddo
                      endif
                      l=l3
                      do imu=1,nmu
@@ -2533,8 +2563,6 @@ contains
                            call moreio(0,nout,0,scr(l),nb,nw)
                            l=l+nw
                         enddo
-                        if (l.gt.nwmax) call error('topfil',&
-                            'scratch storage exceeded',' ')
                      enddo
                   endif
                enddo
@@ -2677,7 +2705,7 @@ contains
 
    !--work with list record read in topfil
    nord=n1h
-   fl=0   
+   fl=0
    do j=1,nord
       fl(j)=scr(6+j)
    enddo
@@ -3374,13 +3402,15 @@ contains
    real(kr)::dmu,awr,ein,acos,ep,csn,elb,drv,clb,cmn,qq,aw1
    real(kr)::fmu
    integer,parameter::namax=9000
-   real(kr)::a(namax)
+   real(kr),dimension(:),allocatable::a
    real(kr)::amu(50)
    real(kr)::p(65)
    real(kr),parameter::zero=0
 
    ! initialise
    acos=0
+   allocate(a(namax))
+   a=0
 
    !--start the conversion process
    ndebug=nsyso
@@ -3427,10 +3457,10 @@ contains
          call listio(nin,0,0,a(l),nb,nw)
          l=l+nw
          do while (nb.ne.0)
+            if (l.gt.namax) call error('fix6','storage exceeded',' ')
             call moreio(nin,0,0,a(l),nb,nw)
             l=l+nw
          enddo
-         if (l.gt.namax) call error('fix6','storage exceeded',' ')
          l2=l
          ein=a(l1+1)
          nep=nint(a(l1+5))
@@ -3567,6 +3597,10 @@ contains
 
    !--finished with this section
    call tosend(nin,nout,ndebug,a)
+
+   !--deallocate
+   deallocate(a)
+
    return
    end subroutine fix6
 
@@ -3629,7 +3663,7 @@ contains
    i16=0
    ntape=0
    nsave=0
-   nk=0   
+   nk=0
    l=1
    if (mf1x(1).eq.0.and.iopp.ne.0) write(nsyso,&
      '(/'' message from gamsum---file 12 not found.'')')
@@ -3914,8 +3948,8 @@ contains
 !  imax=49
    imax=50
    imaxsq=imax*imax
-   lmax=100
-   nned=50
+   lmax=imax*(imax-1)/2
+   nned=100
    allocate(disc(nned))
    allocate(ee(imax))
    allocate(eg(lmax))
@@ -3965,7 +3999,12 @@ contains
    call findf(matd,3,0,npend)
    nnth=0
   101 call contio(npend,0,0,scr,nb,nw)
-   if (mfh.eq.0) go to 102
+   if (mfh.eq.0) then
+      ! we're on a fend record, go back one line (this avoids the next findf
+      ! call to see a mend record if the pendf tape only contains mf3)
+      call skiprz(npend,-2)
+      go to 102
+   endif
    e=0
    call gety1(e,enxt,jdis,x,npend,scr)
    nnth=nnth+1
@@ -4061,9 +4100,9 @@ contains
    do while (nb.ne.0)
       jtot=jtot+nw
       call moreio(kscr,0,0,tot(jtot),nb,nw)
+      if (jtot.gt.nwtot) call error('convr',&
+        'exceeded tot array',' ')
    enddo
-   if (jtot+nw.gt.nwtot) call error('convr',&
-       'exceeded tot array',' ')
    ! supplement grid with discontinuities
    l=6+2*nr
    do i=1,np
@@ -4231,7 +4270,7 @@ contains
          ei=scr(6+(lg+1)*i-lg)
          if (ei.eq.zero.and.ee(k).eq.zero) idone=1
          if (ei.ne.zero) then
-           if (abs(ei-ee(k))/ei.lt.0.0001) idone=1
+            if (abs(ei-ee(k))/ei.lt.0.0001) idone=1
          endif
       enddo
       if (idone.eq.0) then
@@ -4646,8 +4685,6 @@ contains
                            call moreio(nf12c,0,0,scr(now),nb,nw)
                            now=now+nw
                         enddo
-                        if (now.gt.nwamax) call error('gamout',&
-                            'scratch storage exceeded',' ')
                         call pttab(ltt,scr,nout)
                      endif
                   enddo
@@ -4908,7 +4945,7 @@ contains
    integer::nin,matd,newfor,mcnpx,ismooth
    real(kr)::suff,tempd
    ! internals
-   integer::nwscr,nnu,nnup,kfis,mtnr,mtntr,i,nnud,nnf
+   integer::nwscr,nnu,nnup,kfis,mtnr,mtnr2,mtntr,i,nnud,nnf
    integer::nurd,idone,mta,nb,nw,lnu,n,m,jnt,j
    integer::lssf,iinel,iabso,nunr,ncyc,i1,idis
    integer::k,it,ic,ie,ih,next,keep3,keep4,keep,ir,iskip
@@ -4917,6 +4954,7 @@ contains
    integer::jj,ll,ib,iza,mf,mt,lend,lendp,inow
    integer::lff,lxx,nn,mm,iint,loc,ix
    integer::mt418,mt518
+   integer::nt4,nt16,nt103,nt104,nt105,nt106,nt107
    real(kr)::urlo,urhi,e,enext,s,test,awp,spi,q,x,teste,zaid
    real(kr)::xxmin,xxmax,sumup,ex,fx,val
    character(8)::hdt
@@ -4933,7 +4971,7 @@ contains
    !--initialize
    inow=0
    nnex=0
-   nwscr=1000000
+   nwscr=10000000
    allocate(scr(nwscr))
    do i=1,8
       nxsd(i)=0
@@ -5006,31 +5044,32 @@ contains
       if (mf.eq.1.and.mt.eq.455) kfis=2
       if (izai.eq.1) then
          if (mf.eq.3) then
-            if (mt.ne.1.and.mt.ne.2.and.mt.ne.301.and.&
-                (mt.ne.5.or.(mt.eq.5.and.mt5n.eq.0))) then
+            if (mt.ne.1.and.mt.ne.2.and.mt.ne.301) then
                ntr=ntr+1
-               if ((mt.ge.5.and.mt.le.91).or.&
-                 (mt.ge.152.and.mt.le.154).or.&
-                 (mt.ge.156.and.mt.le.181).or.&
-                 (mt.ge.183.and.mt.le.190).or.&
-                 (mt.ge.194.and.mt.le.196).or.&
-                 (mt.ge.198.and.mt.le.200).or.&
-                 (mt.ge.875.and.mt.le.899)) then
+               mtntr=mt
+               if ((mt.eq.5.and.mt5n.eq.0).or.&
+                   (mt.gt.5.and.mt.lt.16.and.mt.ne.10).or.&
+                   (mt.eq.16.and.mt16.eq.0).or.&
+                   (mt.gt.16.and.mt.le.91.and.mt.ne.27).or.&
+                   (mt.ge.152.and.mt.le.154).or.&
+                   (mt.ge.156.and.mt.le.181).or.&
+                   (mt.ge.183.and.mt.le.190).or.&
+                   (mt.ge.194.and.mt.le.196).or.&
+                   (mt.ge.198.and.mt.le.200).or.&
+                   (mt.ge.875.and.mt.le.899.and.mt16.gt.0)) then
                   nr=nr+1
-                  if (mt16.gt.0.and.mt.eq.16) nr=nr-1
                   mtnr=mt
                endif
             endif
-            mtntr=mt
          endif
       else if (izai.eq.1001) then
          if (mf.eq.3) then
-            if (mt.ne.1.and.mt.ne.2.and.&
-                (mt.ne.5.or.(mt.eq.5.and.mt5p.eq.0))) then
+            if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               if (mt.eq.5.or.mt.eq.28.or.mt.eq.41.or.&
-                 mt.eq.42.or.mt.eq.44.or.mt.eq.45.or.&
-                 mt.eq.103.or.mt.eq.111.or.&
+               mtntr=mt
+               if ((mt.eq.5.and.mt5p.eq.0).or.mt.eq.28.or.&
+                 mt.eq.41.or.mt.eq.42.or.mt.eq.44.or.mt.eq.45.or.&
+                 (mt.eq.103.and.mt103.eq.0).or.mt.eq.111.or.&
                  mt.eq.112.or.mt.eq.115.or.mt.eq.116.or.&
                  mt.eq.156.or.mt.eq.159.or.mt.eq.162.or.&
                  mt.eq.163.or.mt.eq.164.or.mt.eq.179.or.&
@@ -5038,74 +5077,74 @@ contains
                  mt.eq.186.or.mt.eq.190.or.mt.eq.191.or.&
                  mt.eq.194.or.mt.eq.196.or.mt.eq.197.or.&
                  mt.eq.198.or.mt.eq.199.or.mt.eq.200.or.&
-                 (mt.ge.600.and.mt.le.649)) then
-                  nr=nr+1
-                  mtnr=mt
+                 (mt.ge.mpmin.and.mt.le.mpmax.and.mt103.gt.0)) then
+                 nr=nr+1
+                 mtnr=mt
                endif
             endif
-            mtntr=mt
          endif
       else if (izai.eq.1002) then
          if (mf.eq.3) then
-            if (mt.ne.1.and.mt.ne.2.and.&
-                (mt.ne.5.or.(mt.eq.5.and.mt5d.eq.0))) then
+            if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               if (mt.eq.5.or.mt.eq.11.or.mt.eq.32.or.mt.eq.35.or.&
-                 mt.eq.104.or.mt.eq.114.or.mt.eq.115.or.mt.eq.117.or.&
-                 mt.eq.157.or.mt.eq.158.or.mt.eq.169.or.&
+               mtntr=mt
+               if ((mt.eq.5.and.mt5d.eq.0).or.mt.eq.11.or.mt.eq.32.or.&
+                 mt.eq.35.or.(mt.eq.104.and.mt104.eq.0).or.&
+                 mt.eq.114.or.mt.eq.115.or.&
+                 mt.eq.117.or.mt.eq.157.or.mt.eq.158.or.mt.eq.169.or.&
                  mt.eq.170.or.mt.eq.171.or.mt.eq.182.or.&
                  mt.eq.183.or.mt.eq.185.or.mt.eq.187.or.&
                  mt.eq.192.or.&
-                 (mt.ge.650.and.mt.le.699)) then
+                 (mt.ge.mdmin.and.mt.le.mdmax.and.mt104.gt.0)) then
                   nr=nr+1
                   mtnr=mt
                endif
             endif
-            mtntr=mt
          endif
       else if (izai.eq.1003) then
          if (mf.eq.3) then
-            if (mt.ne.1.and.mt.ne.2.and.&
-                (mt.ne.5.or.(mt.eq.5.and.mt5t.eq.0))) then
+            if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               if (mt.eq.5.or.mt.eq.33.or.mt.eq.36.or.&
-                 mt.eq.105.or.mt.eq.113.or.mt.eq.116.or.&
-                 mt.eq.154.or.mt.eq.155.or.mt.eq.172.or.&
+               mtntr=mt
+               if ((mt.eq.5.and.mt5t.eq.0).or.mt.eq.33.or.mt.eq.36.or.&
+                 (mt.eq.105.and.mt105.eq.0).or.mt.eq.113.or.&
+                 mt.eq.116.or.mt.eq.154.or.mt.eq.155.or.mt.eq.172.or.&
                  mt.eq.173.or.mt.eq.174.or.mt.eq.175.or.&
                  mt.eq.182.or.mt.eq.184.or.mt.eq.185.or.&
                  mt.eq.188.or.mt.eq.189.or.&
-                 (mt.ge.700.and.mt.le.749)) then
-                  nr=nr+1
-                  mtnr=mt
+                 (mt.ge.mtmin.and.mt.le.mtmax.and.mt105.gt.0)) then
+                 nr=nr+1
+                 mtnr=mt
                endif
             endif
-            mtntr=mt
          endif
       else if (izai.eq.2003) then
          if (mf.eq.3) then
-            if (mt.ne.1.and.mt.ne.2.and.&
-                (mt.ne.5.or.(mt.eq.5.and.mt5he3.eq.0))) then
+            if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               if (mt.eq.5.or.mt.eq.34.or.mt.eq.106.or.&
+               mtntr=mt
+               if ((mt.eq.5.and.mt5he3.eq.0).or.mt.eq.34.or.&
+                  (mt.eq.106.and.mt106.eq.0).or.&
                   mt.eq.176.or.mt.eq.177.or.mt.eq.178.or.&
                   mt.eq.186.or.mt.eq.187.or.mt.eq.188.or.&
                   mt.eq.191.or.mt.eq.192.or.mt.eq.193.or.&
-                  (mt.ge.750.and.mt.le.799)) then
+                  (mt.ge.m3min.and.mt.le.m3max.and.mt106.gt.0)) then
                   nr=nr+1
                   mtnr=mt
                endif
             endif
-            mtntr=mt
          endif
       else if (izai.eq.2004) then
          if (mf.eq.3) then
-            if (mt.ne.1.and.mt.ne.2.and.&
-                (mt.ne.5.or.(mt.eq.5.and.mt5a.eq.0))) then
+            if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               if (mt.eq.5.or.(mt.ge.22.and.mt.le.25).or.&
+               mtntr=mt
+               if ((mt.eq.5.and.mt5a.eq.0).or.&
+                 (mt.ge.22.and.mt.le.25).or.&
                  mt.eq.29.or.mt.eq.30.or.&
                  mt.eq.35.or.mt.eq.36.and.mt.eq.45.or.&
-                 mt.eq.107.or.mt.eq.108.or.mt.eq.109.or.&
+                 (mt.eq.107.and.mt107.eq.0).or.&
+                 mt.eq.108.or.mt.eq.109.or.&
                  mt.eq.112.or.mt.eq.113.or.&
                  mt.eq.114.or.mt.eq.117.or.&
                  mt.eq.155.or.mt.eq.158.or.mt.eq.159.or.&
@@ -5113,12 +5152,11 @@ contains
                  mt.eq.168.or.mt.eq.180.or.mt.eq.181.or.&
                  mt.eq.189.or.mt.eq.193.or.mt.eq.195.or.&
                   mt.eq.196.or.mt.eq.199.or.&
-                 (mt.ge.800.and.mt.le.849)) then
-                  nr=nr+1
-                  mtnr=mt
+                 (mt.ge.m4min.and.mt.le.m4max.and.mt107.gt.0)) then
+                 nr=nr+1
+                 mtnr=mt
                endif
             endif
-            mtntr=mt
          endif
       endif
    enddo
@@ -5193,8 +5231,6 @@ contains
                call moreio(nin,0,0,scr(inow),nb,nw)
                inow=inow+nw
             enddo
-            if (inow.gt.nwscr) call error('acelod',&
-                'exceeded scratch storage',' ')
             m=nint(scr(5))
             n=nint(scr(6))
             jnt=nint(scr(8))
@@ -5380,7 +5416,14 @@ contains
    !--read and store cross sections producing incident particle
    iskip=-1
    mt=-1
-   do while (mt.lt.mtnr)
+   if (mtnr.eq.0) then
+      write(nsyso,'(/,'' acelod: mtnr=0, only elastic scattering '',&
+        &'' produces incident particle'',/)')
+      mtnr2=2
+   else
+      mtnr2=mtnr
+   endif
+   do while (mt.lt.mtnr2)
       call contio(nin,0,0,scr,nb,nw)
       mt=mth
       if (mth.eq.3) keep3=1
@@ -5389,16 +5432,19 @@ contains
          iskip=0
          if (mt.eq.3.or.mt.eq.4) iskip=1
          if (mt.eq.5.and.mt5n.eq.1) iskip=1
+         if (mt.eq.10.or.mt.eq.27) iskip=1
          if (mt.gt.91.and.mt.le.151) iskip=1
          if (mt.eq.155.or.mt.eq.182.or.mt.eq.191) iskip=1
          if (mt.eq.192.or.mt.eq.193.or.mt.eq.197) iskip=1
-         if (mt.gt.200.and.mt.le.849) iskip=1
+         if (mt.gt.200.and.mt.le.874) iskip=1
          if (mt16.gt.0.and.mt.eq.16) iskip=1
+         if (mt16.le.0.and.mt.ge.875.and.mt.le.899) iskip=1
       else if (izai.eq.1001) then
          iskip=1
+         if (mt.eq.5.and.mt5p.eq.0) iskip=0
          if (mt.eq.2.or.mt.eq.28.or.mt.eq.41.or.&
            mt.eq.42.or.mt.eq.44.or.mt.eq.45.or.&
-           mt.eq.103.or.mt.eq.111.or.&
+           (mt.eq.103.and.mt103.eq.0).or.mt.eq.111.or.&
            mt.eq.112.or.mt.eq.115.or.mt.eq.116.or.&
            mt.eq.156.or.mt.eq.159.or.mt.eq.162.or.&
            mt.eq.163.or.mt.eq.164.or.mt.eq.179.or.&
@@ -5406,42 +5452,42 @@ contains
            mt.eq.186.or.mt.eq.190.or.mt.eq.191.or.&
            mt.eq.194.or.mt.eq.196.or.mt.eq.197.or.&
            mt.eq.198.or.mt.eq.199.or.mt.eq.200.or.&
-           (mt.ge.600.and.mt.le.649)) iskip=0
-         if (mt.eq.5.and.mt5p.eq.0) iskip=0
+           (mt.ge.mpmin.and.mt.le.mpmax.and.mt103.gt.0)) iskip=0
       else if (izai.eq.1002) then
          iskip=1
-         if (mt.eq.2.or.mt.eq.32.or.mt.eq.35.or.&
-           mt.eq.104.or.mt.eq.114.or.mt.eq.115.or.mt.eq.117.or.&
-           mt.eq.157.or.mt.eq.158.or.mt.eq.169.or.&
+         if (mt.eq.5.and.mt5d.eq.0) iskip=0
+         if (mt.eq.2.or.mt.eq.11.or.mt.eq.32.or.mt.eq.35.or.&
+           (mt.eq.104.and.mt104.eq.0).or.mt.eq.114.or.mt.eq.115.or.&
+           mt.eq.117.or.mt.eq.157.or.mt.eq.158.or.mt.eq.169.or.&
            mt.eq.170.or.mt.eq.171.or.mt.eq.182.or.&
            mt.eq.183.or.mt.eq.185.or.mt.eq.187.or.&
            mt.eq.192.or.&
-           (mt.ge.650.and.mt.le.699)) iskip=0
-         if (mt.eq.5.and.mt5d.eq.0) iskip=0
+           (mt.ge.mdmin.and.mt.le.mdmax.and.mt104.gt.0)) iskip=0
       else if (izai.eq.1003) then
          iskip=1
+         if (mt.eq.5.and.mt5t.eq.0) iskip=0
          if (mt.eq.2.or.mt.eq.33.or.mt.eq.36.or.&
-           mt.eq.105.or.mt.eq.113.or.mt.eq.116.or.&
+           (mt.eq.105.and.mt105.eq.0).or.mt.eq.113.or.mt.eq.116.or.&
            mt.eq.154.or.mt.eq.155.or.mt.eq.172.or.&
            mt.eq.173.or.mt.eq.174.or.mt.eq.175.or.&
            mt.eq.182.or.mt.eq.184.or.mt.eq.185.or.&
            mt.eq.188.or.mt.eq.189.or.&
-           (mt.ge.700.and.mt.le.749)) iskip=0
-         if (mt.eq.5.and.mt5t.eq.0) iskip=0
+           (mt.ge.mtmin.and.mt.le.mtmax.and.mt105.gt.0)) iskip=0
       else if (izai.eq.2003) then
          iskip=1
-         if (mt.eq.2.or.mt.eq.34.or.mt.eq.106.or.&
+         if (mt.eq.5.and.mt5he3.eq.0) iskip=0
+         if (mt.eq.2.or.mt.eq.34.or.(mt.eq.106.and.mt106.eq.0).or.&
            mt.eq.176.or.mt.eq.177.or.mt.eq.178.or.&
            mt.eq.186.or.mt.eq.187.or.mt.eq.188.or.&
            mt.eq.191.or.mt.eq.192.or.mt.eq.193.or.&
-           (mt.ge.750.and.mt.le.799)) iskip=0
-         if (mt.eq.5.and.mt5he3.eq.0) iskip=0
+           (mt.ge.m3min.and.mt.le.m3max.and.mt106.gt.0)) iskip=0
       else if (izai.eq.2004) then
          iskip=1
+         if (mt.eq.5.and.mt5a.eq.0) iskip=0
          if (mt.eq.2.or.(mt.ge.22.and.mt.le.25).or.&
            mt.eq.29.or.mt.eq.30.or.&
            mt.eq.35.or.mt.eq.36.and.mt.eq.45.or.&
-           mt.eq.107.or.mt.eq.108.or.mt.eq.109.or.&
+           (mt.eq.107.and.mt107.eq.0).or.mt.eq.108.or.mt.eq.109.or.&
            mt.eq.112.or.mt.eq.113.or.&
            mt.eq.114.or.mt.eq.117.or.&
            mt.eq.155.or.mt.eq.158.or.mt.eq.159.or.&
@@ -5449,11 +5495,10 @@ contains
            mt.eq.168.or.mt.eq.180.or.mt.eq.181.or.&
            mt.eq.189.or.mt.eq.193.or.mt.eq.195.or.&
            mt.eq.196.or.mt.eq.199.or.&
-           (mt.ge.800.and.mt.le.849)) iskip=0
-         if (mt.eq.5.and.mt5a.eq.0) iskip=0
+           (mt.ge.m4min.and.mt.le.m4max.and.mt107.gt.0)) iskip=0
       endif
       if (iskip.eq.0) then
-         e=0
+         e=zero
          call gety1(e,enext,idis,s,nin,scr)
          j=1
          n=-1
@@ -5519,22 +5564,32 @@ contains
 
    !--read and store cross sections not producing incident particle
    call findf(matd,3,2,nin)
+   nt4=0
+   nt16=0
+   nt103=0
+   nt104=0
+   nt105=0
+   nt106=0
+   nt107=0
    mt=2
    do while (mt.lt.mtntr)
       call contio(nin,0,0,scr,nb,nw)
       mt=mth
       if (izai.eq.1) then
          iskip=1
-         if (mt.gt.91.and.mt.lt.152) iskip=0
+         if (mt.eq.5.and.mt5n.eq.1) iskip=0
+         if (mt.eq.10.or.mt.eq.27) iskip=0
+         if (mt.gt.91.and.mt.le.151) iskip=0
          if (mt.eq.155.or.mt.eq.182.or.mt.eq.191) iskip=0
          if (mt.eq.192.or.mt.eq.193.or.mt.eq.197) iskip=0
          if (mt.gt.200.and.mt.le.849) iskip=0
          if (mt16.gt.0.and.mt.eq.16) iskip=0
+         if (mt16.le.0.and.mt.ge.875.and.mt.le.899) iskip=0
       else if (izai.eq.1001) then
          iskip=0
-         if (mt.eq.2.or.mt.eq.5.or.mt.eq.28.or.mt.eq.41.or.&
-           mt.eq.42.or.mt.eq.44.or.mt.eq.45.or.&
-           mt.eq.103.or.mt.eq.111.or.&
+         if (mt.eq.2.or.(mt.eq.5.and.mt5p.eq.0).or.mt.eq.28.or.&
+           mt.eq.41.or.mt.eq.42.or.mt.eq.44.or.mt.eq.45.or.&
+           (mt.eq.103.and.mt103.eq.0).or.mt.eq.111.or.&
            mt.eq.112.or.mt.eq.115.or.mt.eq.116.or.&
            mt.eq.156.or.mt.eq.159.or.mt.eq.162.or.&
            mt.eq.163.or.mt.eq.164.or.mt.eq.179.or.&
@@ -5542,39 +5597,39 @@ contains
            mt.eq.186.or.mt.eq.190.or.mt.eq.191.or.&
            mt.eq.194.or.mt.eq.196.or.mt.eq.197.or.&
            mt.eq.198.or.mt.eq.199.or.mt.eq.200.or.&
-           (mt.ge.600.and.mt.le.649)) iskip=1
+           (mt.ge.mpmin.and.mt.le.mpmax.and.mt103.gt.0)) iskip=1
       else if (izai.eq.1002) then
          iskip=0
-         if (mt.eq.2.or.mt.eq.5.or.mt.eq.11.or.&
-           mt.eq.32.or.mt.eq.35.or.&
-           mt.eq.104.or.mt.eq.114.or.mt.eq.115.or.mt.eq.117.or.&
+         if (mt.eq.2.or.(mt.eq.5.and.mt5d.eq.0).or.mt.eq.11.or.&
+           mt.eq.32.or.mt.eq.35.or.(mt.eq.104.and.mt104.eq.0).or.&
+           mt.eq.114.or.mt.eq.115.or.mt.eq.117.or.&
            mt.eq.157.or.mt.eq.158.or.mt.eq.169.or.&
            mt.eq.170.or.mt.eq.171.or.mt.eq.182.or.&
            mt.eq.183.or.mt.eq.185.or.mt.eq.187.or.&
            mt.eq.192.or.&
-           (mt.ge.650.and.mt.le.699)) iskip=1
+           (mt.ge.mdmin.and.mt.le.mdmax.and.mt104.gt.0)) iskip=1
       else if (izai.eq.1003) then
          iskip=0
-         if (mt.eq.2.or.mt.eq.5.or.mt.eq.33.or.mt.eq.36.or.&
-           mt.eq.105.or.mt.eq.113.or.mt.eq.116.or.&
-           mt.eq.154.or.mt.eq.155.or.mt.eq.172.or.&
+         if (mt.eq.2.or.(mt.eq.5.and.mt5t.eq.0).or.mt.eq.33.or.&
+           mt.eq.36.or.(mt.eq.105.and.mt105.eq.0).or.mt.eq.113.or.&
+           mt.eq.116.or.mt.eq.154.or.mt.eq.155.or.mt.eq.172.or.&
            mt.eq.173.or.mt.eq.174.or.mt.eq.175.or.&
            mt.eq.182.or.mt.eq.184.or.mt.eq.185.or.&
            mt.eq.188.or.mt.eq.189.or.&
-           (mt.ge.700.and.mt.le.749)) iskip=1
+           (mt.ge.mtmin.and.mt.le.mtmax.and.mt105.gt.0)) iskip=1
       else if (izai.eq.2003) then
          iskip=0
-         if (mt.eq.2.or.mt.eq.5.or.mt.eq.34.or.mt.eq.106.or.&
-           mt.eq.176.or.mt.eq.177.or.mt.eq.178.or.&
-           mt.eq.186.or.mt.eq.187.or.mt.eq.188.or.&
+         if (mt.eq.2.or.(mt.eq.5.and.mt5he3.eq.0).or.mt.eq.34.or.&
+           (mt.eq.106.and.mt106.eq.0).or.mt.eq.176.or.mt.eq.177.or.&
+           mt.eq.178.or.mt.eq.186.or.mt.eq.187.or.mt.eq.188.or.&
            mt.eq.191.or.mt.eq.192.or.mt.eq.193.or.&
-           (mt.ge.750.and.mt.le.799)) iskip=1
+           (mt.ge.m3min.and.mt.le.m3max.and.mt106.gt.0)) iskip=1
       else if (izai.eq.2004) then
          iskip=0
-         if (mt.eq.2.or.mt.eq.5.or.(mt.ge.22.and.mt.le.25).or.&
-           mt.eq.29.or.mt.eq.30.or.&
+         if (mt.eq.2.or.(mt.eq.5.and.mt5a.eq.0).or.&
+           (mt.ge.22.and.mt.le.25).or.mt.eq.29.or.mt.eq.30.or.&
            mt.eq.35.or.mt.eq.36.and.mt.eq.45.or.&
-           mt.eq.107.or.mt.eq.108.or.mt.eq.109.or.&
+           (mt.eq.107.and.mt107.eq.0).or.mt.eq.108.or.mt.eq.109.or.&
            mt.eq.112.or.mt.eq.113.or.&
            mt.eq.114.or.mt.eq.117.or.&
            mt.eq.155.or.mt.eq.158.or.mt.eq.159.or.&
@@ -5582,7 +5637,7 @@ contains
            mt.eq.168.or.mt.eq.180.or.mt.eq.181.or.&
            mt.eq.189.or.mt.eq.193.or.mt.eq.195.or.&
            mt.eq.196.or.mt.eq.199.or.&
-           (mt.ge.800.and.mt.le.849)) iskip=1
+           (mt.ge.m4min.and.mt.le.m4max.and.mt107.gt.0)) iskip=1
       endif
       if (iskip.eq.0) then
          e=0
@@ -5622,6 +5677,15 @@ contains
             n=0
          endif
 
+         ! check redundant cross sections
+         if (mth.eq.4) nt4=1
+         if (mth.eq.16) nt16=1
+         if (mth.eq.103) nt103=1
+         if (mth.eq.104) nt104=1
+         if (mth.eq.105) nt105=1
+         if (mth.eq.106) nt106=1
+         if (mth.eq.107) nt107=1
+
          !--store cross sections
          do while (j.le.nes)
             e=xss(esz+j)
@@ -5637,38 +5701,90 @@ contains
                endif
             else
                if (izai.eq.1) then
-                  if ((mth.ge.102.and.mth.le.150)&
-                    .or.mth.eq.155.or.mth.eq.182.or.mth.eq.191&
-                    .or.mth.eq.192.or.mth.eq.193.or.mth.eq.197&
-                    .or.(mt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax)&
-                    .or.(mt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax)&
-                    .or.(mt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax)&
-                    .or.(mt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max)&
-                    .or.(mt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max)) then
+                  if (mth.eq.5.or.&
+                    (mth.ge.102.and.mth.le.150).or.&
+                    mth.eq.155.or.mth.eq.182.or.mth.eq.191.or.&
+                    mth.eq.192.or.mth.eq.193.or.mth.eq.197.or.&
+                    (nt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax).or.&
+                    (nt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax).or.&
+                    (nt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax).or.&
+                    (nt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max).or.&
+                    (nt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max)) then
                      xss(ic+j)=xss(ic+j)+s
                   endif
-               else
-                  if (mth.le.200.or.mth.ge.600) then
+                  if ((mth.ge.5.and.mth.le.150.and.&
+                       mth.ne.10.and.mth.ne.27.and.mth.ne.101).or.&
+                     (mth.ge.152.and.mth.le.200).or.&
+                     (nt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax).or.&
+                     (nt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax).or.&
+                     (nt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax).or.&
+                     (nt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max).or.&
+                     (nt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max)) then
+                     xss(it+j)=xss(it+j)+s
+                  endif
+               elseif (izai.eq.1001) then
+                  if ((mth.ge.4.and.mth.le.49.and.mth.ne.10.and.mth.ne.27).or.&
+                      (mth.ge.92.and.mth.le.200.and.mth.ne.101).or.&
+                      (nt4.eq.0.and.mth.ge.50.and.mth.le.91).or.&
+                      (nt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax).or.&
+                      (nt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax).or.&
+                      (nt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max).or.&
+                      (nt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max).or.&
+                      (nt16.eq.0.and.mth.ge.875.and.mth.le.899)) then
                      xss(ic+j)=xss(ic+j)+s
+                     xss(it+j)=xss(it+j)+s
+                  endif
+               elseif (izai.eq.1002) then
+                  if ((mth.ge.4.and.mth.le.49.and.mth.ne.10.and.mth.ne.27).or.&
+                      (mth.ge.92.and.mth.le.200.and.mth.ne.101).or.&
+                      (nt4.eq.0.and.mth.ge.50.and.mth.le.91).or.&
+                      (nt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax).or.&
+                      (nt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax).or.&
+                      (nt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max).or.&
+                      (nt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max).or.&
+                      (nt16.eq.0.and.mth.ge.875.and.mth.le.899)) then
+                     xss(ic+j)=xss(ic+j)+s
+                     xss(it+j)=xss(it+j)+s
+                  endif
+               elseif (izai.eq.1003) then
+                  if ((mth.ge.4.and.mth.le.49.and.mth.ne.10.and.mth.ne.27).or.&
+                      (mth.ge.92.and.mth.le.200.and.mth.ne.101).or.&
+                      (nt4.eq.0.and.mth.ge.50.and.mth.le.91).or.&
+                      (nt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax).or.&
+                      (nt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax).or.&
+                      (nt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max).or.&
+                      (nt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max).or.&
+                      (nt16.eq.0.and.mth.ge.875.and.mth.le.899)) then
+                     xss(ic+j)=xss(ic+j)+s
+                     xss(it+j)=xss(it+j)+s
+                  endif
+               elseif (izai.eq.2003) then
+                  if ((mth.ge.4.and.mth.le.49.and.mth.ne.10.and.mth.ne.27).or.&
+                      (mth.ge.92.and.mth.le.200.and.mth.ne.101).or.&
+                      (nt4.eq.0.and.mth.ge.50.and.mth.le.91).or.&
+                      (nt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax).or.&
+                      (nt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax).or.&
+                      (nt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax).or.&
+                      (nt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max).or.&
+                      (nt16.eq.0.and.mth.ge.875.and.mth.le.899)) then
+                     xss(ic+j)=xss(ic+j)+s
+                     xss(it+j)=xss(it+j)+s
+                  endif
+               elseif (izai.eq.2004) then
+                  if ((mth.ge.4.and.mth.le.49.and.mth.ne.10.and.mth.ne.27).or.&
+                      (mth.ge.92.and.mth.le.200.and.mth.ne.101).or.&
+                      (nt4.eq.0.and.mth.ge.50.and.mth.le.91).or.&
+                      (nt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax).or.&
+                      (nt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax).or.&
+                      (nt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax).or.&
+                      (nt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max).or.&
+                      (nt16.eq.0.and.mth.ge.875.and.mth.le.899)) then
+                     xss(ic+j)=xss(ic+j)+s
+                     xss(it+j)=xss(it+j)+s
                   endif
                endif
                if (mth.eq.444) s=sigfig(s/emev,7,0)
                xss(next)=s
-               if (izai.eq.1) then
-                  if ((mth.ge.5.and.mth.le.150)&
-                    .or.(mth.ge.152.and.mth.le.200)&
-                    .or.(mt103.eq.0.and.mth.ge.mpmin.and.mth.le.mpmax)&
-                    .or.(mt104.eq.0.and.mth.ge.mdmin.and.mth.le.mdmax)&
-                    .or.(mt105.eq.0.and.mth.ge.mtmin.and.mth.le.mtmax)&
-                    .or.(mt106.eq.0.and.mth.ge.m3min.and.mth.le.m3max)&
-                    .or.(mt107.eq.0.and.mth.ge.m4min.and.mth.le.m4max)) then
-                     xss(it+j)=xss(it+j)+s
-                  endif
-               else
-                  if (mth.le.200.or.mth.ge.600) then
-                     xss(it+j)=xss(it+j)+s
-                  endif
-               endif
                n=n+1
                next=next+1
                if (next.gt.nxss) call error('acelod',&
@@ -5811,8 +5927,6 @@ contains
                   call moreio(nin,0,0,scr(jscr),nb,nw)
                   jscr=jscr+nw
                enddo
-               if (jscr.gt.nwscr) call error('acelod',&
-                   'exceeded scratch storage',' ')
             endif
             iso=nint(scr(3))
             lct=nint(scr(4))
@@ -5823,6 +5937,9 @@ contains
          else
             lct=l2h
             call tab1io(nin,0,0,scr,nb,nw)
+            do while (nb.ne.0)
+               call moreio(nin,0,0,scr,nb,nw)
+            enddo
             awp=c2h
             ltt=1
             law=l2h
@@ -5879,8 +5996,13 @@ contains
 
                !--treat charged-particle elastic
                else
-                  call acecpe(next,scr,nin,awr,awp,&
-                    spi,ne,lidp,ie,il,nes)
+                 if (mth.eq.2) then
+                   call acecpe(next,scr,nin,awr,awp,&
+                     spi,ne,lidp,ie,il,nes)
+                 else
+                   call acensd(ir,next,scr,nin,ltt3,lttn,&
+                     ltt,last,law,ne,ie,il,iso,newfor)
+                 endif
                endif
             endif
          endif
@@ -6017,6 +6139,11 @@ contains
          law=l2h
          nn=n1h
          n=n2h
+         loc=1+nw
+         do while (nb.ne.0)
+            call moreio(nin,0,0,scr(loc),nb,nw)
+            loc=loc+nw
+         enddo
          !--dndat entry
          xss(lff)=dntc(i)/shake
          lff=lff+1
@@ -6050,6 +6177,9 @@ contains
          else if (law.eq.5) then
             !--law=5
             call tab1io(nin,0,0,scr,nb,nw)
+            do while (nb.ne.0)
+               call moreio(nin,0,0,scr,nb,nw)
+            enddo
             call tab1io(nin,0,0,scr,nb,nw)
             do while (nb.ne.0)
                call moreio(nin,0,0,scr,nb,nw)
@@ -6076,6 +6206,11 @@ contains
          law=l2h
          nn=n1h
          n=n2h
+         loc=1+nw
+         do while (nb.ne.0)
+            call moreio(nin,0,0,scr(loc),nb,nw)
+            loc=loc+nw
+         enddo
          xxmin=scr(7+2*nn)
          xxmax=scr(5+2*nn+2*n)
          !--ldnd entry
@@ -6114,8 +6249,6 @@ contains
                   call moreio(nin,0,0,scr(loc),nb,nw)
                   loc=loc+nw
                enddo
-               if (loc.gt.nwscr) call error('acelod',&
-                   'exceeded scratch storage',' ')
                l=next+1
                sumup=0
                do j=1,mm
@@ -6144,14 +6277,15 @@ contains
          else if (law.eq.5) then
             !--law=5
             call tab1io(nin,0,0,scr,nb,nw)
+            do while (nb.ne.0)
+               call moreio(nin,0,0,scr,nb,nw)
+            enddo
             call tab1io(nin,0,0,scr,nb,nw)
             loc=1+nw
             do while (nb.ne.0)
                call moreio(nin,0,0,scr(loc),nb,nw)
                loc=loc+nw
             enddo
-            if (loc.gt.nwscr) call error('acelod',&
-                'exceeded scratch storage',' ')
             nn=n1h
             mm=n2h
 
@@ -6172,8 +6306,6 @@ contains
                   mm=mm+1
                enddo
             endif
-            if (2*mm+10.gt.nwscr) call error('acelod',&
-                'exceeded scratch storage',' ')
 
             !--there is no incident energy dependence, we represent
             !--this by two energies with duplicated distributions
@@ -6260,6 +6392,9 @@ contains
          call contio(nin,0,0,scr,nb,nw)
          if (mth.eq.1) then
             call tab1io(nin,0,0,scr,nb,nw)
+            do while (nb.ne.0)
+               call moreio(nin,0,0,scr,nb,nw)
+            enddo
             call tab2io(nin,0,0,scr,nb,nw)
             negn=nint(scr(6))
             if (negn.ne.30) call error('acelod',&
@@ -6320,10 +6455,11 @@ contains
    integer::ir,next,nin,ltt3,lttn,ltt,last,law,ne,ie,il,iso,newfor
    real(kr)::scr(*)
    ! internals
-   integer::idone,j,nb,nw,lang,iint,nn,kk,nmu,m,n,i,ne1,ii,ll
+   integer::idone,j,nb,nw,nw2,lang,iint,nn,kk,nmu,m,n,i,ne1,ii,ll
    real(kr)::sum,renorm
    real(kr),parameter::emev=1.e6_kr
    real(kr),parameter::rmin=1.e-30_kr
+   real(kr),parameter::zero=0
 
    idone=0
    ne1=0
@@ -6332,9 +6468,17 @@ contains
       do j=1,ne
          if (newfor.eq.0) then
             call tab1io(nin,0,0,scr,nb,nw)
+            do while (nb.ne.0)
+               call moreio(nin,0,0,scr,nb,nw)
+            enddo
          else
             if (law.eq.7) then
                call tab1io(nin,0,0,scr,nb,nw)
+               ll=1+nw
+               do while (nb.ne.0)
+                  call moreio(nin,0,0,scr(ll),nb,nw)
+                  ll=ll+nw
+               enddo
             else if (ltt.eq.2) then
                call tab1io(nin,0,0,scr,nb,nw)
                ll=1+nw
@@ -6345,6 +6489,12 @@ contains
                call pttab2(scr)
             else
                call listio(nin,0,0,scr,nb,nw)
+               ll=1+nw
+               do while (nb.ne.0)
+                  call moreio(nin,0,0,scr(ll),nb,nw2)
+                  ll=ll+nw2
+                  nw=nw+nw2 ! nw is used in the if block that follows
+               enddo
                if (mfh.eq.6) then
                   lang=nint(scr(3))
                   if (lang.eq.0) then
@@ -6378,6 +6528,7 @@ contains
                xss(il+j)=-xss(il+j)
                iso=0
                iint=nint(scr(8))
+               iint=min(mod(iint,10),2)
                xss(next)=iint
                xss(next+1)=n
                if (next+2+3*n.gt.nxss) call error('acensd',&
@@ -6400,7 +6551,8 @@ contains
                      xss(next+1+2*n+i)=sigfig(sum,7,0)
                   endif
                enddo
-               renorm=1/xss(next+1+3*n)
+               renorm=1
+               if (xss(next+1+3*n).ne.zero) renorm=1/xss(next+1+3*n)
                do i=1,n
                   xss(next+1+2*n+i)=renorm*xss(next+1+2*n+i)
                   xss(next+1+2*n+i)=sigfig(xss(next+1+2*n+i),9,0)
@@ -6485,13 +6637,23 @@ contains
    real(kr),allocatable,dimension(:)::xxs,yys
    real(kr),parameter::emev=1.e6_kr
    real(kr),parameter::fm=1.e-12_kr
+   real(kr),parameter::epslow=0.9999999999e0_kr
 
    !--allocate scratch storage area
    allocate(xxs(ne))
    allocate(yys(ne))
-   
+
    write(nsyso,'(/'' working on charged-particle elastic'')')
+   write(nsyso,'(a,i7,f7.2,2i7)')' zai spi,lidp,ne =',izai,spi,lidp,ne
    amass=awr/awp
+   i2s=nint(2*spi)
+   ai=awi*amassn
+   at=awr*amassn
+   zt=nint(za/1000)
+   zi=int(izai/1000)
+   cc1=2*amu*ev*fm**2/hbar**2
+   ee=(ev/10000000)*(clight/10)
+   cc2=ee**4*amu/(2*hbar**2*ev)
    llht=1
    scr(llht)=0
    scr(llht+1)=0
@@ -6526,10 +6688,13 @@ contains
          ien=ien+1
       enddo
       f=(xss(esz+ien+1)-e)/(xss(esz+ien+1)-xss(esz+ien))
-      xelas=xss(esz+3*nes+ien)*f+xss(esz+3*nes+ien+1)*(1-f)
-      write(nsyso,'('' e,elas='',1p,2e12.4)') e,xelas
-      write(nsyso,'(15x,''mu'',7x,''signi'',8x,''sigc'',8x,&
-       &''sige'',8x,''ratr'',8x,''cumm'')')
+      xelas=xss(esz+3*nes+ien)*f+xss(esz+3*nes+ien+1)*(1.0d0-f)
+      wn=at*sqrt(cc1*e*ai)/(ai+at)
+      eta=zt*zi*sqrt(cc2*ai/e)
+      write(nsyso,'('' e,elast(mf3/mt2),ltp,k,eta='',1p,2e12.4,&
+        & i4,2e12.4)')e,xelas,ltp,wn,eta
+      write(nsyso,'(15x,''mu'',3x,''pni*signi'',8x,''sigc'',8x,&
+        &''sige'',8x,''ratr'',8x,''cumm'')')
       cumm=0
       amul=0
       smul=0
@@ -6544,39 +6709,66 @@ contains
          do while (ione.eq.0)
             amuu=scr(lld+6+2*(jl-1))
             pmu=scr(lld+7+2*(jl-1))
+            if (jl.gt.1.and.amuu.ge.1.0d0) then
+              amuu=0.9975d0
+              if (amuu.le.scr(lld+6+2*(jl-2))) amuu=scr(lld+6+2*(jl-2))+&
+                (1.0d0-scr(lld+6+2*(jl-2)))*0.1d0
+              if (ltp.eq.14.and.&
+                scr(lld+7+2*(jl-1))*scr(lld+7+2*(jl-2)).gt.0.0d0) then
+                  call terp1(scr(lld+6+2*(jl-2)),scr(lld+7+2*(jl-2)),&
+                    scr(lld+6+2*(jl-1)),scr(lld+7+2*(jl-1)),amuu,pmu,4)
+              elseif (ltp.eq.15.and.&
+                scr(lld+7+2*(jl-1))*scr(lld+7+2*(jl-2)).gt.0.0d0.and.&
+                scr(lld+6+2*(jl-1))*scr(lld+6+2*(jl-2)).gt.0.0d0.and.&
+                amuu*scr(lld+6+2*(jl-2)).gt.0.0d0) then
+                  call terp1(scr(lld+6+2*(jl-2)),scr(lld+7+2*(jl-2)),&
+                    scr(lld+6+2*(jl-1)),scr(lld+7+2*(jl-1)),amuu,pmu,5)
+              else
+                  call terp1(scr(lld+6+2*(jl-2)),scr(lld+7+2*(jl-2)),&
+                    scr(lld+6+2*(jl-1)),scr(lld+7+2*(jl-1)),amuu,pmu,2)
+              endif
+              scr(lld+6+2*(jl-1))=amuu
+              scr(lld+7+2*(jl-1))=pmu
+            endif
             itwo=0
             do while (itwo.eq.0)
-               i2s=nint(2*spi)
-               ai=awi*amassn
-               at=awr*amassn
-               zt=nint(za/1000)
-               zi=int(izai/1000)
-               cc1=2*amu*ev*fm**2/hbar**2
-               ee=(ev/10000000)*(clight/10)
-               cc2=ee**4*amu/(2*hbar**2*ev)
-               wn=at*sqrt(cc1*e*ai)/(ai+at)
-               eta=zt*zi*sqrt(cc2*ai/e)
                sigc=0
                if (lidp.eq.0) sigc=(eta**2/wn**2)/(1-amuu)**2
                if (lidp.eq.1) sigc=((2*eta**2/wn**2)&
                  /(1-amuu**2))*((1+amuu**2)/(1-amuu**2)&
                  +((-1)**i2s)*cos(eta*log((1+amuu)/(1-amuu)))&
                  /(2*spi+1))
-               if (ltp.lt.12) pmu=pmu-sigc
-               if (iterp.eq.1) then
+               if (ltp.lt.12.and.iterp.eq.0) pmu=pmu-sigc
+               if (iterp.eq.1.and.ltp.lt.12) then
                   signi=(ratr-1)*sigc
                else
                   signi=pmu*xelas
-                  if (signi.lt.-sigc) signi=-sigc
+                  if (signi.lt.-sigc) signi=-sigc*epslow
                endif
                ratr=(sigc+signi)/sigc
                itwo=1
-               if (jl.gt.1.and.iterp.eq.0.and.sigc.gt.abs(signi)&
-                 .and.sigc.gt.(2*sigcl)) then
+               if (jl.gt.1.and.iterp.eq.0.and.epslow*sigc.gt.abs(signi).and.&
+                 sigc.gt.(2*sigcl)) then
                   iterp=1
+                  itwo=0
                   amuu=(amul+amuu)/2
                   ratr=(ratrl+ratr)/2
-                  itwo=0
+                  if (ltp.ge.12) then
+                    if (ltp.eq.14.and.&
+                      scr(lld+7+2*(jl-1))*scr(lld+7+2*(jl-2)).gt.0.0d0) then
+                        call terp1(scr(lld+6+2*(jl-2)),scr(lld+7+2*(jl-2)),&
+                          scr(lld+6+2*(jl-1)),scr(lld+7+2*(jl-1)),amuu,pmu,4)
+                    elseif (ltp.eq.15.and.&
+                      scr(lld+7+2*(jl-1))*scr(lld+7+2*(jl-2)).gt.0.0d0.and.&
+                      scr(lld+6+2*(jl-1))*scr(lld+6+2*(jl-2)).gt.0.0d0.and.&
+                      amuu*scr(lld+6+2*(jl-2)).gt.0.0d0) then
+                        call terp1(scr(lld+6+2*(jl-2)),scr(lld+7+2*(jl-2)),&
+                          scr(lld+6+2*(jl-1)),scr(lld+7+2*(jl-1)),amuu,pmu,5)
+                    else
+                        call terp1(scr(lld+6+2*(jl-2)),scr(lld+7+2*(jl-2)),&
+                          scr(lld+6+2*(jl-1)),scr(lld+7+2*(jl-1)),amuu,pmu,2)
+                    endif
+                  endif
                endif
             enddo
             if (jl.gt.1) cumm=cumm+(amuu-amul)*(signi+sigc+smul)/2
@@ -6642,7 +6834,7 @@ contains
       xss(esz+4*nes+j)=sigfig(h,7,0)
    enddo
    deallocate(xxs)
-   deallocate(yys)   
+   deallocate(yys)
    return
    end subroutine acecpe
 
@@ -6657,7 +6849,7 @@ contains
    integer::next,i,matd,mt,nin,ismooth
    real(kr)::q
    ! internals
-   integer::nb,nw,nk,k,lf,m,n,jnt,ja,jb,j,l,nextn,nexd,ne,jscr,ki
+   integer::nb,nw,nk,k,lf,m,n,jnt,ja,jb,j,l,nextn,nexd,ne,jscr,ki,loc
    integer::ie,js,is,last,ix,ixx
    real(kr)::u,e,ep,renorm,efl,efh,emin,emax,tme,tmt
    real(kr)::dy,test,xm,ym,yt,dele,ta11
@@ -6689,6 +6881,11 @@ contains
       lf=nint(scr(4))
       m=nint(scr(5))
       n=nint(scr(6))
+      loc=1+nw
+      do while (nb.ne.0)
+         call moreio(nin,0,0,scr(loc),nb,nw)
+         loc=loc+nw
+      enddo
       if (next+2*m+2*n+3.gt.nxss) call error('acelf5',&
         'insufficient space for energy distributions',' ')
       jnt=nint(scr(8))
@@ -6728,6 +6925,13 @@ contains
          call tab2io(nin,0,0,scr,nb,nw)
          m=nint(scr(5))
          n=nint(scr(6))
+         jscr=1
+         do while (nb.ne.0)
+            jscr=jscr+nw
+            if (jscr.gt.nwscr) call error('acelf5',&
+              'scratch storage exceeded reading lf=1',' ')
+            call moreio(nin,0,0,scr(jscr),nb,nw)
+         enddo
          if (next+2*m+1.gt.nxss) call error('acelf5',&
            'insufficient space for energy distributions',' ')
          jnt=nint(scr(8))
@@ -6760,8 +6964,6 @@ contains
                  'scratch storage exceeded reading lf=1',' ')
                call moreio(nin,0,0,scr(jscr),nb,nw)
             enddo
-            if (jscr+nw.gt.nwscr) call error('acelf5',&
-                'scratch storage exceeded',' ')
             e=c2h
             xss(next+j)=sigfig(e/emev,7,0)
             xss(nextn+j)=nexd-dlw+1
@@ -6804,8 +7006,6 @@ contains
                   endif
                enddo
             endif
-            if (14+2*m+2*n.gt.nwscr) call error('acelf5',&
-                'scratch storage exceeded',' ')
             xss(nexd)=jnt
             xss(nexd+1)=n
             nexd=nexd+1
@@ -6848,7 +7048,14 @@ contains
            'you will have to patch the evaluation to use lf=1.')
          call tab1io(nin,0,0,scr,nb,nw)
          m=nint(scr(5))
-         n=nint(scr(5))
+         n=nint(scr(6))
+         jscr=1
+         do while (nb.ne.0)
+            jscr=jscr+nw
+            if (jscr.gt.nwscr) call error('acelf5',&
+              'scratch storage exceeded reading lf=5',' ')
+            call moreio(nin,0,0,scr(jscr),nb,nw)
+         enddo
          if (next+2*m+2*n+2.gt.nxss) call error('acelf5',&
            'insufficient space for energy distributions',' ')
          jnt=nint(scr(8))
@@ -6872,6 +7079,13 @@ contains
          call tab1io(nin,0,0,scr,nb,nw)
          m=nint(scr(5))
          n=nint(scr(6))
+         jscr=1
+         do while (nb.ne.0)
+            jscr=jscr+nw
+            if (jscr.gt.nwscr) call error('acelf5',&
+              'scratch storage exceeded reading lf=5',' ')
+            call moreio(nin,0,0,scr(jscr),nb,nw)
+         enddo
          if (next+n+1.gt.nxss) call error('acelf5',&
            'insufficient space for energy distributions',' ')
          xss(next)=n
@@ -6886,6 +7100,13 @@ contains
          call tab1io(nin,0,0,scr,nb,nw)
          m=nint(scr(5))
          n=nint(scr(6))
+         jscr=1
+         do while (nb.ne.0)
+            jscr=jscr+nw
+            if (jscr.gt.nwscr) call error('acelf5',&
+              'scratch storage exceeded reading lf=7 or 9',' ')
+            call moreio(nin,0,0,scr(jscr),nb,nw)
+         enddo
          if (next+2*m+2*n+2.gt.nxss) call error('acelf5',&
            'insufficient space for energy distributions',' ')
          jnt=nint(scr(8))
@@ -6915,6 +7136,11 @@ contains
          m=nint(scr(5))
          n=nint(scr(6))
          jnt=nint(scr(8))
+         loc=1+nw
+         do while (nb.ne.0)
+            call moreio(nin,0,0,scr(loc),nb,nw)
+            loc=loc+nw
+         enddo
          if (next+2*m+2*n+2.gt.nxss) call error('acelf5',&
            'insufficient space for energy distributions',' ')
          if (m.ne.1.or.jnt.ne.2) then
@@ -6937,6 +7163,11 @@ contains
          call tab1io(nin,0,0,scr,nb,nw)
          m=nint(scr(5))
          n=nint(scr(6))
+         loc=1+nw
+         do while (nb.ne.0)
+            call moreio(nin,0,0,scr(loc),nb,nw)
+            loc=loc+nw
+         enddo
          if (next+2*m+2*n+2.gt.nxss) call error('acelf5',&
            'insufficient space for energy distributions',' ')
          jnt=nint(scr(8))
@@ -6963,6 +7194,11 @@ contains
       !--law 12...madland-nix fission spectrum
       else if (lf.eq.12) then
          call tab1io(nin,0,0,scr,nb,nw)
+         loc=1+nw
+         do while (nb.ne.0)
+            call moreio(nin,0,0,scr(loc),nb,nw)
+            loc=loc+nw
+         enddo
          efl=scr(1)
          efh=scr(2)
          m=nint(scr(5))
@@ -7085,12 +7321,13 @@ contains
    integer::loc(5)
    character(60)::strng
    real(kr),dimension(:),allocatable::scr
-   integer,parameter::nwscr=1000000
+   integer,parameter::nwscr=10000000
    real(kr),parameter::emev=1.e6_kr
    real(kr),parameter::small=1.e-30_kr
    real(kr),parameter::etop=1.e10_kr
    real(kr),parameter::up=1.00001e0_kr
    real(kr),parameter::elow=1.e-5_kr
+   real(kr),parameter::f0low=1.e-20_kr
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
    real(kr),parameter::ten=10
@@ -7116,7 +7353,7 @@ contains
    igyl=0
    yield=0
    last=0
-   nexd=0   
+   nexd=0
    do while (idone.eq.0)
       ikk=ikk+1
       call tab1io(nin,0,0,scr(jscr),nb,nw)
@@ -7148,8 +7385,6 @@ contains
             jnt=nint(scr(jscr+5+2*m))
             if (next+2*m+2*n+3.gt.nxss) call error('acelf6',&
               'insufficient space for mf6 neutron yield',' ')
-            if (jscr+5+2*m+2*n+1.gt.nwscr) call error('acelf6',&
-                'exceeded scratch storage',' ')
             jscr=jscr+nw
             do while (nb.ne.0)
                call moreio(nin,0,0,scr(jscr),nb,nw)
@@ -7199,7 +7434,15 @@ contains
       if (mth.eq.18) ntyr=19
       if (mth.eq.18) lct=1 ! forces lab system for fission
       xss(tyr+i-1)=(3-2*lct)*ntyr
-      if (law.eq.6) xss(tyr+i-1)=-ntyr
+      if (law.eq.6) then
+        xss(tyr+i-1)=-ntyr
+        if (lct.eq.1.or.lct.eq.4) then
+          write(nsyso,&
+          & '(/'' ---warning from acelf6--- lab system found'', &
+          & '' for law6 in mf6/mt'',0p,i0,&
+          & '' - reset to cm'')') mth
+        endif
+      endif
 
    !--generalized yield
    else
@@ -7357,10 +7600,11 @@ contains
       xx=elow
       n=1
       test1=one+one/100000
-      test2=one/10-one/1000000
+      test2=one/10-one/10000
       test3=one-one/10000
       do while (xx.lt.test1)
          n=n+1
+         if (xx.gt.test3) xx=1
          if (xx.lt.test2) then
              xx=xx*step1
          else
@@ -7392,9 +7636,7 @@ contains
          xss(next+2*nn+n)=yn
          xl=xx
          pl=pn
-         test=one/10
-         test=test-test/10000
-         if (xx.lt.test) then
+         if (xx.lt.test2) then
             xx=xx*step1
          else
             xx=xx+step2
@@ -7426,8 +7668,6 @@ contains
       n=nint(scr(6))
       if (next+2*m+1.gt.nxss) call error('acelf6',&
         'insufficient space for mf6 tab2',' ')
-      if (6+2*m+1.gt.nwscr) call error('acelf6',&
-          'exceeded scratch storage',' ')
       jnt=nint(scr(8))
       jnt=mod(jnt,10)
       if (jnt.gt.2) jnt=2
@@ -7461,8 +7701,6 @@ contains
                call moreio(nin,0,0,scr(jscr),nb,nw)
                jscr=jscr+nw
             enddo
-            if (jscr.gt.nwscr) call error('acelf6',&
-            'exceeded scratch storage',' ')
             xss(next+j)=sigfig(c2h/emev,7,0)
             ee=c2h/emev
             xss(nextn+j)=nexd-dlw+1
@@ -7477,10 +7715,12 @@ contains
             ! extend low histogram bins as sqrt(e) using log energy scale
             ! only do this for outgoing neutrons with law=1, lang=2
             ! only do this if there are no discrete data
+            ex=40
             if (ismooth.gt.0.and.law.eq.1.and.lang.eq.2.and.&
-                lep.eq.1.and.zap.eq.1.and.nd.eq.0) then
+                lep.eq.1.and.nint(zap).eq.1.and.nd.eq.0.and.&
+                scr(7).le.elow.and.scr(8).gt.f0low.and.&
+                scr(7+ncyc).gt.ex) then
                fx=.8409
-               ex=40
                cx=scr(7+ncyc)*scr(8)
                do while (n.gt.2)
                   cxx=cx+scr(8+ncyc)*(scr(7+2*ncyc)-scr(7+ncyc))
@@ -7514,19 +7754,17 @@ contains
                   jscr=jscr+ncyc
                   n=n+1
                enddo
+
             ! extend to lower energy as sqrt(e) using linear interpol
             ! only do this for outgoing neutrons with law=1, lang=2
             ! only do this if there are no discrete data
             else if (ismooth.gt.0.and.law.eq.1.and.lang.eq.2.and.&
-                     lep.eq.2.and.zap.eq.1.and.n.gt.3.and.nd.eq.0) then
-               ex=40
+                 lep.eq.2.and.nint(zap).eq.1.and.n.gt.3.and.nd.eq.0) then
                fx=0.50
                nn=0
                ! make room for initial data at zero energy, then
                ! insert those zero energy data
                if (scr(7).gt.ex) then
-                  if(6+nx+ncyc+1.gt.nwscr) call error('acelf6',&
-                     'exceeded scratch storage',' ')
                   write(nsyso,'('' extending lin-lin as sqrt(E) '',&
                    &''below'',1p,e10.2,'' MeV for E='',e10.2,'' MeV mt='',i3)&
                    &')scr(7)/emev,ee,mt
@@ -7543,8 +7781,6 @@ contains
                ! insert new data between the original E1 and zero.
                ! continue until reach an energy below ex.
                do while (scr(7+ncyc).gt.ex)
-                 if(6+nx+ncyc+1.gt.nwscr) call error('acelf6',&
-                    'exceeded scratch storage',' ')
                   nn=nn+1
                   do ix=nx,ncyc+1,-1
                      scr(6+ncyc+ix)=scr(6+ix)
@@ -7642,7 +7878,7 @@ contains
                   if (na.eq.2) then
                      aa=scr(10+ncyc*(ki-1))
                   else
-                     aa=bachaa(1,1,iza,ee,ep)
+                     aa=bachaa(izai,nint(zap),iza,ee,ep)
                   endif
                   xss(ki+4*n+nexd)=sigfig(aa,7,0)
 
@@ -7700,7 +7936,7 @@ contains
                   if (abs(emu1+1).ge.test.or.abs(emu2-1).ge.test) then
                      fbcm=fbl
                      ffcm=ffl
-                     call fndar2(akak,rkal,fbcm,ffcm,emu1,emu2,ee,ep)
+                     call fndar2(akal,rkal,fbcm,ffcm,emu1,emu2,ee,ep)
                      call mess('acelf6',&
                        'tabulated angular distribution',&
                        'does not extend over entire cosine range.')
@@ -7716,9 +7952,9 @@ contains
                         delfcm=0
                      endif
                      call fndar1(akal,rkal,fbarcm,delfcm,ee,ep)
-                     xss(ki+3*n+nexd)=sigfig(rkal,7,0)
-                     xss(ki+4*n+nexd)=sigfig(akal,7,0)
                   endif
+                  xss(ki+3*n+nexd)=sigfig(rkal,7,0)
+                  xss(ki+4*n+nexd)=sigfig(akal,7,0)
 
                !--convert legendre distribution to law 61
                else if (lang.eq.1.and.newfor.eq.1) then
@@ -7741,8 +7977,6 @@ contains
                   xss(nexcd)=intmu
                   nmu=nint(scr(jscr+5))
                   xss(nexcd+1)=nmu
-                  if (jscr+7+2*nmu+1.gt.nwscr) call error('acelf6',&
-                      'exceeded scratch storage',' ')
                   do imu=1,nmu
                      xss(nexcd+1+imu)=sigfig(scr(jscr+6+2*imu),7,0)
                      xss(nexcd+1+nmu+imu)=sigfig(scr(jscr+7+2*imu),7,0)
@@ -7814,7 +8048,8 @@ contains
          else
             jscr=1
             call tab1io(nin,0,0,scr(jscr),nb,nw)
-            intmu=l1h
+            intmu=scr(jscr+7)
+            intmu=min(mod(intmu,10),2)
             nmu=l2h
             ee=c2h/emev
             xss(next+j)=sigfig(ee,7,0)
@@ -7824,18 +8059,20 @@ contains
             nexd=nexd+2
             mus=nexd
             nexd=nexd+2*nmu
+            do while (nb.ne.0)
+               call moreio(nin,0,0,scr(jscr),nb,nw)
+            enddo
             do imu=1,nmu
                jscr=1
                call tab1io(nin,0,0,scr(jscr),nb,nw)
                npep=n2h
                intep=nint(scr(jscr+7))
+               intep=min(mod(intep,10),2)
                jscr=jscr+nw
                do while (nb.ne.0)
                   call moreio(nin,0,0,scr(jscr),nb,nw)
                   jscr=jscr+nw
                enddo
-               if (jscr.gt.nwscr) call error('acelf6',&
-                   'exceeded scratch storage',' ')
                xss(mus+imu-1)=c2h
                xss(mus+nmu+imu-1)=nexd-dlw+1
                xss(nexd)=intep
@@ -7856,7 +8093,8 @@ contains
                        *(scr(9+2*(ki-1))-scr(9+2*(ki-2)))/2
                   endif
                enddo
-               renorm=1/xss(nexd+3*npep)
+               renorm=1
+               if (xss(nexd+3*npep).ne.zero) renorm=1/xss(nexd+3*npep)
                do ki=1,npep
                   xss(nexd+npep+ki)=&
                     sigfig(renorm*xss(nexd+npep+ki),7,0)
@@ -8155,8 +8393,8 @@ contains
    integer::nesp,nex,j,nwords,kgmt,mfd,mtd,mtdnc,nb,nw
    integer::nk,mto,ik,ifini,jscr,idone,lf,lp,m,n,nn,jnt,i
    integer::ie,je,jn,jfirst,jlast,nlast,law,lff,li,ni,ii,mmm
-   integer::ne,lc,imu,nexl,nc,ic,nexd,k,lep,nd,na,ncyc,ki,jj,kk
-   integer::nyp,mtl,loct,nd0,mtdold
+   integer::ne,lc,imu,nexl,nc,ic,nexd,k,lep,nd,na,ncyc,ki
+   integer::nyp,mtl,loct,nd0,mtdold,jj,kk
    integer::jp,jpn,jpp
    real(kr)::awr,eg,egamma,ei,en,ep,epu,ef,el,e1,teste,renorm,r
    real(kr),dimension(:),allocatable::scr
@@ -8164,12 +8402,12 @@ contains
    real(kr),dimension(:),allocatable::tdise
    character(120)::line1,line2
    character(66)::strng
-   integer,parameter::nwscr=1000000
+   integer,parameter::nwscr=10000000
    integer,parameter::ndise=5000
    real(kr),dimension(:),allocatable::phot
    real(kr),parameter::emev=1.e6_kr
    real(kr),parameter::rmin=1.e-30_kr
-   real(kr),parameter::eps=1.e-6_kr
+   real(kr),parameter::eps=4.e-6_kr
    real(kr),parameter::zero=0
 
    !--initialize
@@ -8477,8 +8715,6 @@ contains
                   jscr=jscr+nw
                   call moreio(nin,0,0,scr(jscr),nb,nw)
                enddo
-               if (jscr+nw.gt.nwscr) call error('acelpp',&
-                   'exceeded scratch storage',' ')
                m=n1h
                n=n2h
                jnt=nint(scr(6+2*m))
@@ -8523,10 +8759,11 @@ contains
                   jscr=1
                   do while (nb.ne.0)
                      jscr=jscr+nw
+                     if (jscr.gt.nwscr) call error('acelpp',&
+                       'insufficient storage for input photon data.',&
+                       ' ')
                      call moreio(nin,0,0,scr(jscr),nb,nw)
                   enddo
-                  if (jscr+nw.gt.nwscr) call error('acelpp',&
-                      'insufficient storage for input photon data.',' ')
                   xss(nex-1+ie)=sigfig(c2h/emev,7,0)
                   xss(nex-1+ne+ie)=nexd-dlwp+1
                   m=n1h
@@ -8550,7 +8787,8 @@ contains
                         *(scr(7+2*k)-scr(7+2*(k-1)))
                   enddo
                   ! renormalize cdf to sum to 1, and pdf correspondingly
-                  renorm=1/xss(3*n+nexd)
+                  renorm=1
+                  if (xss(3*n+nexd).ne.zero) renorm=1/xss(3*n+nexd)
                   do k=1,n
                      xss(k+n+nexd)=sigfig(xss(k+n+nexd)*renorm,9,0)
                      xss(k+2*n+nexd)=sigfig(xss(k+2*n+nexd)*renorm,9,0)
@@ -8596,8 +8834,6 @@ contains
                jscr=jscr+nw
                call moreio(nin,0,0,scr(jscr),nb,nw)
             enddo
-            if (jscr+nw.gt.nwscr) call error('acelpp',&
-                'exceeded scratch storage',' ')
             if (nd.gt.0) then
                !--create an initial list of discrete photons.
                !--use nd0 as a list counter.  if a discrete photon
@@ -8696,7 +8932,7 @@ contains
                   enddo
                endif
                if (nd0.gt.ndise) then
-                  write(strng, '(''ndise is'',i6,'' but need '',i6)')&
+                  write(strng,'(''ndise is'',i6,'' but need '',i6)')&
                         ndise,nd0
                   call error('acelpp',&
                              'too many discrete photons found',strng)
@@ -8714,8 +8950,6 @@ contains
             jscr=jscr+nw
             call moreio(nin,0,0,scr(jscr),nb,nw)
          enddo
-         if (jscr+nw.gt.nwscr) call error('acelpp',&
-             'exceeded scratch storage',' ')
          m=n1h
          n=n2h
          xss(nex+3)=0
@@ -8760,8 +8994,6 @@ contains
                jscr=jscr+nw
                call moreio(nin,0,0,scr(jscr),nb,nw)
             enddo
-            if (jscr+nw.gt.nwscr) call error('acelpp',&
-                'exceeded scratch storage',' ')
             xss(nex-1+ie)=sigfig(c2h/emev,7,0)
             xss(nex-1+ne+ie)=nexd-dlwp+1
             n=n2h
@@ -8890,7 +9122,7 @@ contains
                  *(scr(7+ncyc*(ki-1))-scr(7+ncyc*(ki-2)))
             enddo
             renorm=1
-            if (xss(3*n+nexd).ne.0.) renorm=1/xss(3*n+nexd)
+            if (xss(3*n+nexd).ne.zero) renorm=1/xss(3*n+nexd)
             do ki=1,n
                xss(ki+n+nexd)=sigfig(xss(ki+n+nexd)*renorm,9,0)
                xss(ki+2*n+nexd)=sigfig(xss(ki+2*n+nexd)*renorm,9,0)
@@ -9144,6 +9376,7 @@ contains
 
    ! initialise
    aprime=0
+   awp=0
    chkl=0
    suml=0
    iaa=0
@@ -9198,7 +9431,7 @@ contains
 
    !--count up productions
    ip=0
-   thresh=0   
+   thresh=0
    ntro=ptype+ntype
    ploct=ntro+ntype
    do i=1,ntype
@@ -9285,12 +9518,13 @@ contains
             if ((mt.eq.102.and.izai.eq.1).or.mf.eq.4) then
                xss(tyrh+jp-1)=-1
                if (mt.eq.102) xss(tyrh+jp-1)=1
-               do ie=iaa,nes
+               do ie=it,nes
                   if (mt.eq.2) then
                      xss(hpd+2+ie-it)=&
                        sigfig(xss(esz+3*nes+ie-it),7,0)
                   else
-                     tt=xss(hpd+2+ie-it)+xss(2+k+ie-iaa)
+                     tt=xss(hpd+2+ie-it)
+                     if (ie.ge.iaa) tt=tt+xss(2+k+ie-iaa)
                      xss(hpd+2+ie-it)=sigfig(tt,7,0)
                   endif
                enddo
@@ -9328,8 +9562,6 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
-                  if (ll.gt.nwscr) call error('acelcp',&
-                      'exceeded scratch storage',' ')
 
                   !--if not the desired particle,
                   !--or not a law=1 subsection,
@@ -9349,8 +9581,6 @@ contains
                            call moreio(nin,0,0,scr(ll),nb,nw)
                            ll=ll+nw
                         enddo
-                        if (ll.gt.nwscr) call error('acelcp',&
-                            'exceeded scratch storage',' ')
                         na=nint(scr(4))
                         if (na.gt.0) isocp=0
                      enddo
@@ -9388,18 +9618,19 @@ contains
                   if (ik.eq.lprod(j)) then
                      nrr=1
                      npp=2
-                     do ie=iaa,nes
-                        e=xss(esz+ie-1)*emev
-                        call terpa(y,e,en,idis,scr,npp,nrr)
-                        if (y.lt.delt) y=0
-                        e=e/emev
-                        if (mth.eq.2) then
-                           ss=xss(esz+3*nes+ie-1)
-                        else
-                           ss=xss(2+k+ie-iaa)
-                        endif
-                        tt=xss(hpd+2+ie-it)+y*ss
-                        xss(hpd+2+ie-it)=sigfig(tt,7,0)
+                     do ie=it,nes
+                       e=xss(esz+ie-1)*emev
+                       call terpa(y,e,en,idis,scr,npp,nrr)
+                       if (y.lt.small) y=0
+                       e=e/emev
+                       ss=0
+                       if (mth.eq.2) then
+                          ss=xss(esz+3*nes+ie-1)
+                       else
+                          if (ie.ge.iaa) ss=xss(2+k+ie-iaa)
+                       endif
+                       tt=xss(hpd+2+ie-it)+y*ss
+                       xss(hpd+2+ie-it)=sigfig(tt,7,0)
                      enddo
 
                      !--store the yield
@@ -9491,6 +9722,7 @@ contains
                amass=awr/awi
                do ie=1,ne
                   int=nint(xss(loce))
+                  int=min(mod(int,10),2)
                   n=nint(xss(loce+1))
                   xss(nb+ie)=-(next-andh+1)
                   xss(next)=int
@@ -9524,12 +9756,13 @@ contains
                          *(xss(next+1+i)+xss(next+1+i-1))/4
                      endif
                   enddo
-                  renorm=1/xss(next+1+3*n)
+                  renorm=1.0
+                  if (xss(next+1+3*n).ne.zero) renorm=1/xss(next+1+3*n)
                   do i=1,n
                      xss(next+1+n+i)= &
                        sigfig(renorm*xss(next+1+n+i),7,0)
                      xss(next+1+2*n+i)=&
-                        sigfig(renorm*xss(next+1+2*n+i),9,0)
+                       sigfig(renorm*xss(next+1+2*n+i),9,0)
                   enddo
                   next=next+2+3*n
                   loce=loce+2+3*n
@@ -9619,6 +9852,7 @@ contains
                      xss(il+iie)=next-andh+1
                      xss(il+iie)=-xss(il+iie)
                      int=nint(scr(lld+7))
+                     int=min(mod(int,10),2)
                      xss(next)=int
                      xss(next+1)=n
                      if (next+2+3*n.gt.nxss) call error('acelcp',&
@@ -9654,7 +9888,8 @@ contains
                              *(xss(next+1+i)+xss(next+1+i-1))/4
                         endif
                      enddo
-                     renorm=1/xss(next+1+3*n)
+                     renorm=1.0
+                     if (xss(next+1+3*n).ne.zero) renorm=1/xss(next+1+3*n)
                      do i=1,n
                         xss(next+1+n+i)=&
                           sigfig(renorm*xss(next+1+n+i),7,0)
@@ -9710,6 +9945,11 @@ contains
                   do iie=1,ne
                      ll=lld
                      call tab1io(nin,0,0,scr(ll),nb,nw)
+                     ll=ll+nw
+                     do while (nb.ne.0)
+                        call moreio(nin,0,0,scr(ll),nb,nw)
+                        ll=ll+nw
+                     enddo
                      call pttab2(scr(lld))
                      xss(ie+iie)=sigfig(scr(lld+1)/emev,7,0)
                      m=nint(scr(lld+4))
@@ -9717,6 +9957,7 @@ contains
                      xss(il+iie)=next-andh+1
                      xss(il+iie)=-xss(il+iie)
                      int=nint(scr(lld+7))
+                     int=min(mod(int,10),2)
                      xss(next)=int
                      xss(next+1)=n
                      if (next+2+3*n.gt.nxss) call error('acelcp',&
@@ -9754,7 +9995,8 @@ contains
                              *(xss(next+1+i)+xss(next+1+i-1))/4
                         endif
                      enddo
-                     renorm=1/xss(next+1+3*n)
+                     renorm=1.0
+                     if (xss(next+1+3*n).ne.zero) renorm=1/xss(next+1+3*n)
                      do i=1,n
                         xss(next+1+n+i)=&
                           sigfig(renorm*xss(next+1+n+i),7,0)
@@ -9802,8 +10044,6 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
-                  if (ll.gt.nwscr) call error('acelcp',&
-                      'exceeded scratch storage',' ')
                   if (ik.eq.lprod(j)) then
                      lld=ll
                      xss(landh+jp-1)=-1
@@ -9829,8 +10069,6 @@ contains
                         call moreio(nin,0,0,scr(ll),nb,nw)
                         ll=ll+nw
                      enddo
-                     if (ll.gt.nwscr) call error('acelcp',&
-                         'exceeded scratch storage',' ')
                   endif
 
                   !--law 2 angular distribution
@@ -9893,11 +10131,12 @@ contains
                         xss(il+iie)=next-andh+1
                         xss(il+iie)=-xss(il+iie)
                         int=nint(scr(lld+7))
+                        int=min(mod(int,10),2)
                         xss(next)=int
                         xss(next+1)=n
                         if (next+2+3*n.gt.nxss) call error('acelcp',&
-                  'insufficient storage for angular distributions.',&
-                  ' ')
+                        'insufficient storage for angular distributions.',&
+                        ' ')
                         do i=1,n
                            xss(next+1+i)=&
                              sigfig(scr(lld+4+2*m+2*i),7,0)
@@ -9930,7 +10169,8 @@ contains
                                 *(xss(next+1+i)+xss(next+1+i-1))/4
                            endif
                         enddo
-                        renorm=1/xss(next+1+3*n)
+                        renorm=1.0
+                        if (xss(next+1+3*n).ne.zero) renorm=1/xss(next+1+3*n)
                         do i=1,n
                            xss(next+1+n+i)=&
                              sigfig(renorm*xss(next+1+n+i),7,0)
@@ -9978,34 +10218,41 @@ contains
                            call moreio(nin,0,0,scr(ll),nb,nw)
                            ll=ll+nw
                         enddo
-                        if (ll.gt.nwscr) call error('acelcp',&
-                            'exceeded scratch storage',' ')
                         nmu=nint(scr(lld+3))
+                        llx=max(2*(nint(scr(lld+4)))+4,6)
                         nx=nint(scr(lld+5))
                         intx=nint(scr(lld+7))
-                        xss(na+ie)=scr(lld+1)
+                        intx=min(mod(intx,10),2)
+                        xss(na+ie)=scr(lld+1)/emev
                         xss(nc+ie)=-(next-andh+1)
                         xss(next)=intx
                         xss(next+1)=nx
                         if (next+2+3*nx.gt.nxss) call error('acelcp',&
-                  'insufficient storage for angular distributions.',&
-                  ' ')
+                        'insufficient storage for angular distributions.',&
+                        ' ')
                         do ix=1,nx
-                           xss(next+1+ix)=sigfig(scr(lld+6+2*ix),7,0)
+                           xss(next+1+ix)=sigfig(scr(lld+llx+2*ix),7,0)
                            xss(next+1+nx+ix)=&
-                             sigfig(scr(lld+7+2*ix),7,0)
+                             sigfig(scr(lld+llx+1+2*ix),7,0)
                            if (xss(next+1+nx+ix).lt.small)&
                              xss(next+1+nx+ix)=0
                            if (ix.eq.1) xss(next+1+2*nx+ix)=0
                            if (ix.gt.1) then
-                              sum=xss(next+1+2*nx+ix-1)&
-                                +(xss(next+1+nx+ix)&
-                                +xss(next+1+nx+ix-1))&
-                                *(xss(next+1+ix)-xss(next+1+ix-1))/2
-                              xss(next+1+2*nx+ix)=sigfig(sum,7,0)
+                             if (intx.eq.1) then
+                               sum=xss(next+1+2*nx+ix-1)&
+                                   +xss(next+1+nx+ix-1)&
+                                   *(xss(next+1+ix)-xss(next+1+ix-1))
+                             else
+                               sum=xss(next+1+2*nx+ix-1)&
+                                   +(xss(next+1+nx+ix)&
+                                   +xss(next+1+nx+ix-1))&
+                                   *(xss(next+1+ix)-xss(next+1+ix-1))/2
+                             endif
+                             xss(next+1+2*nx+ix)=sigfig(sum,7,0)
                            endif
                         enddo
-                        renorm=1/xss(next+1+3*nx)
+                        renorm=1.0
+                        if (xss(next+1+3*nx).ne.zero) renorm=1/xss(next+1+3*nx)
                         do ix=1,nx
                            xss(next+1+nx+ix)=&
                              sigfig(renorm*xss(next+1+nx+ix),7,0)
@@ -10075,13 +10322,16 @@ contains
                xss(next)=0
                xss(next+1)=2
                xss(next+2)=sigfig(xss(esz+it-1),7,0)
-               xss(next+3)=1
-               xss(next+4)=sigfig(xss(esz+nes-1),7,0)
+               xss(next+3)=sigfig(xss(esz+nes-1),7,0)
+               xss(next+4)=1
                xss(next+5)=1
                next=next+2+2*2
                xss(last+2)=next-dlwh+1
-               xss(next)=0     ! q is zero for mt102
-               xss(next+1)=awi/(awr+awi)
+               amass=awr/awi
+               aprime=awp/awi
+               xss(next)=sigfig((1+amass)*(-q)/amass,7,0)
+               xss(next+1)=&
+                 sigfig(amass*(amass+1-aprime)/(1+amass)**2,7,0)
                next=next+2
                ! add in contribution to heating
                naa=nint(xss(hpd+1))
@@ -10104,6 +10354,10 @@ contains
                xss(last+1)=33
                xss(next)=0
                xss(next+1)=2
+               xss(next+2)=sigfig(xss(esz+it-1),7,0)
+               xss(next+3)=sigfig(xss(esz+nes-1),7,0)
+               xss(next+4)=1
+               xss(next+5)=1
                next=next+2+2*2
                xss(last+2)=next-dlwh+1
                amass=awr/awi
@@ -10148,8 +10402,6 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
-                  if (ll.gt.nwscr) call error('acelcp',&
-                      'exceeded scratch storage',' ')
 
                   !--if not the desired particle, skip the subsection
                   if (ik.ne.lprod(j).or.law.ne.1) then
@@ -10169,8 +10421,6 @@ contains
                            call moreio(nin,0,0,scr(ll),nb,nw)
                            ll=ll+nw
                         enddo
-                        if (ll.gt.nwscr) call error('acelcp',&
-                            'exceeded scratch storage',' ')
                         na=nint(scr(lld+3))
                         if (na.gt.0) isocp=0
                      enddo
@@ -10196,8 +10446,6 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
-                  if (ll.gt.nwscr) call error('acelcp',&
-                      'exceeded scratch storage',' ')
 
                   !--if not the desired particle, skip the subsection
                   if (izap.ne.ip) then
@@ -10209,13 +10457,17 @@ contains
                      xss(next)=0
                      xss(next+1)=2
                      xss(next+2)=sigfig(xss(esz+it-1),7,0)
-                     xss(next+3)=1
-                     xss(next+4)=sigfig(xss(esz+nes-1),7,0)
+                     xss(next+3)=sigfig(xss(esz+nes-1),7,0)
+                     xss(next+4)=1
                      xss(next+5)=1
                      next=next+2+2*2
                      xss(last+2)=next-dlwh+1
-                     xss(next)=0
-                     xss(next+1)=awi/(awr+awi)
+                     amass=awr/awi
+                     aprime=awp/awi
+                     xss(next)=sigfig((1+amass)*(-q)/amass,7,0)
+                     xss(next+1)=&
+                       sigfig(amass*(amass+1-aprime)/(1+amass)**2,7,0)
+
                      next=next+2
                      ! add in contribution to heating
                      naa=nint(xss(hpd+1))
@@ -10276,8 +10528,6 @@ contains
                            call moreio(nin,0,0,scr(ll),nb,nw)
                            ll=ll+nw
                         enddo
-                        if (ll.gt.nwscr) call error('acelcp',&
-                            'exceeded scratch storage',' ')
                         if (ie.eq.1) then
                            xss(lee+2)=sigfig(scr(lld+1)/emev,7,0)
                            xss(lee+4)=1
@@ -10368,7 +10618,7 @@ contains
                                  else
                                     intmu=lang-10
                                     nmu=na/2
-                                    llx=lld+6
+                                    llx=lld+6+ncyc*(ig-1)
                                  endif
                                  xss(next+1+3*ng+ig)=nexcd-dlwh+1
                                  xss(nexcd)=intmu
@@ -10425,7 +10675,8 @@ contains
                                  avll=avl
                               endif
                            enddo
-                           renorm=1/xss(next+1+3*ng)
+                           renorm=1.0
+                           if (xss(next+1+3*ng).ne.zero) renorm=1/xss(next+1+3*ng)
                            do ig=1,ng
                               xss(next+1+ng+ig)=&
                                 sigfig(renorm*xss(next+1+ng+ig),7,0)
@@ -10491,6 +10742,10 @@ contains
                      if (law.eq.3) xss(landh+jp-1)=0
                      xss(next)=0
                      xss(next+1)=2
+                     xss(next+2)=sigfig(xss(esz+it-1),7,0)
+                     xss(next+3)=sigfig(xss(esz+nes-1),7,0)
+                     xss(next+4)=1
+                     xss(next+5)=1
                      next=next+2+2*2
                      xss(last+2)=next-dlwh+1
                      amass=awr/awi
@@ -10521,8 +10776,11 @@ contains
                      apsx=scr(ll)
                      npsx=nint(scr(ll+5))
                      xss(next)=0
-                     lee=next
                      xss(next+1)=2
+                     xss(next+2)=sigfig(xss(esz+it-1),7,0)
+                     xss(next+3)=sigfig(xss(esz+nes-1),7,0)
+                     xss(next+4)=1
+                     xss(next+5)=1
                      next=next+2+2*2
                      xss(last+2)=next-dlwh+1
                      xss(next)=npsx
@@ -10538,6 +10796,7 @@ contains
                      test3=one-one/100000
                      do while (xx.lt.test1)
                         n=n+1
+                        if (xx.gt.test3) xx=1
                         if (xx.lt.test2) then
                             xx=xx*step1
                         else
@@ -10660,15 +10919,17 @@ contains
                   else if (law.eq.7) then
                      xss(last+1)=67
                      call tab2io(nin,0,0,scr(ll),nb,nw)
-                     lep=nint(scr(ll+3))
                      ne=nint(scr(ll+5))
+                     xss(next)=0
+                     lee=next
+                     xss(next+1)=2
+                     next=next+2+2*2
                      xss(last+2)=next-dlwh+1
                      xss(next)=0
                      xss(next+1)=ne
-                     lee=next+2
-                     next=lee+2*ne
+                     lle=next+2
+                     next=lle+2*ne
                      llht=ll
-                     llad=llht+8+2*ne
                      scr(llht)=0
                      scr(llht+1)=0
                      scr(llht+2)=0
@@ -10677,23 +10938,37 @@ contains
                      scr(llht+5)=ne
                      scr(llht+6)=ne
                      scr(llht+7)=2
+                     llad=llht+8+2*ne
                      nrr=1
                      npp=2
                      do ie=1,ne
                         ll=llad
-                           call tab1io(nin,0,0,scr(ll),nb,nw)
-                        intmu=l1h
+                        call tab1io(nin,0,0,scr(ll),nb,nw)
+                        ll=ll+nw
+                        do while (nb.ne.0)
+                           call moreio(nin,0,0,scr(ll),nb,nw)
+                           ll=ll+nw
+                        enddo
+                        lld=ll
+                        intmu=nint(scr(llad+7))
+                        intmu=min(mod(intmu,10),2)
                         nmu=l2h
                         e=c2h
                         ee=c2h/emev
-                        xss(lee+ie-1)=sigfig(ee,7,0)
-                        xss(lee+ne+ie-1)=next-dlwh+1
+                        if (ie.eq.1) then
+                          xss(lee+2)=sigfig(ee,7,0)
+                          xss(lee+4)=1
+                        elseif (ie.eq.ne) then
+                          xss(lee+3)=sigfig(ee,7,0)
+                          xss(lee+5)=1
+                        endif
+                        xss(lle+ie-1)=sigfig(ee,7,0)
+                        xss(lle+ne+ie-1)=next-dlwh+1
                         xss(next)=intmu
                         xss(next+1)=nmu
                         next=next+2
                         mus=next
                         next=next+2*nmu
-                        lld=llad+nw
                         nra=1
                         npa=2
                         ebar=0
@@ -10701,15 +10976,15 @@ contains
                         do imu=1,nmu
                            ll=lld
                            call tab1io(nin,0,0,scr(ll),nb,nw)
+                           llx=max(2*n1h+6,8)
                            npep=n2h
                            intep=nint(scr(ll+7))
+                           intep=min(mod(intep,10),2)
                            ll=ll+nw
                            do while (nb.ne.0)
                               call moreio(nin,0,0,scr(ll),nb,nw)
                               ll=ll+nw
                            enddo
-                           if (ll.gt.nwscr) call error('acelcp',&
-                               'exceeded scratch storage',' ')
                            xss(mus+imu-1)=c2h
                            amuu=c2h
                            xss(mus+nmu+imu-1)=next-dlwh+1
@@ -10721,51 +10996,50 @@ contains
                            chk=0
                            do ki=1,npep
                               xss(next+ki)=&
-                                sigfig(scr(lld+8+2*(ki-1))/emev,7,0)
+                                sigfig(scr(lld+llx+2*(ki-1))/emev,7,0)
                               xss(next+npep+ki)=&
-                                sigfig(scr(lld+9+2*(ki-1))*emev,7,0)
+                                sigfig(scr(lld+1+llx+2*(ki-1))*emev,7,0)
                               if (ki.ne.1) then
                                  if (intep.eq.1) then
                                     xss(next+2*npep+ki)=&
                                       xss(next+2*npep+ki-1)&
-                                      +scr(lld+9+2*(ki-2))&
-                                      *(scr(lld+8+2*(ki-1))&
-                                      -scr(lld+8+2*(ki-2)))
+                                      +scr(lld+1+llx+2*(ki-2))&
+                                      *(scr(lld+llx+2*(ki-1))&
+                                      -scr(lld+llx+2*(ki-2)))
                                     eav=eav&
-                                      +scr(lld+9+2*(ki-2))&
-                                      *(scr(lld+8+2*(ki-1))&
-                                      -scr(lld+8+2*(ki-2)))&
-                                      *(scr(lld+8+2*(ki-1))&
-                                      +scr(lld+8+2*(ki-2)))/2
+                                      +scr(lld+1+llx+2*(ki-2))&
+                                      *(scr(lld+llx+2*(ki-1))&
+                                      -scr(lld+llx+2*(ki-2)))&
+                                      *(scr(lld+llx+2*(ki-1))&
+                                      +scr(lld+llx+2*(ki-2)))/2
                                     chk=chk&
-                                      +scr(lld+9+2*(ki-2))&
-                                      *(scr(lld+8+2*(ki-1))&
-                                      -scr(lld+8+2*(ki-2)))
+                                      +scr(lld+1+llx+2*(ki-2))&
+                                      *(scr(lld+llx+2*(ki-1))&
+                                      -scr(lld+llx+2*(ki-2)))
                                  else if (intep.eq.2) then
                                     xss(next+2*npep+ki)=&
                                       xss(next+2*npep+ki-1)&
-                                      +(scr(lld+9+2*(ki-2))&
-                                      +scr(lld+9+2*(ki-1)))&
-                                      *(scr(lld+8+2*(ki-1))&
-                                      -scr(lld+8+2*(ki-2)))/2
+                                      +(scr(lld+1+llx+2*(ki-2))&
+                                      +scr(lld+1+llx+2*(ki-1)))&
+                                      *(scr(lld+llx+2*(ki-1))&
+                                      -scr(lld+llx+2*(ki-2)))/2
                                     eav=eav&
-                                      +(scr(lld+9+2*(ki-2))&
-                                      *scr(lld+8+2*(ki-2))&
-                                      +scr(lld+9+2*(ki-1))&
-                                      *scr(lld+8+2*(ki-1)))&
-                                      *(scr(lld+8+2*(ki-1))&
-                                      -scr(lld+8+2*(ki-2)))/2
+                                      +(scr(lld+1+llx+2*(ki-2))&
+                                      *scr(lld+llx+2*(ki-2))&
+                                      +scr(lld+1+llx+2*(ki-1))&
+                                      *scr(lld+llx+2*(ki-1)))&
+                                      *(scr(lld+llx+2*(ki-1))&
+                                      -scr(lld+llx+2*(ki-2)))/2
                                     chk=chk&
-                                      +(scr(lld+9+2*(ki-2))&
-                                      +scr(lld+9+2*(ki-1)))&
-                                      *(scr(lld+8+2*(ki-1))&
-                                      -scr(lld+8+2*(ki-2)))/2
+                                      +(scr(lld+1+llx+2*(ki-2))&
+                                      +scr(lld+1+llx+2*(ki-1)))&
+                                      *(scr(lld+llx+2*(ki-1))&
+                                      -scr(lld+llx+2*(ki-2)))/2
                                  endif
                               endif
                            enddo
-                           renorm=1
-                           if (xss(next+3*npep).ne.zero)&
-                             renorm=1/xss(next+3*npep)
+                           renorm=1.0
+                           if (xss(next+3*npep).ne.zero) renorm=1/xss(next+3*npep)
                            do ki=1,npep
                               xss(next+npep+ki)=&
                                 sigfig(renorm*xss(next+npep+ki),7,0)
@@ -10778,8 +11052,13 @@ contains
                            eav=ad*eav
                            chk=ad*chk
                            if (imu.gt.1) then
-                              ebar=ebar+(amuu-amulst)*(eav+eavlst)/2
-                              chek=chek+(amuu-amulst)*(chk+chklst)/2
+                             if (intmu.eq.1) then
+                               ebar=ebar+(amuu-amulst)*eavlst
+                               chek=chek+(amuu-amulst)*chklst
+                             else
+                               ebar=ebar+(amuu-amulst)*(eav+eavlst)/2
+                               chek=chek+(amuu-amulst)*(chk+chklst)/2
+                             endif
                            endif
                            eavlst=eav
                            amulst=amuu
@@ -10816,7 +11095,7 @@ contains
             xss(hpd+2+naa+ie-it)=xss(hpd+2+naa+ie-it)&
               /xss(esz+nes+ie-1)
          endif
-         if (xss(hpd+2+naa+ie-it).lt.delt) xss(hpd+2+naa+ie-it)=0
+         if (xss(hpd+2+naa+ie-it).lt.small) xss(hpd+2+naa+ie-it)=0
          if (ip.eq.1) xss(hpd+2+naa+ie-it)=0
          if (izai.gt.1) then
             xss(esz+4*nes+ie-1)=xss(esz+4*nes+ie-1)&
@@ -10825,7 +11104,6 @@ contains
          xss(hpd+2+naa+ie-it)=sigfig(xss(hpd+2+naa+ie-it),7,0)
          xss(esz+4*nes+ie-1)=sigfig(xss(esz+4*nes+ie-1),7,0)
       enddo
-
       !--fill in the yh block
       yh=next
       xss(ploct+10*(itype-1)+9)=yh
@@ -10877,8 +11155,6 @@ contains
                call moreio(nin,0,0,scr(ll),nb,nw)
                ll=ll+nw
             enddo
-            if (ll.gt.nwscr) call error('acelcp',&
-                'exceeded scratch storage',' ')
 
             !--compute the heating from this recoil nuclide
             if (izap.gt.2004) then
@@ -10908,8 +11184,6 @@ contains
                         call moreio(nin,0,0,scr(ll),nb,nw)
                         ll=ll+nw
                      enddo
-                     if (ll.gt.nwscr) call error('acelcp',&
-                         'exceeded scratch storage',' ')
                      e=c2h
                      if (law.ne.2) then
                         heat=0
@@ -10940,7 +11214,7 @@ contains
                   nrr=1
                   npp=2
                   do ie=iaa,nes
-                  e=xss(esz+ie-1)*emev
+                     e=xss(esz+ie-1)*emev
                      if (law.eq.1) then
                         call terpa(h,e,en,idis,scr(llh),npp,nrr)
                      else
@@ -10980,11 +11254,7 @@ contains
                      call moreio(nin,0,0,scr(ll),nb,nw)
                      ll=ll+nw
                   enddo
-                  if (ll.gt.nwscr) call error('acelcp',&
-                      'exceeded scratch storage',' ')
                   call tab2io(nin,0,0,scr(ll),nb,nw)
-                  if (ll+nw.gt.nwscr) call error('acelcp',&
-                      'exceeded scratch storage',' ')
                   ne=nint(scr(ll+5))
                   th=(1+amass)*q/amass
                   r1=amass*(amass+1-aprime)/aprime
@@ -12215,7 +12485,7 @@ contains
    enddo
 
    !--print energy-dependent photon production yields
-   kl=0   
+   kl=0
    if (nindx.ne.0) then
       if (ipy.gt.0) write(nsyso,'(''1''/&
         &'' photon production yields''/&
@@ -12910,7 +13180,8 @@ contains
    !-------------------------------------------------------------------
    ! Write ACE data out in desired format.
    !-------------------------------------------------------------------
-   use util ! provides openz,closz,error
+   use util  ! provides openz,closz,error
+   use acecm ! provides write routines
    ! externals
    integer::itype,nace,ndir,mcnpx
    character(70)::hk
@@ -13008,101 +13279,6 @@ contains
    return
    end subroutine aceout
 
-   subroutine advance_to_locator(nout,l,locator)
-   !-------------------------------------------------------------------
-   ! Advance to the next locator position from the current position l.
-   ! If the current position is not equal to the locator position, the
-   ! function will advance l until it is equal to the locator position.
-   ! It will write the values in the xss array while advancing to the
-   ! new position.
-   !-------------------------------------------------------------------
-   use util
-   ! externals
-   integer::nout,l,locator
-   ! internals
-   character(66)::text
-
-   if (l.lt.locator) then
-      write(text,'(''expected xss index ('',i6,'') greater than '',&
-                   &''current index ('',i6,'')'')') locator, l
-      call mess('change',text,'xss array was padded accordingly')
-      do while (l.lt.locator)
-         call typen(l,nout,1)
-         l=l+1
-      enddo
-   else if (l.gt.locator) then
-      write(text,'(''expected xss index ('',i6,'') less than '',&
-                   &''current index ('',i6,'')'')') locator, l
-      call error('change',text,'this may be a serious problem')
-   endif
-
-   return
-   end subroutine advance_to_locator
-
-   subroutine write_integer(nout,l)
-   !-------------------------------------------------------------------
-   ! Write an integer value at the position l, and advance l to the
-   ! next position
-   !-------------------------------------------------------------------
-   ! externals
-   integer::nout,l
-
-   call typen(l,nout,1)
-   l=l+1
-
-   return
-   end subroutine write_integer
-
-   subroutine write_real(nout,l)
-   !-------------------------------------------------------------------
-   ! Write a real value at the position l, and advance l to the
-   ! next position
-   !-------------------------------------------------------------------
-   ! externals
-   integer::nout,l
-
-   call typen(l,nout,2)
-   l=l+1
-
-   return
-   end subroutine write_real
-
-   subroutine write_integer_list(nout,l,n)
-   !-------------------------------------------------------------------
-   ! Write n integer values from position l, and advance l to the
-   ! next position
-   !-------------------------------------------------------------------
-   ! externals
-   integer::nout,l,n
-   ! internals
-   integer::i
-
-   do i=1,n
-      call typen(l,nout,1)
-      l=l+1
-   enddo
-
-   return
-   end subroutine write_integer_list
-
-   subroutine write_real_list(nout,l,n)
-   !-------------------------------------------------------------------
-   ! Write n real values from position l, and advance l to the
-   ! next position
-   !-------------------------------------------------------------------
-   ! externals
-   integer::nout,l,n
-   ! internals
-   integer::i
-
-   do i=1,n
-      call typen(l,nout,2)
-      l=l+1
-   enddo
-
-   return
-   end subroutine write_real_list
-
    subroutine change(nout)
    !-------------------------------------------------------------------
    ! Change ACE data fields from integer to real or vice versa.
@@ -13113,7 +13289,8 @@ contains
    ! If nout.eq.1, integer fields are changed to real in memory
    !    (fields are assumed to contain mixed reals and integers).
    !-------------------------------------------------------------------
-   use util ! provides error
+   use util  ! provides openz,closz,error
+   use acecm ! provides write routines
    ! externals
    integer::nout
    ! internals
@@ -13131,6 +13308,7 @@ contains
    l=1
 
    !--write esz block
+   call advance_to_locator(nout,l,esz)
    call write_real_list(nout,l,5*nes)
 
    !--write nu block
@@ -13573,7 +13751,6 @@ contains
       call advance_to_locator(nout,l,sigp)
       do i=1,ntrp
          call advance_to_locator(nout,l,sigp+nint(xss(rlocator))-1) ! sigp=jxs(15)
-
          mftype=nint(xss(l))
          call write_integer(nout,l)              ! MFTYPE
          if (mftype.ne.12.and.mftype.ne.16) then ! MF=13
@@ -13631,7 +13808,6 @@ contains
       !--dlwp block
       call advance_to_locator(nout,l,dlwp)
       do i=1,ntrp
-
          !--loop over laws
          call advance_to_locator(nout,l,dlwp+nint(xss(rlocator))-1) ! dlwp=jxs(19)
          lnw=1
@@ -13670,8 +13846,7 @@ contains
                call write_real(nout,l)               ! EG
 
             !--law 4 and law 44
-            ! this piece is NOT compatible with LAW=44 (need two additional
-            ! arrays for r and a), potential issue?
+            ! LAW=44 need two additional arrays for r and a
             else if (law.eq.4.or.law.eq.44) then
                nrr=nint(xss(l))
                call write_integer(nout,l)               ! NR
@@ -13689,6 +13864,9 @@ contains
                   np=nint(xss(l))
                   call write_integer(nout,l)         ! NP
                   call write_real_list(nout,l,3*np)  ! Eout, PDF, CDF (each NP values)
+                  if (law.eq.44) then
+                    call write_real_list(nout,l,2*np) ! r and a arrays for law44 (each NP values)
+                  endif
                   ielocator=ielocator+1
                enddo
             else
@@ -13724,7 +13902,6 @@ contains
 
       !--loop over particle types
       do i=1,ntype
-
          ! IXS array entries
          hpd=nint(xss(plocator))
          mtrh=nint(xss(plocator+1))
@@ -13736,6 +13913,7 @@ contains
          ldlwh=nint(xss(plocator+7))
          dlwh=nint(xss(plocator+8))
          yh=nint(xss(plocator+9))
+         ntrh=nint(xss(ntro+i-1)) ! number of reactions for this particle type
 
          !--hpd block
          call advance_to_locator(nout,l,hpd)
@@ -13744,8 +13922,6 @@ contains
          call write_integer(nout,l)              ! NE
          if (ne.ne.0) then
             call write_real_list(nout,l,2*ne)    ! sigma, H (each NE values)
-
-            ntrh=nint(xss(ntro+i-1)) ! number of reactions for this particle type
 
             !--mtrh block
             call advance_to_locator(nout,l,mtrh)
@@ -13764,7 +13940,6 @@ contains
             call advance_to_locator(nout,l,sigh)
             do j=1,ntrh
                call advance_to_locator(nout,l,sigh+nint(xss(rlocator))-1)
-
                call write_integer(nout,l)           ! MFTYPE=12 only
                call write_integer(nout,l)           ! MTMULT
                nrr=nint(xss(l))
@@ -13952,6 +14127,8 @@ contains
                         enddo
                         ielocator=ielocator+1
                      enddo
+
+                   ! unknown law
                    else
                       write(text,'(''Undefined law for dlwh block: '',i3)') law
                       call error('change',text,' ')
@@ -13974,39 +14151,13 @@ contains
    return
    end subroutine change
 
-   subroutine typen(l,nout,iflag)
-   !-------------------------------------------------------------------
-   ! Write an integer or a real number to a Type-1 ACE file,
-   ! or (if nout=0) convert real to integer for type-3 output,
-   ! or (if nout=1) convert integer to real for type-3 input.
-   ! Use iflag.eq.1 to write an integer (i20).
-   ! Use iflag.eq.2 to write a real number (1pe20.11).
-   ! Use iflag.eq.3 to write partial line at end of file.
-   !-------------------------------------------------------------------
-   ! externals
-   integer::l,nout,iflag
-   ! internals
-   integer::i,j
-   character(20)::hl(4)
-   save hl,i
-
-   if (iflag.eq.3.and.nout.gt.1.and.i.lt.4) then
-      write(nout,'(4a20)') (hl(j),j=1,i)
-   else
-      i=mod(l-1,4)+1
-      if (iflag.eq.1) write(hl(i),'(i20)') nint(xss(l))
-      if (iflag.eq.2) write(hl(i),'(1p,e20.11)') xss(l)
-      if (i.eq.4) write(nout,'(4a20)') (hl(j),j=1,i)
-   endif
-   return
-   end subroutine typen
-
    subroutine acefix(nin,itype,nout,ndir,iprint,nplot,suff,&
      nxtra,hk,izn,awn,mcnpx)
    !-------------------------------------------------------------------
    ! Print or edit ACE files.
    !-------------------------------------------------------------------
-   use util ! provides openz,closz,error
+   use util  ! provides openz,closz
+   use acecm ! provides write routines
    ! externals
    integer::nin,itype,nout,ndir,iprint,nplot,nxtra,mcnpx
    real(kr)::suff
@@ -14276,7 +14427,8 @@ contains
    real(kr),parameter::oneup=1.0001e0_kr
    real(kr),parameter::oplus=1.000001e0_kr
    real(kr),parameter::zero=0
-   real(kr),parameter::one=1
+   real(kr),parameter::one=1.0e0_kr
+   real(kr),parameter::eps=1.0e-11_kr
    character(120)::text
 
    write(nsyso,'(/'' ace consistency checks''/&
@@ -14306,10 +14458,21 @@ contains
    do i=1,nes
       e=xss(esz-1+i)
       if (e.le.elast) then
-         write(nsyso,'(''   consis: energy'',1p,e16.8,&
-           &'' less than'',e16.8,'' (see point no.'',i7,'')'')')&
-           e,elast,i
-         nerr=nerr+1
+        if (e.lt.elast) then
+           write(nsyso,'(''   consis: energy '',1p,e18.11,&
+             &'' less than '',e18.11,'' (see point no.'',i7,'')'')')&
+             & e,elast,i
+        elseif (e.eq.elast) then
+           write(nsyso,'(''   consis: energy '',1p,e18.11,&
+             &'' equal to '',e18.11,'' (see point no.'',i7,'')'')')&
+             & e,elast,i
+           if (e*(1.0d0+eps).lt.xss(esz+i)) then
+              e=e*(1.0d0+eps)
+              xss(esz-1+i)=e
+              write(nsyso,'(10x,'' energy set to '',1p,e18.11)')e
+           endif
+        endif
+        nerr=nerr+1
       endif
       elast=e
    enddo
@@ -14449,7 +14612,14 @@ contains
          mt=iabs(nint(xss(mtr+n-1)))
          call mtname(mt,name,izai)
          ll=len_trim(name)
-         aprime=1
+         ! In my opinion aprime should be equal to awp*awi to be
+         ! consistent with the LAB -> CM conversion formalism.
+         ! This parameter is used for checking and correcting energy
+         ! distributions represented by law=4 or law=44
+         ! Furthermore, for these reactions awp=awi, so aprime=awi*awi.
+         ! It is only equal to 1 for incident neutrons.
+         ! D. Lopez Aldama, August 2023
+         aprime=awi*awi
          q=xss(lqr+n-1)
          nlaw=1
          l=nint(xss(ldlw+n-1)+dlw-1)
@@ -14505,10 +14675,12 @@ contains
                   e=xss(ie+l)
                   loci=nint(xss(ie+ne+l)+dlw-1)
                   intt=nint(xss(loci))
+                  intt=mod(intt,10)
                   if (intt.ne.1.and.intt.ne.2) then
                      write(nsyso,'(''   consis:'',&
                        &'' illegal interpolation--'',&
                        &''only int=1 and 2 are allowed'')')
+                     xss(loci)=2
                      nerr=nerr+1
                   endif
                   nn=nint(xss(loci+1))
@@ -14525,11 +14697,11 @@ contains
                      c=xss(j+2*nn+loci)
                      if (ep.gt.epmax.and.q.lt.zero) then
                         write(text,'(''   consis:'',&
-                                    &'' ep.gt.epmax'',1p,e13.6,&
-                                    &'' with q.lt.0 for '',a,&
+                                    &'' ep > epmax'',1p,e13.6,&
+                                    &'' with q<0 for '',a,&
                                     &'' mt'',1p,i0,&
-                                    &'' law '',1p,i0,&
-                                    &'' at e'',e13.6,'' -> eprime'',e13.6)')&
+                                    &'' law'',1p,i0,&
+                                    &'' at e'',e13.6,'' -> ep '',e13.6)')&
                                     epmax,name(1:ll),mt,law,e,ep
                         write(nsyso,'(a)') text
                         n2big=n2big+1
@@ -14608,10 +14780,12 @@ contains
                   e=xss(ie+l)
                   loci=nint(xss(ie+ne+l)+dlw-1)
                   intt=nint(xss(loci))
+                  intt=mod(intt,10)
                   if (intt.ne.1.and.intt.ne.2) then
                      write(nsyso,'(''   consis:'',&
                        &'' illegal interpolation--'',&
                        &''only int=1 and 2 are allowed'')')
+                     xss(loci)=2
                      nerr=nerr+1
                   endif
                   nn=nint(xss(loci+1))
@@ -14627,29 +14801,29 @@ contains
                      ep=xss(j+loci)
                      c=xss(j+2*nn+loci)
                      r=xss(j+3*nn+loci)
-                     if (ep.gt.epmax) then
+                     if (ep.gt.epmax.and.q.lt.zero) then
                         write(text,'(''   consis:'',&
-                                    &'' ep.gt.epmax'',1p,e13.6,&
-                                    &'' with q.lt.0 for '',a,&
+                                    &'' ep > epmax '',1p,e13.6,&
+                                    &'' with q<0 for '',a,&
                                     &'' mt'',1p,i0,&
-                                    &'' law '',1p,i0,&
-                                    &'' at e'',e13.6,'' -> eprime'',e13.6)')&
+                                    &'' law'',1p,i0,&
+                                    &'' at e'',e13.6,'' -> ep'',e13.6)')&
                                     epmax,name(1:ll),mt,law,e,ep
-                        if (mt.ne.5.and.q.lt.0) then
+                        if (mt.ne.5) then
                            write(nsyso,'(a)') text
                            n2big=n2big+1
                            nerr=nerr+1
                         else if (mt.eq.5.and.aw0.lt.180.) then
                            write(nsyso,'(a)') text
                            write(nsyso,'(''   consis:'',&
-                             &''   awr.lt.180'',&
+                             &''   awr < 180'',&
                              &''---this is probably an error.'')')
                            n2big=n2big+1
                            nerr=nerr+1
                         else if (mt.eq.5.and.aw0.ge.180.) then
                            write(nsyso,'(a)') text
                            write(nsyso,&
-                             &'(''   consis: awr.ge.180---'',&
+                             &'(''   consis: awr > 179---'',&
                              &''there could be a legitimate'',&
                              &'' positive-q channel'',&
                              &'' or admixed fission.'')')
@@ -14659,14 +14833,14 @@ contains
                      if (c.lt.zero.or.c.gt.oplus) then
                         write(nsyso,'(''   consis:'',&
                           &'' bad cumm. prob. for '',a,&
-                          &''at'',1p,e14.6,'' ->'',e13.6)')&
+                          &''at'',1p,e14.6,'' -> '',e13.6)')&
                           name(1:ll),e,ep
                         nerr=nerr+1
                      endif
                      if (c.lt.clast) then
                         write(nsyso,'(''   consis:'',&
                           &'' decreasing cumm. prob for '',a,&
-                          &'' at '',1p,e14.6,'' ->'',e13.6)')&
+                          &'' at '',1p,e14.6,'' -> '',e13.6)')&
                           name(1:ll),e,ep
                         nerr=nerr+1
                      endif
@@ -14674,7 +14848,7 @@ contains
                      if (r.lt.zero.or.r.gt.oneup) then
                         write(nsyso,'(''   consis:'',&
                           &'' bad kalbach r for '',a,&
-                          &''at'',1p,e14.6,'' ->'',e13.6)')&
+                          &''at'',1p,e14.6,'' -> '',e13.6)')&
                           name(1:ll),e,ep
                         nerr=nerr+1
                      endif
@@ -14747,14 +14921,14 @@ contains
                      if (c.lt.zero.or.c.gt.oplus) then
                         write(nsyso,'(''   consis:'',&
                           &'' bad cumm. prob. for '',a,&
-                          &'' at'',1p,e14.6,'' ->'',e13.6)')&
+                          &'' at'',1p,e14.6,'' -> '',e13.6)')&
                           name(1:ll),e,ep
                         nerr=nerr+1
                      endif
                      if (c.lt.clast) then
                         write(nsyso,'(''   consis:'',&
                           &'' decreasing cumm. prob for '',a,&
-                          &'' at '',1p,e14.6,'' ->'',e13.6)')&
+                          &'' at '',1p,e14.6,'' -> '',e13.6)')&
                           name(1:ll),e,ep
                         nerr=nerr+1
                      endif
@@ -14766,22 +14940,109 @@ contains
                         co=xss(locj+1+k)
                         cc=xss(locj+1+2*nmu+k)
                         if (cc.lt.zero.or.cc.gt.oplus) then
-                           write(nsyso,'('' consis:'',&
+                           write(nsyso,'(''   consis:'',&
                              &'' bad angular cumm. prob. for '',a,&
-                             &''at'',1p,e14.6,'' ->'',e13.6,e14.6)')&
-                             name(1:ll),e,ep,co
+                             &''at'',1p,e14.6,'' -> '',e13.6,'' mu='',&
+                             & 0p,f9.6)')name(1:ll),e,ep,co
                            nerr=nerr+1
                         endif
                         if (cc.lt.cclast) then
                            write(nsyso,'(''   consis:'',&
                              &'' decreasing angular'',&
                              &'' cumm. prob for '',a,&
-                             &'' at '',1p,e14.6,'' ->'',e13.6,e14.6)')&
-                             name(1:ll),e,ep,co
+                             &'' at '',1p,e14.6,'' -> '',e13.6,'' mu='',&
+                             & 0p,f9.6)')name(1:ll),e,ep,co
                            nerr=nerr+1
                         endif
                         cclast=cc
                      enddo
+                  enddo
+               enddo
+
+            !--law67
+            else if (law.eq.67) then
+               if (icm.eq.1) then
+                 write(nsyso,'(''   consis:'',&
+                   &'' Bad reference system (CM) for law67'')')
+                 write(nsyso,'(''   consis:'',&
+                   &'' Forced to laboratory reference system (LAB)'',&
+                   &'' without corrections'')')
+                 xss(tyr+n-1)=-xss(tyr+n-1)
+                 icm=0
+               endif
+               j=nint(xss(l))
+               if (j.ne.0) then
+                  l=l+2*j
+               endif
+               l=l+1
+               ne=nint(xss(l))
+               do ie=1,ne
+                  e=xss(ie+l)
+                  loci=nint(xss(ie+ne+l))+dlw-1
+                  intt=nint(xss(loci))
+                  if (intt.ne.1.and.intt.ne.2) then
+                    write(nsyso,'(''   consis:'',&
+                      & '' bad interpolation law intmu='',i3,'' at e'',&
+                      & 1p,e13.6,'' correction applied'')')intt,e
+                    nerr=nerr+1
+                    intt=mod(intt,10)
+                    if (intt.gt.2) intt=2
+                    xss(loci)=intt
+                    write(nsyso,'(''   consis:'',&
+                      &'' new interpolation law intmu='',i3)')intt
+                  endif
+                  loci=loci+1
+                  nmu=nint(xss(loci))
+                  do k=1,nmu
+                    co=xss(loci+k)
+                    locj=nint(xss(loci+nmu+k))+dlw-1
+                    intt=nint(xss(locj))
+                    if (intt.ne.1.and.intt.ne.2) then
+                      write(nsyso,'(''   consis:'',&
+                        &'' bad interpolation law intep='',i3,&
+                        &'' at e'',1p,e13.6,'' mu='',0p,f9.6,&
+                        &'' correction applied'')')intt,e,co
+                      nerr=nerr+1
+                      intt=mod(intt,10)
+                      if (intt.gt.2) intt=2
+                      xss(locj)=intt
+                      write(nsyso,'(''   consis:'',&
+                        &'' new interpolation law intep='',i3)')intt
+                    endif
+                    locj=locj+1
+                    nn=nint(xss(locj))
+                    clast=0.
+                    do j=1,nn
+                      ep=xss(locj+j)
+                      p=xss(locj+nn+j)
+                      c=xss(locj+2*nn+j)
+                      if (p.lt.zero) then
+                        write(nsyso,'('' consis:'',&
+                          &'' negative pdf='',1p,e13.6,'' for mt'',&
+                          & 1p,i0,'' law'',1p,i0,'' mu='',&
+                          & 0p,f9.6,'' at e='',1p,e13.6,&
+                          & '' ep='',e13.6)')p,mt,law,co,e,ep
+                        nerr=nerr+1
+                      endif
+                      if (c.lt.zero.or.c.gt.oplus) then
+                        write(nsyso,'(''   consis:'',&
+                          &'' bad cumm. prob.='',1p,e13.6,&
+                          &'' for mt'',1p,i0,'' law'',1p,i0,&
+                          &'' mu='',0p,f9.6,&
+                          &'' at e'',1p,e13.6,'' ep'',e13.6)')&
+                          c,mt,law,co,e,ep
+                        nerr=nerr+1
+                      endif
+                      if (c.lt.clast) then
+                        write(nsyso,'(''   consis:'',&
+                          &'' decreasing cumm. prob '',1p,e13.6,&
+                          &'' for mt'',1p,i0,'' law'',1p,i0,&
+                          &'' mu='',0p,f9.6,'' at e'',1p,e13.6,&
+                          &'' ep'',e13.6)')c,mt,law,co,e,ep
+                        nerr=nerr+1
+                      endif
+                      c=clast
+                    enddo
                   enddo
                enddo
             endif
@@ -14851,42 +15112,6 @@ contains
            endif
          enddo
          nerr=nerr+nerrtb+nerrxt+nerrxe+nerrxf+nerrxg+nerrxh
-         if (nerrxh.gt.0.and.lurf.eq.1) then
-           write(nsyso,'('' consis: ***** heating factors corrected by '',&
-           & ''setting to  1.000000E+00 *****'')')
-           do ib=1,nurb
-             xss(ll+5*nurb+ib)=1.0d0
-           enddo
-         elseif (nerrxh.gt.0.and.lurf.eq.0) then
-           c=xss(iurpt+5+ie)
-           do k=1,nes
-             e=xss(esz+k)
-             if (c.le.e) then
-               ib=k
-               exit
-             endif
-           enddo
-           if (c.lt.e) then
-             y=(c-xss(esz+ib-1))/(e-xss(esz+ib-1))* &
-              & (xss(esz+nes+ib)-xss(esz+nes+ib-1))+xss(esz+nes+ib-1)
-             x=(c-xss(esz+ib-1))/(e-xss(esz+ib-1))* &
-              & (xss(esz+4*nes+ib)-xss(esz+4*nes+ib-1))+xss(esz+4*nes+ib-1)
-           else
-             y=xss(esz+nes+ib)
-             x=xss(esz+4*nes+ib)
-           endif
-           if (y.ne.0.0d0) then
-             c=x/y
-           else
-             c=0.0d0
-           endif
-           write(nsyso,'('' consis: ***** heating values corrected by '',&
-           & ''setting to '',1pe14.6," *****")')c
-           do ib=1,nurb
-             xss(ll+5*nurb+ib)=c
-             if (xss(ll+5*nurb+ib).lt.0.0d0) xss(ll+5*nurb+ib)=0.0d0
-           enddo
-         endif
       enddo
    endif
 
@@ -14979,7 +15204,7 @@ contains
                     .or.(mtmult.eq.18.and.nint(xss(mtr+ii-1)).eq.21)&
                     .or.(mtmult.eq.18.and.nint(xss(mtr+ii-1)).eq.38)&
                     ) then
-                     k=nint(xss(lsig+ii-1)+sig-1)
+                     k=nint(xss(lsig+ii-1))+sig-1
                      iaa=nint(xss(k))
                      naa=nint(xss(k+1))
                      if (ie.ge.iaa.and.ie.lt.iaa+naa) then
@@ -15007,9 +15232,9 @@ contains
          gg=xss(gpd+ie-1)
          if (abs(gg-gsum).gt.gg/10000) then
             nerr=nerr+1
-            write(nsyso,'(''   consis: mismatch at'',&
-              &1p,e14.6,''  gpd='',e14.6,&
-              &''  sum='',e14.6)') e,gg,gsum
+            write(nsyso,'(''   consis: mismatch for mftype '',i3,&
+              &'' at'',1p,e14.6,''  gpd='',e14.6,&
+              &''  sum='',e14.6)') mftype,e,gg,gsum
          endif
       enddo
 
@@ -15047,7 +15272,7 @@ contains
                   if (c.lt.zero.or.c.gt.oplus) then
                      write(nsyso,'(''   consis:'',&
                        &'' bad cumm. prob. for '',a,&
-                       &''at'',1p,e14.6,'' ->'',e13.6)')&
+                       &'' at'',1p,e14.6,'' ->'',e13.6)')&
                        name(1:l),e,ep
                      nerr=nerr+1
                   endif
@@ -15236,6 +15461,93 @@ contains
                      enddo
                   enddo
                enddo
+
+            !--law=67
+            else if (law.eq.67) then
+               j=nint(xss(l3))
+               if (j.ne.0) then
+                  l3=l3+2*j
+               endif
+               l3=l3+1
+               ne=nint(xss(l3))
+               do ie=1,ne
+                  e=xss(ie+l3)
+                  loci=nint(xss(ie+ne+l3))+dlwh-1
+                  intt=nint(xss(loci))
+                  if (intt.ne.1.and.intt.ne.2) then
+                    write(nsyso,'('' consis:'',&
+                      & '' bad interpolation law intmu='',i3,'' at e'',&
+                      & 1p,e13.6,'' correction applied'')')intt,e
+                    nerr=nerr+1
+                    intt=mod(intt,10)
+                    if (intt.gt.2) intt=2
+                    xss(loci)=intt
+                    write(nsyso,'('' consis:'',&
+                      &'' new interpolation law intmu='',i3)')intt
+                  endif
+                  loci=loci+1
+                  nmu=nint(xss(loci))
+                  do k=1,nmu
+                    co=xss(loci+k)
+                    locj=nint(xss(loci+nmu+k))+dlwh-1
+                    intt=nint(xss(locj))
+                    if (intt.ne.1.and.intt.ne.2) then
+                      write(nsyso,'('' consis:'',&
+                        &'' bad interpolation law intep='',i3,&
+                        &'' at e'',1p,e13.6,'' mu='',0p,f9.6,&
+                        &'' correction applied'')')intt,e,co
+                      nerr=nerr+1
+                      intt=mod(intt,10)
+                      if (intt.gt.2) intt=2
+                      xss(locj)=intt
+                      write(nsyso,'('' consis:'',&
+                        &'' new interpolation law intep='',i3)')intt
+                    endif
+                    locj=locj+1
+                    nn=nint(xss(locj))
+                    clast=0.
+                    cclast=0.
+                    do j=1,nn
+                      ep=xss(locj+j)
+                      p=xss(locj+nn+j)
+                      c=xss(locj+2*nn+j)
+                      if (ep.lt.cclast) then
+                        write(nsyso,'('' consis:'',&
+                          & '' decreasing ep '',1p,e13.6,'' for mt'',&
+                          & 1p,i0,'' law'',1p,i0,'' mu='',0p,f9.6,&
+                          & '' at e'',1p,e13.6)')ep,mt,law,co,e
+                        nerr=nerr+1
+                      endif
+                      if (p.lt.zero) then
+                        write(nsyso,'('' consis:'',&
+                          & '' negative pdf='',1p,e13.6,'' for mt'',&
+                          & 1p,i0,'' law'',1p,i0,'' mu='',&
+                          & 0p,f9.6,'' at e'',1p,e13.6,&
+                          & '' ep'',e13.6)')p,mt,law,co,e,ep
+                        nerr=nerr+1
+                      endif
+                      if (c.lt.zero.or.c.gt.oplus) then
+                        write(nsyso,'(''   consis:'',&
+                          &'' bad cumm. prob.='',1p,e13.6,&
+                          &'' for mt'',1p,i0,'' law'',1p,i0,&
+                          &'' mu='',0p,f9.6,&
+                          &'' at e'',1p,e13.6,'' ep'',e13.6)')&
+                          c,mt,law,co,e,ep
+                        nerr=nerr+1
+                      endif
+                      if (c.lt.clast) then
+                        write(nsyso,'(''   consis:'',&
+                          &'' decreasing cumm. prob '',1p,e13.6,&
+                          &'' for mt'',1p,i0,'' law '',1p,i0,&
+                          &'' mu='',0p,f9.6,'' at e'',1p,e13.6,&
+                          &'' ep'',e13.6)')c,mt,law,co,e,ep
+                        nerr=nerr+1
+                      endif
+                      c=clast
+                      cclast=ep
+                    enddo
+                  enddo
+               enddo
             endif
          enddo
       enddo
@@ -15244,7 +15556,7 @@ contains
    if (nerr.eq.0) then
       write(nsyso,'(/'' no problems found'')')
    else
-      write(nsyso,'(/i5,'' problems found'')') nerr
+      write(nsyso,'(/i9,'' problems found'')') nerr
       call mess('consis','consistency problems found',' ')
    endif
 
@@ -15304,7 +15616,10 @@ contains
    real(kr)::e,tot,abso,elas,gprod,xtag,ytag,thin,abss
    real(kr)::e1,e2,fiss,cap,heat,dam,x,y,xlast
    real(kr)::xmin,xmax,ymin,ymax,xstep,ystep,test
-   real(kr)::ee(pltumx),s0(pltumx),s1(pltumx),s2(pltumx)
+   real(kr),dimension(:),allocatable::ee
+   real(kr),dimension(:),allocatable::s0
+   real(kr),dimension(:),allocatable::s1
+   real(kr),dimension(:),allocatable::s2
    real(kr)::f0,f1,f2,c1,c2,cl,dp,pp,pe,capt
    character(1)::qu=''''
    character(10)::name
@@ -15332,6 +15647,14 @@ contains
    iif=0
    iic=0
    mtl=0
+   allocate(ee(pltumx))
+   allocate(s0(pltumx))
+   allocate(s1(pltumx))
+   allocate(s2(pltumx))
+   ee=0
+   s0=0
+   s1=0
+   s2=0
 
    !--start the viewr input text
    call openz(nout,1)
@@ -16882,6 +17205,12 @@ contains
    !--plot particle production sections
    if (ntype.gt.0) call aploxp(nout,iwcol,hk)
 
+   !--deallocate
+   deallocate(ee)
+   deallocate(s0)
+   deallocate(s1)
+   deallocate(s2)
+
    !--end the plotr input text
    write(nout,'(''99/'')')
    write(nout,'(''stop'')')
@@ -16909,7 +17238,7 @@ contains
    real(kr),parameter::zero=0
    integer,parameter::nden=4000
    mtlast=0
-   mtl=0   
+   mtl=0
    ilev=0
 
    !--loop over the inelastic levels
@@ -17286,10 +17615,9 @@ contains
    real(kr),parameter::up=1.01e0_kr
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
-   
+
    ! initialise
    it=0
-
 
    !--loop over angular distributions
    nr1=nr+1
@@ -17791,7 +18119,7 @@ contains
                         ep=xss(j+loci)
                         p=xss(j+nn+loci)
                         if (p.lt.zmin) p=zmin
-                        if (ep.le.xmax) then
+                        if (ep.ge.xmin.and.ep.le.xmax) then
                            if (intt.eq.1) write(nout,&
                               '(1p,2e14.6,''/'')') ep,ylast
                            write(nout,'(1p,2e14.6,''/'')') ep,p
@@ -17822,7 +18150,7 @@ contains
                e=xss(ie+l)
                test=ymax+ymax/1000
                if (e.le.test) then
-                  loci=nint(xss(ie+ne+l)+dlw-1)
+                  loci=nint(xss(ie+ne+l))+dlw-1
                   intt=mod(nint(xss(loci)),10)
                   nd=nint(xss(loci)/10)
                   nn=nint(xss(loci+1))
@@ -17856,7 +18184,7 @@ contains
                   e=xss(ie+l)
                   test=ymax+ymax/1000
                   if (e.le.test) then
-                     loci=nint(xss(ie+ne+l)+dlw-1)
+                     loci=nint(xss(ie+ne+l))+dlw-1
                      intt=mod(nint(xss(loci)),10)
                      nd=nint(xss(loci)/10)
                      nn=nint(xss(loci+1))
@@ -17979,6 +18307,7 @@ contains
                do while (epnext.ne.emax)
                   ep=epnext
                   call getl7(ep,epnext,loci,xss(dlw),f0)
+                  if (f0.lt.zmin) zmin=f0
                   if (f0.gt.zmax2.and.f0.lt.zmax1)zmax2=f0
                   if (f0.gt.zmax1) then
                      zmax2=zmax1
@@ -18044,12 +18373,20 @@ contains
                   write(nout,'(1p,e14.6,''/'')') e
                   ep=-1
                   call getl7(ep,epnext,loci,xss(dlw),f0)
+                  k=0
                   do while (epnext.ne.emax)
                      ep=epnext
                      call getl7(ep,epnext,loci,xss(dlw),f0)
-                     if (f0.lt.zmin) f0=zmin
-                     write(nout,'(1p,2e14.6,''/'')') ep,f0
+                     if (ep.ge.xmin.and.ep.le.xmax) then
+                       if (f0.lt.zmin) f0=zmin
+                       write(nout,'(1p,2e14.6,''/'')') ep,f0
+                       k=k+1
+                     endif
                   enddo
+                  if (k.lt.2) then
+                     write(nout,'(1p,2e14.6,''/'')') xmin,zmin
+                     write(nout,'(1p,2e14.6,''/'')') xmax,zmin
+                  endif
                   write(nout,'(''/'')')
                enddo
                write(nout,'(''/'')')
@@ -18859,7 +19196,7 @@ contains
    integer::ipt,mtrh,nmtr
    integer hpd,lsigh,sigh,landh,andh,ldlwh,dlwh,yh
    real(kr)::test,e,xs,xstep,ystep,xtag,ytag,thin,xlast
-   real(kr)::ep,pd,ylast,break,cc,pp,rat,stepm,elast
+   real(kr)::ep,epnext,pd,epl,pdl,ylast,break,cc,pp,rat,stepm,elast
    real(kr)::xmin,xmax,ymin,ymax,zmin,zmax,zmax1,zmax2,heat
    character(10)::name
    character(1)::qu=''''
@@ -19006,7 +19343,7 @@ contains
          hpd=nint(xss(ploct+10*(j-1)))
          iaa=nint(xss(hpd))
          naa=nint(xss(hpd+1))
-         ie=i-iaa-1
+         ie=i-iaa+1
          if (ie.ge.1.and.ie.le.naa) heat=heat-xss(hpd+1+naa+ie)
       enddo
       if (e.lt.xmin) xmin=e
@@ -19051,7 +19388,7 @@ contains
                   hpd=nint(xss(ploct+10*(k-1)))
                   iaa=nint(xss(hpd))
                   naa=nint(xss(hpd+1))
-                  ie=i-iaa-1
+                  ie=i-iaa+1
                   if (ie.ge.1.and.ie.le.naa) heat=heat-xss(hpd+1+naa+ie)
                enddo
                j=j+1
@@ -19221,6 +19558,8 @@ contains
                endif
             endif
             l3=dlwh+nint(xss(l2+2))-1
+            j=nint(xss(l3))
+            if (j.ne.0) l3=l3+2*j
             ne=nint(xss(l3+1))
             zmin=1000
             zmax1=0
@@ -19276,13 +19615,15 @@ contains
                   intt=nint(xss(loci))
                   nn=nint(xss(loci+1))
                   loci=loci+1
+                  epl = xss(loci+1)
+                  pdl = xss(loci+nn+1)
                   do j=1,nn
                      ep=xss(loci+j)
                      pd=xss(loci+nn+j)
-                     if (pd.ge.zmin.and.pd.le.zmax) then
-                        if (ep.lt.xmin) xmin=ep
-                        if (ep.gt.xmax) xmax=ep
-                     endif
+                     if(pd  .ge. zmin .and. epl .lt. xmin) xmin = epl
+                     if(pdl .ge. zmin .and. ep  .gt. xmax) xmax = ep
+                     epl = ep
+                     pdl = pd
                   enddo
                endif
             enddo
@@ -19360,6 +19701,134 @@ contains
                endif
             enddo
             write(nout,'(''/'')')
+         else if (law.eq.67) then
+            call mtname(mt,name,izai)
+            if (name(1:1).eq.'(') then
+               if (izai.eq.1) then
+                  name(2:2)='n'
+               else if (izai.eq.1001) then
+                  name(2:2)='p'
+               else if (izai.eq.1002) then
+                  name(2:2)='d'
+               else if (izai.eq.1003) then
+                  name(2:2)='t'
+               else if (izai.eq.2003) then
+                  name(2:2)='s'
+               else if (izai.eq.2004) then
+                  name(2:2)='a'
+               endif
+            endif
+            l3=dlwh+nint(xss(l2+2))-1
+            j=nint(xss(l3))
+            if (j.ne.0) l3=l3+2*j
+            l3=l3+1
+            ne=nint(xss(l3))
+            xmin=1000
+            xmax=0
+            ymin=1000
+            ymax=0
+            zmin=1000
+            zmax1=0
+            zmax2=0
+            do ie=2,ne
+               e=xss(ie+l3)
+               if (e.lt.ymin) ymin=e
+               if (e.gt.ymax) ymax=e
+               loci=nint(xss(ie+ne+l3))
+               ep=-1
+               call getl7(ep,epnext,loci,xss(dlwh),pd)
+               do while (epnext.ne.big)
+                  ep=epnext
+                  call getl7(ep,epnext,loci,xss(dlwh),pd)
+                  if (pd.lt.zmin) zmin=pd
+                  if (pd.gt.zmax2.and.pd.lt.zmax1)zmax2=pd
+                  if (pd.gt.zmax1) then
+                     zmax2=zmax1
+                     zmax1=pd
+                  endif
+               enddo
+            enddo
+            if (zmax1.gt.zero) then
+               if ((zmax2/zmax1.lt.1.e-4_kr).and.(zmax2.ne.zero)) then
+                  zmax=zmax2
+               else
+                  zmax=zmax1
+               endif
+               zmin=zmax/10000
+               call ascll(zmin,zmax)
+               do ie=2,ne
+                  e=xss(ie+l3)
+                  loci=nint(xss(ie+ne+l3))
+                  ep=-1
+                  call getl7(ep,epnext,loci,xss(dlwh),pd)
+                  epl=ep
+                  pdl=0
+                  do while (epnext.ne.big)
+                     ep=epnext
+                     call getl7(ep,epnext,loci,xss(dlwh),pd)
+                     if (pd.ge.zmin.and.epl.lt.xmin) xmin=epl
+                     if (pdl.ge.zmin.and.ep.gt.xmax) xmax=ep
+                     epl=ep
+                     pdl=pd
+                  enddo
+               enddo
+               call ascle(2,xmin,xmax,major,minor)
+               xstep=(xmax-xmin)/major
+               call ascle(4,ymin,ymax,major,minor)
+               ystep=(ymax-ymin)/major
+               write(nout,'(''1'',i3,''/'')') iwcol
+               it=1
+               do j=1,70
+                  if (hk(j:j).ne.' ') it=j
+               enddo
+               write(nout,'(a,''<'',a,''>'',a,''/'')') qu,hk(1:it),qu
+               if (ipt.eq.1) write(nout,&
+                  '(a,''neutrons from '',a,a,''/'')') qu,name,qu
+               if (ipt.eq.9) write(nout,&
+                  '(a,''protons from '',a,a,''/'')') qu,name,qu
+               if (ipt.eq.31) write(nout,&
+                  '(a,''deuterons from '',a,a,''/'')') qu,name,qu
+               if (ipt.eq.32) write(nout,&
+                  '(a,''tritons from '',a,a,''/'')') qu,name,qu
+               if (ipt.eq.33) write(nout,&
+                  '(a,''he3s from '',a,a,''/'')') qu,name,qu
+               if (ipt.eq.34) write(nout,&
+                  '(a,''alphas from '',a,a,''/'')') qu,name,qu
+               write(nout,'(''-1 2/'')')
+               write(nout,'(1p,3e12.3,''/'')') xmin,xmax,xstep
+               write(nout,'(a,''<s>ec. <e>nergy'',a,''/'')') qu,qu
+               write(nout,'(1p,3e12.3,''/'')') ymin,ymax,ystep
+               write(nout,'(a,''<e>nergy (<m>e<v>)'',a,''/'')') qu,qu
+               write(nout,'(1p,3e12.3,''/'')') zmin,zmax,one
+               write(nout,'(a,''<p>rob/<m>e<v>'',a,''/'')') qu,qu
+               write(nout,'(''/'')')
+               write(nout,'(''/'')')
+               write(nout,'(''1/'')')
+               do ie=2,ne
+                  e=xss(ie+l3)
+                  loci=nint(xss(ie+ne+l3))
+                  write(nout,'(1p,e14.6,''/'')') e
+                  ep=-1
+                  call getl7(ep,epnext,loci,xss(dlwh),pd)
+                  ylast=zmin
+                  k=0
+                  do while (epnext.ne.big)
+                     ep=epnext
+                     call getl7(ep,epnext,loci,xss(dlwh),pd)
+                     if (ep.ge.xmin.and.ep.le.xmax) then
+                       if (pd.lt.zmin) pd=zmin
+                       write(nout,'(1p,2e14.6,''/'')') ep,pd
+                       k=k+1
+                     endif
+                  enddo
+                  if (k.lt.2) then
+                     write(nout,'(1p,2e14.6,''/'')') xmin,zmin
+                     write(nout,'(1p,2e14.6,''/'')') xmax,zmin
+                  endif
+                  write(nout,'(''/'')')
+               enddo
+               write(nout,'(''/'')')
+            endif
          endif
 
          !--check for an angular distribution
@@ -19533,13 +20002,15 @@ contains
    real(kr)::ep,epnext,a7(*),f0
    ! internals
    integer::intmu,nmu,locmu,imu,locimu,intep,npep,iep,inow,idone
-   real(kr)::ulast,flast,u,ep1,ep2,epn,fact1,fact2,f
+   real(kr)::ulast,flast,u,ep1,ep2,epn,f
    real(kr),parameter::emax=1.e10_kr
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
+   real(kr),parameter::fact1=one-one/10000
+   real(kr),parameter::fact2=one-2.*one/10000
 
    !--initialize
-   inow=0   
+   inow=0
    if (ep.lt.zero) then
       intmu=nint(a7(loci))
       nmu=nint(a7(loci+1))
@@ -19583,8 +20054,6 @@ contains
       else
          call terp1(ep1,a7(inow+npep),ep2,a7(inow+1+npep),ep,f,intep)
          epn=ep2
-         fact1=one-one/10000
-         fact2=one-2*one/10000
          if (intep.eq.1.and.ep.lt.fact2*ep2) epn=fact1*ep2
          if (epn.lt.epnext) epnext=epn
       endif
@@ -19782,4 +20251,3 @@ contains
    end subroutine ascll
 
 end module acefc
-
