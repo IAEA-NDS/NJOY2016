@@ -1,5 +1,16 @@
 ![](https://github.com/njoy/NJOY2016/workflows/Continuous%20Integration/badge.svg)
 
+## Important note by the IAEA-NDS
+
+This repository exists to keep track of modifications of the
+[official NJOY2016 version](https://github.com/njoy/NJOY2016) to ensure
+the proper processing of the nuclear data libraries
+distributed by the Nuclear Data Section of the IAEA.
+
+The preliminary document `Updating NJOY2016.72 for IAEA-NDS libraries.docx` gives
+ a brief (and not necessarily complete) summary of the modifications effected
+by the IAEA-NDS since NJOY2016.72.
+
 # NJOY2016
 
 The NJOY Nuclear Data Processing System is a modular computer code designed to read evaluated data in ENDF format, transform the data in various ways, and output the results as libraries designed to be used in various applications. Each module performs a well defined processing task. The modules are essentially independent programs, and they communicate with each other using input and output files, plus a very few common variables.
