@@ -418,7 +418,7 @@ contains
    if (mth.eq.198) izr=izr-3004
    if (mth.eq.199) izr=izr-4009
    if (mth.eq.200) izr=izr-2007
-   if (izr.eq.4008) izg=1
+   if (izr.eq.4008.or.izr.eq.3008) izg=1
    if (izg.eq.0.and.&
      (izr.gt.2004.or.izr.le.0)) go to 245
    if (enext.lt.thrg) thrg=enext
