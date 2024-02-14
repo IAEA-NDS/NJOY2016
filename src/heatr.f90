@@ -19,7 +19,7 @@ module heatm
    ! global variables
    integer::matd,mgam,npk,mtp(28),nqa,mta(nqamax),mt303,mt19
    integer::ne,kchk,iprint,lqs(nqamax)
-   integer::kkerma
+   integer::kkerma,krecoil
    real(kr),dimension(:),allocatable::qbar
    real(kr)::qa(nqamax),efirst,elast,za,awr,elist(ilmax)
    real(kr)::break
@@ -97,8 +97,11 @@ contains
    !    iprint   print (0 min, 1 max, 2 check) (default=0)
    !    ed       displacement energy for damage
    !             (default from built-in table)
-   !    kkerma   0/1=total (mt301) is energy balance / kinematic
-   !             (default=0)
+   !    kkerma   0/1=total (mt301) is energy balance/kinematic limit
+   !             (default=0, balance)
+   !    krecoil  0/1=use/remove recoil angle-energy data from MF6 for
+   !             heating and damage calculation. Use with caution.
+   !             (default=0, use recoil data on MF6 if available)
    ! card 3      for npk gt 0 only
    !    mtk      mt numbers for partial kermas desired
    !             total (mt301) will be provided automatically.
@@ -166,7 +169,8 @@ contains
    iprint=0
    break=0
    kkerma=0
-   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break,kkerma
+   krecoil=0
+   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break,kkerma,krecoil
    kchk=0
    if (iprint.eq.2) kchk=1
    if (iprint.eq.2) iprint=1
@@ -297,6 +301,10 @@ contains
         &'' damage displacement energy ........... '',f10.1,&
         &'' ev'')') break
    endif
+   write(nsyso,'(&
+     &'' total kerma (0 balance, 1 kinematic) . '',i10)')kkerma
+   write(nsyso,'(&
+     &'' MF6 recoil data (0 use, 1 ignore) .... '',i10)')krecoil
    if (ntemp.eq.0) ntemp=100
    if (npk.ge.3) write(nsyso,'(&
      &'' partial kerma mt-s desired ........... '',i10)') mtp(3)
@@ -487,6 +495,7 @@ contains
    integer::ielem,ik,nr,idnx,nen,law
    integer::lrel,nmod
    integer::i6t,nl,l
+   integer::nscr6,iprec,kpart
    real(kr)::zar,awrr,e,enext,y,yld,test,efix
    real(kr)::c(30)
    character(60)::strng
@@ -816,6 +825,18 @@ contains
    i6p=0
    mt6yp=0
    if (i6.gt.0) then
+      if (krecoil.gt.0) then
+        !--prepare a temporary file for further analysis (krecoil>0)
+        nscr6=16
+        if (nendf.lt.0) nscr6=-nscr6
+        call openz(nscr6,1)
+        call repoz(nscr6)
+        nsp=1
+        math=1
+        call afend(nscr6,0)
+      else
+        nscr6=nend6
+      endif
       call repoz(nend6)
       nsp=1
       math=1
@@ -832,7 +853,7 @@ contains
          jpp=jp-10*jpn
       endif
       if (mth.ne.18 .or. (mth.eq.18 .and. jp.eq.0)) then
-         call contio(0,nend6,0,scr,nb,nw)
+         call contio(0,nscr6,0,scr,nb,nw)
       else
          !--delete mt=18 from mt6 array and skip this section (for now)
          i6t=i6
@@ -854,10 +875,10 @@ contains
             ielem=mod(nint(c1h),1000)
             do ik=1,nk
                l=1
-               call tab1io(nendf,nend6,0,scr(l),nb,nw)
+               call tab1io(nendf,nscr6,0,scr(l),nb,nw)
                l=l+nw
                do while (nb.ne.0)
-                  call moreio(nendf,nend6,0,scr(l),nb,nw)
+                  call moreio(nendf,nscr6,0,scr(l),nb,nw)
                   l=l+nw
                enddo
                nr=n1h
@@ -904,31 +925,31 @@ contains
                endif
                if (zap.eq.zero) mgam=10+mod(mgam,10)
                if (law.eq.6) then
-                  call contio(nendf,nend6,0,scr,nb,nw)
+                  call contio(nendf,nscr6,0,scr,nb,nw)
                else if (law.eq.1.or.law.eq.2.or.law.eq.5) then
-                  call tab2io(nendf,nend6,0,scr,nb,nw)
+                  call tab2io(nendf,nscr6,0,scr,nb,nw)
                   ne=n2h
                   do ie=1,ne
-                     call listio(nendf,nend6,0,scr,nb,nw)
+                     call listio(nendf,nscr6,0,scr,nb,nw)
                      do while (nb.ne.0)
-                        call moreio(nendf,nend6,0,scr,nb,nw)
+                        call moreio(nendf,nscr6,0,scr,nb,nw)
                      enddo
                   enddo
                else if (law.eq.7) then
-                  call tab2io(nendf,nend6,0,scr,nb,nw)
+                  call tab2io(nendf,nscr6,0,scr,nb,nw)
                   ne=n2h
                   do ie=1,ne
-                     call tab2io(nendf,nend6,0,scr,nb,nw)
+                     call tab2io(nendf,nscr6,0,scr,nb,nw)
                      nmu=n2h
                      do imu=1,nmu
-                        call tab1io(nendf,nend6,0,scr,nb,nw)
+                        call tab1io(nendf,nscr6,0,scr,nb,nw)
                         do while (nb.ne.0)
-                           call moreio(nendf,nend6,0,scr,nb,nw)
+                           call moreio(nendf,nscr6,0,scr,nb,nw)
                         enddo
                      enddo
                   enddo
                else if (law.lt.0) then
-                  call skip6(nendf,nend6,0,scr,law)
+                  call skip6(nendf,nscr6,0,scr,law)
                endif
             enddo
             if (zar.ne.zero) then
@@ -949,6 +970,140 @@ contains
          endif
       endif
    enddo
+   if (krecoil.gt.0) then
+      !--prepare scratch file nend6 from the temporary file nscr6
+      !--ignore(remove) MF6 recoil data (ZAP>2004)
+      !--Applies for MT not equal to: 5 or 18-21 or 38 or 102 nor
+      !--a discrete reaction using MF6/LAW=2,3 for the particle
+      !--(MF6/LAW=4 is expected for the recoil in the latter case)
+      call amend(nscr6,0)
+      call atend(nscr6,0)
+      call repoz(nscr6)
+      call findf(matd,6,0,nscr6)
+      ii6=0
+      mfh=6
+      do while (mfh.eq.6)
+         call contio(nscr6,0,0,scr(1),nb,nw)
+         if (mfh.ne.0) then
+            if (mth.ne.0) then
+              ii6=ii6+1
+              nk=n1h
+              i=7
+              do ik=1,nk
+                 l=i
+                 call tab1io(nscr6,0,0,scr(l),nb,nw)
+                 l=l+nw
+                 do while (nb.ne.0)
+                    call moreio(nscr6,0,0,scr(l),nb,nw)
+                    l=l+nw
+                 enddo
+                 zap=c1h
+                 law=l2h
+                 if (ik.eq.1) then
+                   iprec=nk-1
+                   if ((mt6no(ii6).ne.0).or.(iprec.le.0).or.&
+                      (mth.eq.5).or.(mth.ge.18.and.mth.le.21).or.&
+                      (mth.eq.38).or.(mth.eq.102).or.&
+                      ((mt6no(ii6).eq.0).and.(law.eq.2.or.law.eq.3))) then
+                     call contio(0,nend6,0,scr(1),nb,nw)
+                     iprec=0
+                   else
+                     scr(5)=iprec
+                     if (zap.ge.0.and.zap.lt.2004.1) then
+                        call contio(0,nend6,0,scr(1),nb,nw)
+                        iprec=1
+                        kpart=nint(zap)
+                     else
+                        iprec=-1
+                     endif
+                   endif
+                 endif
+                 if (iprec.eq.0.or.&
+                    (iprec.gt.0.and.zap.ge.zero.and.zap.lt.2004.1)) then
+                   l=i
+                   call tab1io(0,nend6,0,scr(l),nb,nw)
+                   l=l+nw
+                   do while (nb.ne.0)
+                      call moreio(0,nend6,0,scr(l),nb,nw)
+                      l=l+nw
+                   enddo
+                   if (law.eq.6) then
+                      call contio(nscr6,nend6,0,scr,nb,nw)
+                   else if (law.eq.1.or.law.eq.2.or.law.eq.5) then
+                      call tab2io(nscr6,nend6,0,scr,nb,nw)
+                      ne=n2h
+                      do ie=1,ne
+                         call listio(nscr6,nend6,0,scr,nb,nw)
+                         do while (nb.ne.0)
+                            call moreio(nscr6,nend6,0,scr,nb,nw)
+                         enddo
+                      enddo
+                   else if (law.eq.7) then
+                      call tab2io(nscr6,nend6,0,scr,nb,nw)
+                      ne=n2h
+                      do ie=1,ne
+                         call tab2io(nscr6,nend6,0,scr,nb,nw)
+                         nmu=n2h
+                         do imu=1,nmu
+                            call tab1io(nscr6,nend6,0,scr,nb,nw)
+                            do while (nb.ne.0)
+                               call moreio(nscr6,nend6,0,scr,nb,nw)
+                            enddo
+                         enddo
+                      enddo
+                   else if (law.lt.0) then
+                      call skip6(nscr6,nend6,0,scr,law)
+                   endif
+                   if (iprec.gt.0.and.zap.gt.0) then
+                     iprec=ik
+                     kpart=nint(zap)
+                   endif
+                 else
+                   if (law.eq.6) then
+                      call contio(nscr6,0,0,scr,nb,nw)
+                   else if (law.eq.1.or.law.eq.2.or.law.eq.5) then
+                      call tab2io(nscr6,0,0,scr,nb,nw)
+                      ne=n2h
+                      do ie=1,ne
+                         call listio(nscr6,0,0,scr,nb,nw)
+                         do while (nb.ne.0)
+                            call moreio(nscr6,0,0,scr,nb,nw)
+                         enddo
+                      enddo
+                   else if (law.eq.7) then
+                      call tab2io(nscr6,0,0,scr,nb,nw)
+                      ne=n2h
+                      do ie=1,ne
+                         call tab2io(nscr6,0,0,scr,nb,nw)
+                         nmu=n2h
+                         do imu=1,nmu
+                            call tab1io(nscr6,0,0,scr,nb,nw)
+                            do while (nb.ne.0)
+                               call moreio(nscr6,0,0,scr,nb,nw)
+                            enddo
+                         enddo
+                      enddo
+                   else if (law.lt.0) then
+                      call skip6(nscr6,0,0,scr,law)
+                   endif
+                 endif
+              enddo
+              if (iprec.gt.0) then
+                mt6no(ii6)=iprec
+                write(strng,'(''mf6, mt'',i3,&
+                   &'' recoil data removed. zap='',i6)')mth,kpart
+                call mess('hinit',strng,&
+                   &'one-particle recoil approx. used.')
+              endif
+            else
+              call asend(nend6,0)
+            endif
+         else
+           call afend(nend6,0)
+         endif
+      enddo
+      call closz(nscr6)
+   endif
    call amend(nend6,0)
    call atend(nend6,0)
    call repoz(nend6)
@@ -1780,6 +1935,7 @@ contains
    ! Compute damage energy for capture reactions.
    !-------------------------------------------------------------------
    use endf    ! provides iverf,terp1
+   use mainio ! provides nsyso,nsyse
    ! externals
    integer::mtd
    real(kr)::ee,dame,q,za,awr
@@ -1843,11 +1999,15 @@ contains
          dame=df(er,z,awr+1,z,awr)
       else if (ax.ne.zero) then
          ! capture followed by particle emission
-         ec=econ*zx*z*denom
          ea=q+awr*e*aw1fac
          if (ea.ge.zero) then
+            ec=econ*zx*z*denom
             et=(awr+1-ax)*e*aw1fac
-            if (ea.gt.ec*(1+eps)) ea=ec
+            if (ea.lt.ec*(1-eps)) then
+              write(nsyso,'(a,1p,e12.5,a,e12.5,a,e12.5,a,i3,a)') &
+              & ' capdam message: Ea < Vc at E=',e,' Ea=',ea,' Vc=',ec, &
+              & ' for MT=',mtd,'. Ea is used for damage calculation'
+            endif
             do iq=1,nq
                er=(et-2*sqrt(et*ax*ea)*qp(iq)+ax*ea)*aw1fac
                dame=dame+qw(iq)*df(er,z-zx,awr+1-ax,z,awr)/2
