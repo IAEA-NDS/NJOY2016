@@ -1934,7 +1934,7 @@ contains
    !-------------------------------------------------------------------
    ! Compute damage energy for capture reactions.
    !-------------------------------------------------------------------
-   use endf    ! provides iverf,terp1
+   use endf   ! provides iverf,terp1
    use mainio ! provides nsyso,nsyse
    ! externals
    integer::mtd
@@ -2004,9 +2004,9 @@ contains
             ec=econ*zx*z*denom
             et=(awr+1-ax)*e*aw1fac
             if (ea.lt.ec*(1-eps)) then
-              write(nsyso,'(a,1p,e12.5,a,e12.5,a,e12.5,a,i3,a)') &
-              & ' capdam message: Ea < Vc at E=',e,' Ea=',ea,' Vc=',ec, &
-              & ' for MT=',mtd,'. Ea is used for damage calculation'
+              write(nsyse,'(/,a,1p,e11.4,a,i3,/,27x,a,e12.5,a,e12.5,a)') &
+              & ' ---message from capdam--- Ea < Vc at E=',e,' for mt=',mtd, &
+              '(',ea,' < ',ec,')'
             endif
             do iq=1,nq
                er=(et-2*sqrt(et*ax*ea)*qp(iq)+ax*ea)*aw1fac
