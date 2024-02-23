@@ -7454,7 +7454,7 @@ contains
    integer::mfn,nb,nw,lct3,ik,nne,ne,int,nss
    integer::ie,ilo,jlo,jhi,ii,nn,nnn,langn,lepn,idis,jzap
    integer::nk,jzad,lang,lep,i,npsx,irr,npp,nmu,l1
-   integer::j,iss,ip,ir,jgmax,jj,jg,ndlo,nplo,nclo,nphi,nchi
+   integer::j,iss,ip,ir,jgmax,jj,jg,ndlo,nplo,nclo,nphi,nchi,ndx
    integer::llo,lhi,iz,l,iy,max,nc,lf
    real(kr)::zad,elo,ehi,apsx,enow,eihi,ep,epnext,en
    real(kr)::pspmax,yldd,el,eh,e0,g0,e1,e2,test,pe,disc102
@@ -7477,6 +7477,7 @@ contains
    real(kr),parameter::eps=0.02e0_kr
    real(kr),parameter::zero=0
    real(kr),parameter::alight=5
+   real(kr),parameter::emin=1.e-5_kr
    integer,parameter::ntmp=2000000
    save nne,ne,int
    save jlo,elo,jhi,ehi,terml
@@ -7633,13 +7634,16 @@ contains
                  &1p,e10.3)')tmp(ilo+1)
             endif
          endif
-         if (ismooth.gt.0.and.jzap.eq.1.and.lep.eq.1) then
+         ncyc=nint(tmp(ilo+3))+2
+         ndx=nint(tmp(ilo+2))
+         nx=nint(tmp(ilo+4))
+         n=nint(tmp(ilo+5))
+         ex=40
+         if (ismooth.gt.0.and.jzap.eq.1.and.lep.eq.1.and.&
+             lang.eq.2.and.ndx.eq.0.and.tmp(ilo+6).le.emin.and.&
+             tmp(ilo+7).gt.zero.and.tmp(ilo+6+ncyc).gt.ex) then
             fx=.8409
-            ex=40
-            ncyc=nint(tmp(ilo+3))+2
             cx=tmp(ilo+6+ncyc)*tmp(ilo+7)
-            nx=nint(tmp(ilo+4))
-            n=nint(tmp(ilo+5))
             do while (n.gt.2)
                cxx=cx+tmp(ilo+7+ncyc)*(tmp(ilo+6+2*ncyc)-tmp(ilo+6+ncyc))
                if (abs(cxx/tmp(ilo+6+2*ncyc)**1.5&
@@ -7676,14 +7680,11 @@ contains
                tmp(ilo+5)=n
             enddo
             l=ilo+6+nx
-         else if (ismooth.gt.0.and.jzap.eq.1.and.lep.eq.2) then
-             ncyc=nint(tmp(ilo+3))+2
-             nx=nint(tmp(ilo+4))
-             n=nint(tmp(ilo+5))
+         else if (ismooth.gt.0.and.jzap.eq.1.and.lep.eq.2.and.n.gt.3.and.&
+                  lang.eq.2.and.ndx.eq.0) then
              write(nsyso,'('' extending lin-lin as sqrt(E) below'',&
                &1p,e10.2,'' eV for E='',e10.2,'' eV'')')&
                tmp(ilo+6+ncyc),tmp(ilo+1)
-             ex=40
              fx=0.50
              nn=0
              cx=(tmp(ilo+6+ncyc)-tmp(ilo+6))*(tmp(ilo+7+ncyc)+tmp(ilo+7))/2
