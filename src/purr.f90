@@ -12,6 +12,10 @@ module purm
    integer::init
    integer::nunr,lssf,iinel,iabso
    integer::iprint,nermax,nladr,nmode
+   
+   ! inverse factor for minimum total cross section treatment
+   ! min sigma_t=min(spot,sigma_t_inf)/f0bin
+   real(kr)::f0bin
 
    ! arrays for the w function
    real(kr)::tr(41,27),ti(41,27),trs(41,27),tis(41,27)
@@ -96,6 +100,8 @@ contains
    !   nladr   no. of resonance ladders
    !   iprint  print option (0=min, 1=max, def=1)
    !   nunx    no. of energy points desired (def=0=all)
+   !   f0bin   inverse factor for minimum total cross section (def=50.)
+   !           min sigma_t=min(spot,sigma_t_inf)/f0bin   
    ! card 3
    !   temp    temperatures in kelvin (including zero)
    ! card 4
@@ -126,6 +132,8 @@ contains
    real(kr),parameter::tref=300.e0_kr
    real(kr),parameter::sigmin=1.e-6_kr
    real(kr),parameter::zero=0
+   real(kr),parameter::f0bdef=50.0e0_kr
+   real(kr),parameter::f0bin0=1.0e30_kr
 
    !--initialize
    ipl=0
@@ -173,7 +181,9 @@ contains
    ntemp=1
    nsigz=1
    init=0
-   read(nsysi,*) matd,ntemp,nsigz,nbin,nladr,iprint,nunx
+   f0bin=f0bdef
+   read(nsysi,*) matd,ntemp,nsigz,nbin,nladr,iprint,nunx,f0bin
+   if (f0bin.le.zero) f0bin=f0bin0
    if (matd.eq.0) go to 400
    call repoz(-nscr)
    if (allocated(temp)) then
@@ -200,8 +210,9 @@ contains
      &'' number of probability bins ........... '',i10/&
      &'' number of resonance ladders .......... '',i10/&
      &'' print option (0=min, 1=max) .......... '',i10/&
-     &'' no. of energy points (0=all) ......... '',i10)')&
-     nbin,nladr,iprint,nunx
+     &'' no. of energy points (0=all) ......... '',i10/&
+     &'' factor for min. total cross section .. '',1pe10.3)')&
+     nbin,nladr,iprint,nunx,f0bin
    if (nbin.lt.15) call error('purr','nbin should be 15 or more',' ')
 
    !--allocate storage for ladders and tables
@@ -1836,7 +1847,6 @@ contains
    real(kr),parameter::tref=300.e0_kr
    real(kr),parameter::big=1.e6_kr
    real(kr),parameter::sigmin=1.0e-6_kr
-   real(kr),parameter::f0bin=50.0e0_kr
    real(kr),parameter::zero=0
    save navoid,binmin,elow
    rpi=sqrt(pi)
