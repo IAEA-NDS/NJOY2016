@@ -321,7 +321,6 @@ contains
    call asend(nout,0)
 
    !--process dictionary from endf tape.
-
    call contio(nendf,0,0,scr,nb,nw)
    nx=n2h
    if (iverf.ge.5) call contio(nendf,0,0,scr,nb,nw)
@@ -1749,7 +1748,7 @@ contains
          else
             idone=1
             if ((mt19.eq.1.and.mth.eq.18).or.&
-              (mt19.ne.1.and.&
+              (mt19.eq.0.and.&
               (mth.eq.19.or.mth.eq.20.or.mth.eq.21.or.mth.eq.38)).or.&
               (mth.eq.26.or.mth.eq.27).or.&
               (mth.eq.101.or.mth.eq.120).or.&
@@ -5046,7 +5045,6 @@ contains
          if (mf.eq.3) then
             if (mt.ne.1.and.mt.ne.2.and.mt.ne.301) then
                ntr=ntr+1
-               mtntr=mt
                if ((mt.eq.5.and.mt5n.eq.0).or.&
                    (mt.gt.5.and.mt.lt.16.and.mt.ne.10).or.&
                    (mt.eq.16.and.mt16.eq.0).or.&
@@ -5056,17 +5054,17 @@ contains
                    (mt.ge.183.and.mt.le.190).or.&
                    (mt.ge.194.and.mt.le.196).or.&
                    (mt.ge.198.and.mt.le.200).or.&
-                   (mt.ge.875.and.mt.le.899.and.mt16.gt.0)) then
+                   (mt.ge.875.and.mt.le.891.and.mt16.gt.0)) then
                   nr=nr+1
                   mtnr=mt
                endif
             endif
+            mtntr=mt
          endif
       else if (izai.eq.1001) then
          if (mf.eq.3) then
             if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               mtntr=mt
                if ((mt.eq.5.and.mt5p.eq.0).or.mt.eq.28.or.&
                  mt.eq.41.or.mt.eq.42.or.mt.eq.44.or.mt.eq.45.or.&
                  (mt.eq.103.and.mt103.eq.0).or.mt.eq.111.or.&
@@ -5082,12 +5080,12 @@ contains
                  mtnr=mt
                endif
             endif
+            mtntr=mt
          endif
       else if (izai.eq.1002) then
          if (mf.eq.3) then
             if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               mtntr=mt
                if ((mt.eq.5.and.mt5d.eq.0).or.mt.eq.11.or.mt.eq.32.or.&
                  mt.eq.35.or.(mt.eq.104.and.mt104.eq.0).or.&
                  mt.eq.114.or.mt.eq.115.or.&
@@ -5100,12 +5098,12 @@ contains
                   mtnr=mt
                endif
             endif
+            mtntr=mt
          endif
       else if (izai.eq.1003) then
          if (mf.eq.3) then
             if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               mtntr=mt
                if ((mt.eq.5.and.mt5t.eq.0).or.mt.eq.33.or.mt.eq.36.or.&
                  (mt.eq.105.and.mt105.eq.0).or.mt.eq.113.or.&
                  mt.eq.116.or.mt.eq.154.or.mt.eq.155.or.mt.eq.172.or.&
@@ -5117,12 +5115,12 @@ contains
                  mtnr=mt
                endif
             endif
+            mtntr=mt
          endif
       else if (izai.eq.2003) then
          if (mf.eq.3) then
             if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               mtntr=mt
                if ((mt.eq.5.and.mt5he3.eq.0).or.mt.eq.34.or.&
                   (mt.eq.106.and.mt106.eq.0).or.&
                   mt.eq.176.or.mt.eq.177.or.mt.eq.178.or.&
@@ -5133,12 +5131,12 @@ contains
                   mtnr=mt
                endif
             endif
+            mtntr=mt
          endif
       else if (izai.eq.2004) then
          if (mf.eq.3) then
             if (mt.ne.1.and.mt.ne.2) then
                ntr=ntr+1
-               mtntr=mt
                if ((mt.eq.5.and.mt5a.eq.0).or.&
                  (mt.ge.22.and.mt.le.25).or.&
                  mt.eq.29.or.mt.eq.30.or.&
@@ -5157,6 +5155,7 @@ contains
                  mtnr=mt
                endif
             endif
+            mtntr=mt
          endif
       endif
    enddo
@@ -5438,7 +5437,7 @@ contains
          if (mt.eq.192.or.mt.eq.193.or.mt.eq.197) iskip=1
          if (mt.gt.200.and.mt.le.874) iskip=1
          if (mt16.gt.0.and.mt.eq.16) iskip=1
-         if (mt16.le.0.and.mt.ge.875.and.mt.le.899) iskip=1
+         if (mt16.le.0.and.mt.ge.875.and.mt.le.891) iskip=1
       else if (izai.eq.1001) then
          iskip=1
          if (mt.eq.5.and.mt5p.eq.0) iskip=0
@@ -5582,9 +5581,9 @@ contains
          if (mt.gt.91.and.mt.le.151) iskip=0
          if (mt.eq.155.or.mt.eq.182.or.mt.eq.191) iskip=0
          if (mt.eq.192.or.mt.eq.193.or.mt.eq.197) iskip=0
-         if (mt.gt.200.and.mt.le.849) iskip=0
+         if (mt.gt.200.and.mt.le.874) iskip=0
          if (mt16.gt.0.and.mt.eq.16) iskip=0
-         if (mt16.le.0.and.mt.ge.875.and.mt.le.899) iskip=0
+         if (mt16.le.0.and.mt.ge.875.and.mt.le.891) iskip=0
       else if (izai.eq.1001) then
          iskip=0
          if (mt.eq.2.or.(mt.eq.5.and.mt5p.eq.0).or.mt.eq.28.or.&
@@ -12753,8 +12752,8 @@ contains
    nyp=nint(xss(yp))
    if (nyp.ne.0) then
       write(nsyso,'(//&
-        &'' neutron mts needed as multipliers for photon yields''/&
-        &'' ---------------------------------------------------''//&
+        &'' mts needed as multipliers for photon yields''/&
+        &'' -------------------------------------------''//&
         &(6x,12i6))') (nint(xss(i+yp)),i=1,nyp)
    endif
    if (allocated(indx)) deallocate(indx)
