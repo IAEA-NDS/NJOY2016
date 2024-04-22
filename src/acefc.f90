@@ -4944,7 +4944,7 @@ contains
    integer::nin,matd,newfor,mcnpx,ismooth
    real(kr)::suff,tempd
    ! internals
-   integer::nwscr,nnu,nnup,kfis,mtnr,mtnr2,mtntr,i,nnud,nnf
+   integer::nwscr,nnu,nnup,kfis,mtnr,mtntr,i,nnud,nnf
    integer::nurd,idone,mta,nb,nw,lnu,n,m,jnt,j
    integer::lssf,iinel,iabso,nunr,ncyc,i1,idis
    integer::k,it,ic,ie,ih,next,keep3,keep4,keep,ir,iskip
@@ -5416,13 +5416,10 @@ contains
    iskip=-1
    mt=-1
    if (mtnr.eq.0) then
-      write(nsyso,'(/,'' acelod: mtnr=0, only elastic scattering '',&
+      write(nsyso,'(/,'' acelod message: only elastic scattering '',&
         &'' produces incident particle'',/)')
-      mtnr2=2
-   else
-      mtnr2=mtnr
    endif
-   do while (mt.lt.mtnr2)
+   do while (mt.lt.mtnr)
       call contio(nin,0,0,scr,nb,nw)
       mt=mth
       if (mth.eq.3) keep3=1
@@ -7435,7 +7432,7 @@ contains
       xss(tyr+i-1)=(3-2*lct)*ntyr
       if (law.eq.6) then
         xss(tyr+i-1)=-ntyr
-        if (lct.eq.1.or.lct.eq.4) then
+        if (lct.lt.2) then
           write(nsyso,&
           & '(/'' ---warning from acelf6--- lab system found'', &
           & '' for law6 in mf6/mt'',0p,i0,&
@@ -7654,12 +7651,20 @@ contains
       lang=nint(scr(3))
       if (law.eq.1.and.(lang.lt.1.or.(lang.gt.2.and.lang.lt.11)&
         .or.lang.gt.13)) call error('acelf6',&
-        'only lang=1,2,11-13 allowed for endf-6 file 6 neutrons',&
+        'only lang=1,2,11-13 allowed for endf-6 file 6 ',&
         ' ')
-      if (newfor.eq.0.and.law.eq.1.and.lct.eq.2.and.lang.ne.2) then
-         write(nsyso,'(/'' converting to kalbach:'',&
-           &'' mt ='',i4)') mth
-         xss(tyr+i-1)=-abs(xss(tyr+i-1))
+      if (newfor.eq.0.and.law.eq.1.and.lang.ne.2) then
+        if (lct.ge.2) then
+          write(nsyso,'(/'' converting to kalbach:'',&
+            &'' mt ='',i4)') mth
+          xss(tyr+i-1)=-abs(xss(tyr+i-1))
+        else
+          write(nsyso,'(/'' fatal error: lab system found '',&
+            &''converting law1 to kalbach:'','' mt ='',i4)') mth
+          write(nsyse,'(/'' fatal error: lab system found '',&
+            &''converting law1 to kalbach:'','' mt ='',i4)') mth
+          stop
+        endif
       endif
       if (newfor.eq.1.and.law.eq.1.and.lang.ne.2) xss(last+1)=61
       lep=nint(scr(4))
@@ -7882,7 +7887,7 @@ contains
                   xss(ki+4*n+nexd)=sigfig(aa,7,0)
 
                !--convert legendre distribution to kalbach form
-               else if (lang.eq.1.and.newfor.ne.1) then
+               else if (lang.eq.1.and.newfor.eq.0) then
                   iso=1
                   do ik3=1,na
                      if (scr(8+ik3+ncyc*(ki-1)).ne.zero) iso=0
@@ -9347,8 +9352,8 @@ contains
    integer::ipt,mtrh,ntrh,ipn
    real(kr)::emc2,thresh,tt,e,y,en,ss,q,amass,ubar,sum,renorm
    real(kr)::h,awp,aprime,th,r1,r2,betasq,awprec,ee
-   real(kr)::avadd,avlab,avll,test,rkal,ep,akal,del,av
-   real(kr)::eavi,avl,avcm,sign,dele,avav,tt1,tt2
+   real(kr)::avlab,test,rkal,ep,akal,del,av
+   real(kr)::tt1,tt2
    real(kr)::apsx,step1,step2,xx,test1,test2,test3
    real(kr)::xl,pl,yn,pn,rn,ecm,ea,eim,chek,dmu,e1l,e2l
    real(kr)::chk,pp,disc,v1,v2,e1,e2,pp1,pp2,de,pp1l,pp2l
@@ -10430,6 +10435,7 @@ contains
                call findf(matd,mf,mt,nin)
                call contio(nin,0,0,scr,nb,nw)
                nk=n1h
+               lct=l2h
                ik=0
                idone=0
                do while (ik.lt.nk.and.idone.eq.0)
@@ -10551,9 +10557,6 @@ contains
                            xss(next+1)=ng
                            nexcd=next+4*ng+2
                            amass=awp*emc2
-                           avadd=awi*sqrt(2*ee/(emc2*awi))/(awi+awr)
-                           avlab=0
-                           avll=0
                            do ig=1,ng
                               ! distribution
                               xss(next+1+ig)=&
@@ -10652,27 +10655,6 @@ contains
                                  enddo
                                  nexcd=nexcd+2+3*nmu
                               endif
-                              ! average lab energy
-                              if (ig.ne.1) then
-                                 eavi=xss(next+1+ig)
-                                 if (na.eq.0) then
-                                    avl=eavi
-                                 else
-                                    avcm=sqrt(2*eavi/amass)
-                                    sign=1
-                                    avl=eavl(akal,amass,avcm,&
-                                      avadd,rkal,sign)
-                                 endif
-                                 dele=xss(next+1+ig)-xss(next+ig)
-                                 if (lep.eq.1) then
-                                    avav=xss(next+ig+ng)*(avll+avl)/2
-                                 else
-                                    avav=(xss(next+ig+ng)*avll&
-                                      +xss(next+ig+1+ng)*avl)/2
-                                 endif
-                                 avlab=avlab+avav*dele
-                                 avll=avl
-                              endif
                            enddo
                            renorm=1.0
                            if (xss(next+1+3*ng).ne.zero) renorm=1/xss(next+1+3*ng)
@@ -10682,8 +10664,10 @@ contains
                               xss(next+1+2*ng+ig)=&
                                 sigfig(renorm*xss(next+1+2*ng+ig),9,0)
                            enddo
+                           ! average lab energy
+                           avlab=aveep(scr(lld+1),izap,awp,lct,lang,lep,nd,na,ng,scr(lld+6))
                            scr(llh+6+2*ie)=ee
-                           scr(llh+7+2*ie)=avlab
+                           scr(llh+7+2*ie)=avlab/emev
                            if (lawnow.eq.61) then
                               next=nexcd
                            else
@@ -11142,6 +11126,7 @@ contains
             q=xss(lqr+ir-1)
          enddo
          nk=n1h
+         lct=l2h
          lly=1
          do ik=1,nk
             ll=lly
@@ -11161,6 +11146,7 @@ contains
                !--law 1
                if (law.eq.1) then
                   call tab2io(nin,0,0,scr(ll),nb,nw)
+                  lang=nint(scr(ll+2))
                   lep=nint(scr(ll+3))
                   ne=nint(scr(ll+5))
                   llh=ll
@@ -11183,22 +11169,15 @@ contains
                         call moreio(nin,0,0,scr(ll),nb,nw)
                         ll=ll+nw
                      enddo
-                     e=c2h
+                     e=scr(lld+1)
                      if (law.ne.2) then
-                        heat=0
-                        np=nint(scr(lld+5))
-                        call terpa(y,e,en,idis,scr(lly),npp,nrr)
-                        do ip=1,np
-                           ep=scr(lld+4+2*ip)
-                           g=scr(lld+5+2*ip)
-                           if (ip.gt.1) then
-                              heat=heat+(ep-epl)*gl*(ep+epl)/2
-                           endif
-                              epl=ep
-                           gl=g
-                        enddo
-                        scr(llh+6+2*ie)=e
-                        scr(llh+7+2*ie)=y*heat
+                       nd=nint(scr(lld+2))
+                       na=nint(scr(lld+3))
+                       np=nint(scr(lld+5))
+                       heat=aveep(e,izap,awp,lct,lang,lep,nd,na,np,scr(lld+6))
+                       call terpa(y,e,en,idis,scr(lly),npp,nrr)
+                       scr(llh+6+2*ie)=e
+                       scr(llh+7+2*ie)=y*heat
                      endif
                   enddo
                   mtt=0
@@ -11220,9 +11199,11 @@ contains
                         amass=awr/awp
                         h=2*amass*e/(1+amass)**2
                      endif
-                     h=(h/emev)*xss(2+k+ie-iaa)/xss(esz+nes+ie-1)
-                     xss(esz+4*nes+ie-1)=&
-                       sigfig(xss(esz+4*nes+ie-1)+h,7,0)
+                     if (xss(esz+nes+ie-1).ne.zero) then
+                       h=(h/emev)*xss(2+k+ie-iaa)/xss(esz+nes+ie-1)
+                       xss(esz+4*nes+ie-1)=&
+                         sigfig(xss(esz+4*nes+ie-1)+h,7,0)
+                     endif
                   enddo
                else if (law.eq.4) then
                   izarec=izap
@@ -11274,9 +11255,11 @@ contains
                   do ie=iaa,nes
                      e=xss(esz+ie-1)*emev
                      call terpa(h,e,en,idis,scr(llht),npp,nrr)
-                     h=(h/emev)*xss(2+k+ie-iaa)/xss(esz+nes+ie-1)
-                     xss(esz+4*nes+ie-1)=&
-                       sigfig(xss(esz+4*nes+ie-1)+h,7,0)
+                     if (xss(esz+nes+ie-1).ne.zero) then
+                       h=(h/emev)*xss(2+k+ie-iaa)/xss(esz+nes+ie-1)
+                       xss(esz+4*nes+ie-1)=&
+                         sigfig(xss(esz+4*nes+ie-1)+h,7,0)
+                     endif
                   enddo
                else if (law.eq.6) then
                   write(nsyso,'('' warning: law=6 heating for '',&
@@ -20248,5 +20231,306 @@ contains
    endif
    return
    end subroutine ascll
+
+   real(kr) function aveep(ee,izap,awp,lct,lang,lep,nd,na,nep,b)
+   !------------------------------------------------------------
+   ! Calculate average energy taking into account the reference
+   ! system (LAB or CM). Relativistic transformation is applied
+   !------------------------------------------------------------
+   use acecm
+   ! externals
+   real(kr)::ee,awp,b(*)
+   integer::izap,lct,lang,lep,nd,na,nep
+   ! internals
+   real(kr),parameter::emnc2=939.56542052539e+6_kr
+   real(kr),parameter::ev2mev=1.0e-6_kr
+   integer::iza,lcm,ncyc,iep,j,nu,iu,iepc,nepc,iep1
+   real(kr)::eemev,ewi,ewr,ewp,beta,r,aa,epmev,xplus,xmin
+   real(kr)::sumep,sumf0,epp,eplab,epfint,fint
+   real(kr),dimension(:),allocatable::ep,f0,uave,fu,xnu
+
+   allocate(ep(nep),f0(nep),uave(nep))
+   iza=nint(za)
+   eemev=ee*ev2mev
+   ewi=awi*emnc2
+   ewr=awr*emnc2
+   ewp=awp*emnc2
+   if (izai.eq.0) then ! photon
+     beta=ee/(ee+ewr)
+   else
+     beta=sqrt(ee*(ee+2.0d0*ewi))/(ee+ewi+ewr)
+   endif
+   if (lct.eq.1.or.(lct.eq.3.and.awp.gt.4.0d0)) then
+     lcm=0  ! LAB system
+   else
+     lcm=1  ! CM system (warning: lct=4 == lct=2. Incorrect for breakup prod.)
+   endif
+   ncyc=na+2
+   do iep=1,nep
+     j=(iep-1)*ncyc+1
+     ep(iep)=abs(b(j))
+     f0(iep)=b(j+1)
+     uave(iep)=0.0d0
+     if (lcm.gt.0.and.na.gt.0) then
+       if (lang.eq.0.or.lang.eq.1) then  ! Legendre expansion
+         if(f0(iep).ne.0.0d0) then
+           uave(iep)=b(j+2)/f0(iep)
+         endif
+       elseif (lang.eq.2) then  ! Kalbach-Mann systematic
+         r=b(j+2)
+         if (na.eq.1) then
+           epmev=ep(iep)*ev2mev
+           aa=bachaa(izai,izap,iza,eemev,epmev)
+         else
+           aa=b(j+3)
+         endif
+         if (abs(aa).gt.1.0d-6) then
+           xplus=exp(aa)
+           xmin=exp(-aa)
+           uave(iep)=r*((xplus+xmin)/(xplus-xmin)-1.0d0/aa)
+         else
+           uave(iep)=r*aa/3.0d0
+         endif
+       else    ! Tabulated data
+         nu=na/2
+         allocate(fu(nu),xnu(nu))
+         j=j+2
+         do iu=1,nu
+           xnu(iu)=b(j)
+           fu(iu)=b(j+1)
+           j=j+2
+         enddo
+         uave(iep)=avecos(nu,xnu,fu,lang)
+         deallocate(fu,xnu)
+       endif
+       if (uave(iep).lt.-1.0d0) then
+         uave(iep)=-1.0d0
+       elseif (uave(iep).gt.1.0d0) then
+         uave(iep)=1.0d0
+       endif
+     endif
+   enddo
+   sumep=0.0d0
+   sumf0=0.0d0
+   if (nd.gt.0) then
+     do iep=1,nd
+       epp=ep(iep)
+       eplab=elab(epp,uave(iep),ewp,lcm,beta)
+       sumep=sumep+eplab*f0(iep)
+       sumf0=sumf0+f0(iep)
+     enddo
+   endif
+   if (nep.gt.nd) then
+     iepc=nd+1
+     nepc=nep-1
+     do iep=iepc,nepc
+       iep1=iep+1
+       call ef0int(epfint,fint,ep(iep),ep(iep1),uave(iep),uave(iep1), &
+                   f0(iep),f0(iep1),ewp,beta,lcm,lep)
+       sumep=sumep+epfint
+       sumf0=sumf0+fint
+     enddo
+   endif
+   deallocate(ep,f0,uave)
+   if (sumf0.ne.0.0d0) then
+     aveep=sumep/sumf0
+   else
+     aveep=0.0d0
+   endif
+   return
+   end function aveep
+
+   real(kr) function avecos(nu,x,y,intlaw)
+   !-------------------------------------------------
+   ! calculate the average cosine for tabulated data
+   !-------------------------------------------------
+   use endf
+   ! externals
+   integer::nu,intlaw
+   real(kr)::x(*),y(*)
+   ! internals
+   integer,parameter::nmax=25
+   real(kr),parameter::c03=0.33333333333333e0_kr
+   real(kr),parameter::eps=1.0e-8_kr
+   integer::ll,ilaw,i,jmax,j,i1,k,l
+   real(kr)::sumxy,sumy,u1,f1,u2,f2,du,su,fdu,fu,slope,b,h,h2,uj,fj
+   real(kr)::sumxy1,sumy1,pow,den
+   real(kr)::xy0(nmax),xy1(nmax), y0(nmax),y1(nmax)
+
+   ll=intlaw/10
+   ilaw=intlaw-10*ll
+   sumxy=0.0d0
+   sumy=0.0d0
+   u1=x(1)
+   f1=y(1)
+   if (ilaw.eq.1) then
+     do i=2,nu
+       u2=x(i)
+       f2=y(i)
+       du=u2-u1
+       if (du.gt.0.0d0) then
+         su=u2+u1
+         fdu=f1*du
+         sumxy=sumxy+0.5d0*fdu*su
+         sumy=sumy+fdu
+       endif
+       u1=u2
+       f1=f2
+     enddo
+   elseif (ilaw.eq.2) then
+     do i=2,nu
+       u2=x(i)
+       f2=y(i)
+       du=u2-u1
+       if (du.gt.0.0d0) then
+         su=u2+u1
+         slope=(f2-f1)/du
+         b=f1-slope*u1
+         sumxy=sumxy+du*(c03*slope*(u2*u2+u2*u1+u1*u1)+0.5d0*b*su)
+         sumy=sumy+du*(0.5d0*slope*su+b)
+       endif
+       u1=u2
+       f1=f2
+     enddo
+   else
+     do l=2,nu
+       u2=x(l)
+       f2=y(l)
+       h=u2-u1
+       if (h.gt.0.0d0) then
+         h2=0.5d0*h
+         xy0(1)=h2*(u1*f1+u2*f2)
+         y0(1)=h2*(f1+f2)
+         h=h2
+         jmax=1
+         do i=1,nmax-1
+           sumxy1=0.5d0*xy0(1)
+           sumy1=0.5d0*y0(1)
+           do j=1,jmax
+             uj=u1+(2*j-1)*h
+             call terp1(u1,f1,u2,f2,uj,fj,ilaw)
+             sumxy1=sumxy1+h*uj*fj
+             sumy1=sumy1+h*fj
+           enddo
+           xy1(1)=sumxy1
+           y1(1)=sumy1
+           jmax=2*jmax
+           pow=4.0d0
+           do k=1,i
+             den=pow-1.0d0
+             xy1(k+1)=xy1(k)+(xy1(k)-xy0(k))/den
+             y1(k+1)=y1(k)+(y1(k)-y0(k))/den
+             pow=4.0d0*pow
+           enddo
+           i1=i+1
+           if ((abs(xy1(i1)-xy1(i)).le.eps*abs(xy1(i1)).and.&
+                abs(y1(i1)-y1(i)).le.eps*abs(y1(i1))).or.&
+                i1.eq.nmax) then
+              exit
+           else
+             h=0.5d0*h
+             do k=1,i1
+               xy0(k)=xy1(k)
+               y0(k)=y1(k)
+             enddo
+           endif
+         enddo
+         sumxy=sumxy+xy1(i1)
+         sumy=sumy+y1(i1)
+       endif
+       u1=u2
+       f1=f2
+     enddo
+   endif
+   if (sumy.ne.0.0d0) then
+     avecos=sumxy/sumy
+   else
+     avecos=0.0d0
+   endif
+   return
+   end function avecos
+
+   real(kr) function elab(tp,up,ewp,lcm,beta)
+   !-------------------------------------------
+   ! Convert secondary energy tp to LAB system
+   !-------------------------------------------
+   ! externals
+   integer::lcm
+   real(kr)::tp,up,ewp,beta
+   ! internals
+   real(kr)::gam
+
+   if (lcm.gt.0) then   ! lcm=0 LAB system
+     gam=1.0d0/(sqrt(1.0d0-beta*beta))
+     elab=gam*(tp+beta*up*sqrt(tp*(tp+2.0d0*ewp)))+(gam-1.0d0)*ewp
+   else
+     elab=tp
+   endif
+   return
+   end function elab
+
+   subroutine ef0int(epfint,fint,e1,e2,u1,u2,f1,f2,ewp,beta,lcm,lep)
+   !---------------------------------------------------------
+   ! Integration of e'*f(e,e') and f(e,e') between e1 and e2
+   !---------------------------------------------------------
+   use endf
+   ! externals
+   integer::lcm,lep  ! lcm=0 LAB system
+   real(kr)::epfint,fint,e1,e2,u1,u2,f1,f2,ewp,beta
+   !internals
+   integer,parameter::nmax=25
+   real(kr),parameter::eps=1.0e-8_kr
+   integer::jmax,i,j,i1,k
+   real(kr)::h,el1,el2,h2,sumy,ej,uj,elj,fj,pow,den
+   real(kr)::y0(nmax),y1(nmax)
+
+   h=e2-e1
+   if (h.le.0.0d0) then
+     epfint=0.0d0
+     fint=0.0d0
+   else
+     el1=elab(e1,u1,ewp,lcm,beta)
+     el2=elab(e2,u2,ewp,lcm,beta)
+     h2=0.5d0*h
+     if (lep.eq.1) then
+       fint=h*f1
+       y0(1)=h2*(el1+el2)*f1
+     else
+       fint=h2*(f1+f2)
+       y0(1)=h2*(el1*f1+el2*f2)
+     endif
+     h=h2
+     jmax=1
+     do i=1,nmax-1
+       sumy=0.5d0*y0(1)
+       do j=1,jmax
+         ej=e1+(2*j-1)*h
+         call terp1(e1,u1,e2,u2,ej,uj,lep)
+         elj=elab(ej,uj,ewp,lcm,beta)
+         call terp1(e1,f1,e2,f2,ej,fj,lep)
+         sumy=sumy+h*elj*fj
+       enddo
+       y1(1)=sumy
+       jmax=2*jmax
+       pow=4.0d0
+       do k=1,i
+         den=pow-1.0d0
+         y1(k+1)=y1(k)+(y1(k)-y0(k))/den
+         pow=4.0d0*pow
+       enddo
+       i1=i+1
+       if (abs(y1(i1)-y1(i)).le.eps*abs(y1(i1)).or.i1.eq.nmax) then
+         exit
+       else
+         h=0.5d0*h
+         do k=1,i1
+           y0(k)=y1(k)
+         enddo
+       endif
+     enddo
+     epfint=y1(i1)
+   endif
+   return
+   end subroutine ef0int
 
 end module acefc
