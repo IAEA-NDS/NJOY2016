@@ -12,7 +12,7 @@ module purm
    integer::init
    integer::nunr,lssf,iinel,iabso
    integer::iprint,nermax,nladr,nmode
-   
+
    ! inverse factor for minimum total cross section treatment
    ! min sigma_t=min(spot,sigma_t_inf)/f0bin
    real(kr)::f0bin
@@ -101,7 +101,7 @@ contains
    !   iprint  print option (0=min, 1=max, def=1)
    !   nunx    no. of energy points desired (def=0=all)
    !   f0bin   inverse factor for minimum total cross section (def=50.)
-   !           min sigma_t=min(spot,sigma_t_inf)/f0bin   
+   !           min sigma_t=min(spot,sigma_t_inf)/f0bin
    ! card 3
    !   temp    temperatures in kelvin (including zero)
    ! card 4
@@ -134,6 +134,7 @@ contains
    real(kr),parameter::zero=0
    real(kr),parameter::f0bdef=50.0e0_kr
    real(kr),parameter::f0bin0=1.0e30_kr
+   real(kr),parameter::f0bmin=5.0e0_kr
 
    !--initialize
    ipl=0
@@ -183,7 +184,11 @@ contains
    init=0
    f0bin=f0bdef
    read(nsysi,*) matd,ntemp,nsigz,nbin,nladr,iprint,nunx,f0bin
-   if (f0bin.le.zero) f0bin=f0bin0
+   if (f0bin.le.zero) then
+      f0bin=f0bin0
+   elseif (f0bin.lt.10.0d0) then
+      f0bin=f0bmin
+   endif
    if (matd.eq.0) go to 400
    call repoz(-nscr)
    if (allocated(temp)) then
