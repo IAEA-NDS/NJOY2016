@@ -14140,6 +14140,7 @@ contains
    !-------------------------------------------------------------------
    use util  ! provides openz,closz
    use acecm ! provides write routines
+   use physics !provides mass ratios for p,d,t,he3,a
    ! externals
    integer::nin,itype,nout,ndir,iprint,nplot,nxtra,mcnpx
    real(kr)::suff
@@ -14154,8 +14155,8 @@ contains
    character(70)::hko
    character(10)::str
    character(3)::ht
-   real(kr),dimension(6),parameter::awit=(/1.0e0_kr,0.99862e0_kr,&
-     1.99626e0_kr,2.98960e0_kr,2.98903e0_kr,3.96713e0_kr/)
+   real(kr),dimension(6),parameter::awit=(/1.0e0_kr,pnratio,&
+     dnratio,tnratio,hnratio,anratio/)
    real(kr),parameter::zero=0
 
    !--branch on input file type
@@ -14426,6 +14427,7 @@ contains
       call mtname(iin,name,izai)
       thresh=(aw0+awi)*(-xss(lqr-1+i))/aw0
       if (thresh.lt.elow) thresh=elow
+      thresh=sigfig(thresh,7,0)
       if (xss(esz-1+iaa).lt.thresh.and.thresh.gt.elow) then
          write(nsyso,'(''   consis: threshold'',1p,e16.8,&
            &'' less than the expected'',e16.8,'' for '',a)')&
