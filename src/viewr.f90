@@ -1272,13 +1272,14 @@ contains
    integer::i,j,nn,k,ncurv,major,minor,itop,ibot,l,n
    real(kr)::wt,xlo,xhi,ylo,yhi,zlo,zhi,xn,yn,zn,yy
    real(kr)::top,bot,xop,yop,zop
-   integer::lll(400)
+   integer::lll(2000)
    real(kr)::x(10000),y(10000),z(10000)
+   integer::kmax=9999  !  x(:),y(:),z(:) arrays  dimension - 1
+   integer::lmax=1999  !  lll(:) array  dimension - 1
    real(kr),parameter::big=1.e10_kr
    real(kr),parameter::d0=.001e0_kr
    real(kr),parameter::d3=.301e0_kr
    real(kr),parameter::d7=.699e0_kr
-   integer::kmax=9999
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
    real(kr),parameter::ten=10
@@ -1322,6 +1323,9 @@ contains
          enddo
          i=i+2+2*nn
          j=j+1
+         if (j.gt.lmax) then
+           call error('set3d','exceeded lll array storage',' ')
+         endif
       endif
    enddo
    ncurv=j-1
