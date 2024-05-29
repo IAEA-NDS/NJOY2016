@@ -1034,10 +1034,12 @@ contains
       start=itce
       middle=itca
       nea=ncl+1
+      ne=nee
       if (idpnc.eq.5) then
          start=itcei
          middle=itcai
          nea=ncli+1
+         ne=neei
       endif
       write(nsyso,'(''1''/&
         &'' incoherent elastic data - equally probable angles''/&
@@ -1051,7 +1053,7 @@ contains
       if (nea.gt.8) lim=8
       lim1=lim+1
       loc=middle-1
-      do i=1,neei
+      do i=1,ne
          if ((lines+nln).gt.58) then
             write(nsyso,'(''1'')')
             write(nsyso,'(/&
