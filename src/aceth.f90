@@ -1259,13 +1259,14 @@ contains
       i=0
       idone=0
       e=0
-      do while (idone.eq.0.and.i.lt.nee)
+      do while (idone.eq.0.and.i.lt.nie)
          i=i+1
          e=xss(itie+i)
          if (e.ge.xss(itce+1)) then
             idone=1
          else
             xn=xss(itie+nie+i)
+            xielas=0
             if (idpnc.eq.5) then
                j=0
                do while (j.lt.neei)
