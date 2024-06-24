@@ -3938,9 +3938,11 @@ contains
    equivalence(t(1),gamid(1))
    real(kr),dimension(:),allocatable::ee,eg,es,yy,aa,rr
    real(kr),dimension(:),allocatable::tot
-   integer,parameter::nwtot=5000
+!   integer,parameter::nwtot=5000 
+   integer,parameter::nwtot=100000 !Modified for D1SUNED library generation
    real(kr),dimension(:),allocatable::yold
-   integer,parameter::nyold=1000
+!   integer,parameter::nyold=1000
+   integer,parameter::nyold=80000 !Modified for D1SUNED library generation
    real(kr),dimension(:),allocatable::scr
    character(4)::blank='    '
    real(kr),parameter::etop=1.e10_kr
