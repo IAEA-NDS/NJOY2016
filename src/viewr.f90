@@ -341,8 +341,6 @@ contains
    character(80)::text
    integer,parameter::mmax=50000   !same in plotr and viewr
    integer,parameter::maxaa=5000000
-   integer,parameter::mmax=20000   !same in plotr and viewr
-   integer,parameter::maxaa=500000
    real(kr),dimension(15)::z
    real(kr),dimension(maxaa)::aa
    real(kr),dimension(mmax)::x,y,b,dxm,dxp,dym,dyp
@@ -1282,7 +1280,7 @@ contains
    real(kr),parameter::d0=.001e0_kr
    real(kr),parameter::d3=.301e0_kr
    real(kr),parameter::d7=.699e0_kr
-   integer::kmax=lenxyz-1  !  x(:),y(:),z(:) arrays' dimension - 1
+   integer::kmax=lenxyz-1  !  x(:),y(:),z(:) arrays  dimension - 1
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
    real(kr),parameter::ten=10
@@ -1326,13 +1324,8 @@ contains
          enddo
          i=i+2+2*nn
          j=j+1
-<<<<<<< HEAD
-         if (j.gt.lmax) then
-           call error('set3d','exceeded lll array storage',' ')
-=======
          if (j.gt.length) then
             call error('set3d','array overflow, increase the length parameter',' ')
->>>>>>> lanl/main
          endif
       endif
    enddo
