@@ -341,6 +341,8 @@ contains
    character(80)::text
    integer,parameter::mmax=50000   !same in plotr and viewr
    integer,parameter::maxaa=5000000
+   integer,parameter::mmax=20000   !same in plotr and viewr
+   integer,parameter::maxaa=500000
    real(kr),dimension(15)::z
    real(kr),dimension(maxaa)::aa
    real(kr),dimension(mmax)::x,y,b,dxm,dxp,dym,dyp
@@ -1269,17 +1271,18 @@ contains
    integer::iplot,nxyz
    real(kr)::xyz(nxyz)
    ! internals
+   integer,parameter::length=2000
+   integer,parameter::lenxyz=10000
    integer::i,j,nn,k,ncurv,major,minor,itop,ibot,l,n
    real(kr)::wt,xlo,xhi,ylo,yhi,zlo,zhi,xn,yn,zn,yy
    real(kr)::top,bot,xop,yop,zop
-   integer::lll(2000)
-   real(kr)::x(10000),y(10000),z(10000)
-   integer::kmax=9999  !  x(:),y(:),z(:) arrays  dimension - 1
-   integer::lmax=1999  !  lll(:) array  dimension - 1
+   integer::lll(length)
+   real(kr)::x(lenxyz),y(lenxyz),z(lenxyz)
    real(kr),parameter::big=1.e10_kr
    real(kr),parameter::d0=.001e0_kr
    real(kr),parameter::d3=.301e0_kr
    real(kr),parameter::d7=.699e0_kr
+   integer::kmax=lenxyz-1  !  x(:),y(:),z(:) arrays' dimension - 1
    real(kr),parameter::zero=0
    real(kr),parameter::one=1
    real(kr),parameter::ten=10
@@ -1323,8 +1326,13 @@ contains
          enddo
          i=i+2+2*nn
          j=j+1
+<<<<<<< HEAD
          if (j.gt.lmax) then
            call error('set3d','exceeded lll array storage',' ')
+=======
+         if (j.gt.length) then
+            call error('set3d','array overflow, increase the length parameter',' ')
+>>>>>>> lanl/main
          endif
       endif
    enddo
@@ -1667,4 +1675,3 @@ contains
    end subroutine ascalv
 
 end module viewm
-
