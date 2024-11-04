@@ -4670,8 +4670,8 @@ contains
    real(kr),parameter::test=1.e-10_kr
    real(kr),parameter::finity=.99e12_kr
    real(kr),parameter::small=1.e-8_kr
-   real(kr),parameter::zero=0
-   real(kr),parameter::one=1
+   real(kr),parameter::zero=0.0e0_kr
+   real(kr),parameter::one=1.0e0_kr
 
    !--set up storage allocations.
    allocate(bufo(nbuf))
@@ -4799,7 +4799,7 @@ contains
    call gety1(eg,enext,idis,sn,nin,scr)
    ! set zero cross section at threshold, but mt2 for charge particles
    if ((mth.ne.2.or.(mth.eq.2.and.nint(zain).le.1)).and.&
-     & thresh.gt.one.and.abs(thresh-eg).lt.test*thresh) sn=0
+     & (thresh-one).gt.test*one.and.(eg-thresh).lt.test*thresh) sn=0
    ! backgrounds in a range of unresolved-smooth overlap
    ! are arbitrarily assigned to the unresolved component
    ! this only applies to total, elastic, fission and capture.
