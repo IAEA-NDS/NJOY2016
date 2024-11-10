@@ -8327,7 +8327,7 @@ contains
    else
       if (lidp.ne.1) then
          sigr=c(7)/2
-         do ip=1,np
+         do ip=1,nt
             sigr=sigr+(2*ip+1)*p(ip+1)*c(ip+7)/2
          enddo
          y=sigc+sigr/(1-x)

@@ -2276,7 +2276,7 @@ contains
    real(kr),dimension(:),allocatable::bufr,bufg,bufl
    real(kr),dimension(:),allocatable::x,y
    real(kr),dimension(:,:),allocatable::sigs
-   integer,parameter::ndim=30
+   integer,parameter::ndim=50
    real(kr),parameter::half=0.5e0_kr
    real(kr),parameter::estp=4.1e0_kr
    real(kr),parameter::small=1.e-10_kr
