@@ -15,7 +15,7 @@ module reconm
    integer::lis,lis0,nfor,lrel,nver
    integer::lfw,mata,itype,lrp,lfi,lssf,lrx
    integer,parameter::nmtmax=10
-   integer::mtr4,mtr18,mtr(nmtmax),mtrt(nmtmax),nmtr
+   integer::mtr3,mtr4,mtr18,mtr(nmtmax),mtrt(nmtmax),nmtr
    integer::mt103,mt104,mt105,mt106,mt107
    integer::mpmin,mpmax,mdmin,mdmax,mtmin,mtmax,m3min,m3max,m4min,m4max
    integer::nxc,ngo,mtr522,ncards
@@ -511,6 +511,7 @@ contains
    igam=0
    nxn=0
    nmtr=0
+   mtr3=0
    mtr4=0
    mtr18=0
    mt103=0
@@ -564,6 +565,11 @@ contains
                mtr(nmtr)=18
                mtr18=1
             endif
+            if (mti.eq.3.and.mtr3.eq.0) then
+               nmtr=nmtr+1
+               mtr(nmtr)=3
+               mtr3=1
+            endif
             if (mti.ge.51.and.mti.le.91.and.mtr4.eq.0) then
                nmtr=nmtr+1
                mtr(nmtr)=4
@@ -601,9 +607,10 @@ contains
          nxn=nxn+1
          mti=nint(dict(i+3))
          if (nint(zain).le.1) then
-           if (mti.eq.3) then
+           if (mti.eq.3.and.mtr3.eq.0) then
              nmtr=nmtr+1
              mtr(nmtr)=3
+             mtr3=1
            endif
          endif
       else if (mfi.eq.13) then
