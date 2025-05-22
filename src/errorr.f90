@@ -5923,13 +5923,14 @@ contains
       b(2)=awr
       ! pass iverf on to covr
       b(3)=iverf
-      b(4)=0
+      b(4)=irelco
       b(5)=-11
       b(6)=0
       call contio(0,nout,0,b,nb,nw)
       b(1)=tempin
       b(2)=0
       b(3)=ngn
+      b(4)=0
       nw=6
       ngnp1=ngn+1
       do i=1,ngnp1
@@ -6094,13 +6095,14 @@ contains
       b(1)=za
       b(2)=awr
       b(3)=iverf
-      b(4)=0
+      b(4)=irelco
       b(5)=-12
       b(6)=0
       call contio(0,nout,0,b,nb,nw)
       b(1)=tempin
       b(2)=0
       b(3)=ngn
+      b(4)=0
       nw=6
       ngnp1=ngn+1
       do i=1,ngnp1
@@ -7837,7 +7839,7 @@ contains
       b(1)=za
       b(2)=awr
       b(3)=iverf
-      b(4)=0
+      b(4)=irelco
       b(5)=-11
       if (mfcov.eq.40) b(5)=-14
       b(6)=0
@@ -7845,6 +7847,7 @@ contains
       b(1)=tempin
       b(2)=0
       b(3)=ngn
+      b(4)=0
       nw=6
       ngnp1=ngn+1
       do i=1,ngnp1
