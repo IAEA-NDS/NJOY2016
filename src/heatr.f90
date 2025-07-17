@@ -2003,10 +2003,11 @@ contains
          if (ea.ge.zero) then
             ec=econ*zx*z*denom
             et=(awr+1-ax)*e*aw1fac
-            if (ea.lt.ec*(1-eps)) then
+            if (ea.gt.ec*(1+eps)) then
+              ! Just a message on the system console, but ea is not changed                                                             
               write(nsyse,'(/,a,1p,e11.4,a,i3,/,27x,a,e12.5,a,e12.5,a)') &
-              & ' ---message from capdam--- Ea < Vc at E=',e,' for mt=',mtd, &
-              '(',ea,' < ',ec,')'
+              & ' ---message from capdam--- Ea > Vc at E=',e,' for mt=',mtd, &
+              '(',ea,' > ',ec,')'
             endif
             do iq=1,nq
                er=(et-2*sqrt(et*ax*ea)*qp(iq)+ax*ea)*aw1fac
@@ -2967,8 +2968,8 @@ contains
    real(kr)::c(ncmax),b(nbmax)
    ! internals
    integer::matd,mfd,mtd,l,nb,nw,ik,nnt,nmu,imu,mf1,mt1,idis
-   integer::ip,ir,idisc,iraw,nne,ne,law,lang,lep,intl,ll
-   real(kr)::disc102,zp,zt,ap,at,ztt,pe,eihi,f,d,s,enext,ygam102(5000)
+   integer::ip,ir,idisc,iraw,nne,ne,law,lang,lep,intl
+   real(kr)::disc102,zp,zt,ap,at,ztt,pe,eihi,f,d,s,enext
    real(kr)::elo,ehi,flo,fhi,dlo,dhi
    character(60)::strng
    real(kr),parameter::small=1.e-10_kr
@@ -2976,7 +2977,7 @@ contains
    real(kr),parameter::zero=0
    save iraw,nne,ne,law,lang,lep,intl
    save elo,ehi,flo,fhi,dlo,dhi
-   save disc102,zp,ap,zt,at,ygam102
+   save disc102,zp,ap,zt,at
 
    !--initialize for this subsection when e=0.
    if (e.gt.zero) go to 300
@@ -3032,14 +3033,10 @@ contains
 
    iflag=0
    disc102=0
-   if (zap.eq.zero.and.law.eq.2.and.mth.eq.102.and.awp.ne.zero) then
+   if (zap.eq.zero) then
       iflag=1
       disc102=awp
       awp=0
-      nw=6+2*nint(c(5))+2*nint(c(6))
-      do ll=1,nw
-        ygam102(ll)=c(ll)
-      enddo
    endif
    ebar=0
    yld=0
@@ -3234,7 +3231,6 @@ contains
    else
       ztt=int(zat/1000)
       call tabsq6(fhi,dhi,c(iraw),law,ztt,awrt,ehi,c(1))
-      pe=1.0
    endif
    go to 305
 
@@ -3265,8 +3261,8 @@ contains
    return
 
    !--discrete relativistic capture gamma
-  430 call hgam102(e,ebar,dame,disc102,ygam102,irec,zp,ap,zt,at,pe)
-   yld=pe
+   430 call hgam102(e,ebar,dame,disc102,c,irec,zp,ap,zt,at)
+   yld=1
    return
 
    !--return zeros outside range of table
@@ -3291,7 +3287,7 @@ contains
    integer::nl,l,i,nd,na,nep,ncyc,iq,ia,nld,il,nmu,imu
    integer::nr,np,next,ibase,iint
    real(kr)::zp,zt,ap,at,summ,epnext,el,fl,dy,da,xm
-   real(kr)::epn,ym,test,en,f,f1,h,d,xl,yl,xx,yy
+   real(kr)::epn,ym,test,en,f,f1,h,d,xl,yl,xx,yy,xxe
    real(kr)::x2,zpp,ztt,b,er,t1,t2,thresh,beta
    real(kr)::afact,arec,u,e2,ul,fn,dl,hl,f2
    real(kr)::x(10),y(10,2)
@@ -3607,10 +3603,12 @@ contains
       do i=1,np
          xx=c(ibase+2*i-1)
          yy=c(ibase+2*i)
-         en=yy*xx
-         if (irec.gt.0) then
-            xx=(e-2*sqrt(e*awp*xx)*u+awp*xx)/(awrt+1-awp)
+         if (irec.gt.0) then ! recoil energy
+            xxe=(e-2*sqrt(e*awp*xx)*u+awp*xx)/(awrt+1-awp)
+         else
+            xxe=xx       
          endif
+         en=yy*xxe
          if (i.gt.1) then
             if (iint.eq.1) then
                h=h+(xx-xl)*el
@@ -3618,7 +3616,7 @@ contains
                h=h+(xx-xl)*(en+el)/2
             endif
          endif
-         f=yy*df(xx,zp,ap,zt,at)
+         f=yy*df(xxe,zp,ap,zt,at)
          if (i.gt.1) then
             if (iint.eq.1) then
                d=d+(xx-xl)*fl
@@ -4412,8 +4410,8 @@ contains
    endif
 
    !--finished
-   g=yield*yield*g/s
-   h=yield*yield*h/s
+   g=yield*g/s
+   h=yield*h/s
    return
    end subroutine tabsq6
 
@@ -5249,7 +5247,7 @@ contains
    return
    end subroutine hconvr
 
-   subroutine hgam102(e,ebar,dame,disc102,c,irec,zp,ap,zt,at,yld)
+   subroutine hgam102(e,ebar,dame,disc102,c,irec,zp,ap,zt,at)
    !-------------------------------------------------------------------
    ! Process the relativistic discrete gamma or its recoil as given in
    ! mf6/mt102 for H-1 in the ENDF/B-VII.1 & ENDF/B-VIII.0 using
@@ -5259,10 +5257,10 @@ contains
    use endf ! terpa
    ! externals
    integer::irec
-   real(kr)::e,ebar,dame,disc102,zp,ap,zt,at,yld
+   real(kr)::e,ebar,dame,disc102,zp,ap,zt,at
    real(kr)::c(*)
    ! internals
-   real(kr)::er,eg2,enext
+   real(kr)::er,eg2,enext,yld
    integer::idisc,ip,ir
 
    !--interpolate yield
@@ -5276,10 +5274,9 @@ contains
    else
       !--include recoil energy plus photon "kick" energy
       er=e/(awr+1)
-      eg2=yld*yld*disc102*disc102*rtm/2
+      eg2=yld*disc102*disc102*rtm/2
       ebar=er+eg2
       dame=df(ebar,zp,ap,zt,at)
-      yld=1.0
    endif
    return
    end subroutine hgam102
@@ -5301,7 +5298,7 @@ contains
    real(kr)::cerr,enxt,el,elow,ehigh,test,thresh
    real(kr)::egkr,ebar,egam,edam,damn,enext,enx,egk
    real(kr)::h,hk,cfix,eava,ebarp,xp,yp,hp,egamp,edamp
-   real(kr)::damep,hx,hxp,subtot,elo,ehi,x,y,ydum
+   real(kr)::damep,hx,hxp,subtot,elo,ehi,x,y
    real(kr)::c(30)
    integer::imt(30)
    real(kr),dimension(:),allocatable::scr
@@ -5439,7 +5436,7 @@ contains
    egkr=c1h
    nwd=nd
    if (egkr.eq.zero)&
-     call gambar(e,ebar,egam,edam,nendf,matd,mtx,d,nwd,ydum)
+     call gambar(e,ebar,egam,edam,nendf,matd,mtx,d,nwd)
    lp=l1h
    ik=ik+1
    if (iprint.eq.1.and.egkr.eq.zero) write(nsyso,&
@@ -5462,7 +5459,7 @@ contains
          enddo
       endif
       call capdam(e,damn,q,za,awr,mth)
-      call disgam(e,egam,edam,z,awr,ydum)
+      call disgam(e,egam,edam,z,awr)
       ipx=2
       irx=1
    endif
@@ -5498,16 +5495,16 @@ contains
    dame=0
    if (ik.eq.1) c(npkk)=0
    if (egkr.eq.zero)&
-     call gambar(e,ebar,egam,edam,nendf,matd,mtx,d,nwd,y)
+     call gambar(e,ebar,egam,edam,nendf,matd,mtx,d,nwd)
    if (mfd.eq.13) go to 170
    if (mth.ne.102) go to 164
    ! photon recoil correction
-   if (egkr.ne.zero) call disgam(egkr,egam,edam,z,awr,y)
-   h=egam*x
+   if (egkr.ne.zero) call disgam(egkr,egam,edam,z,awr)
+   h=egam*x*y
    hk=h
    c(npkk-1)=c(npkk-1)+x*y*ebar
    c(npkk)=c(npkk)+y*ebar
-   dame=edam*x
+   dame=edam*x*y
    if (ik.eq.nk) then
       if (idame.gt.0) then
          call capdam(e,damn,q,za,awr,mth)
@@ -5676,7 +5673,7 @@ contains
    return
    end subroutine gheat
 
-   subroutine gambar(e,ebar,esqb,esqd,nin,matd,mtd,a,nwamax,yld)
+   subroutine gambar(e,ebar,esqb,esqd,nin,matd,mtd,a,nwamax)
    !-------------------------------------------------------------------
    ! Calculate ebar for continuous spectra and the photon
    ! recoil correction for capture.
@@ -5685,7 +5682,7 @@ contains
    use endf ! provides endf routines and variables
    ! externals
    integer::nin,matd,mtd,nwamax
-   real(kr)::e,ebar,esqb,esqd,a(*),yld
+   real(kr)::e,ebar,esqb,esqd,a(*)
    ! internals
    integer::nb,nw,mfd,l,iz,lf,iend,j,il
    integer::jstart,jend,istart,ilo,ihi,nnt,ne,nne,inn,nbt
@@ -5790,10 +5787,10 @@ contains
    !--integrate at high and low energies.
    if (ilo.le.0) then
       call tabbar(flo,a(istart),lf)
-      if (mtd.eq.102) call tabsqr(glo,hlo,a(istart),lf,z,awr,yld)
+      if (mtd.eq.102) call tabsqr(glo,hlo,a(istart),lf,z,awr)
    endif
    call tabbar(fhi,a(jstart),lf)
-   if (mtd.eq.102) call tabsqr(ghi,hhi,a(jstart),lf,z,awr,yld)
+   if (mtd.eq.102) call tabsqr(ghi,hhi,a(jstart),lf,z,awr)
    ihi=1
 
    !--yes.  interpolate for mean energy.
@@ -5841,7 +5838,7 @@ contains
    return
    end subroutine gambar
 
-   subroutine tabsqr(g,h,a,law,z,awr,yld)
+   subroutine tabsqr(g,h,a,law,z,awr)
    !-------------------------------------------------------------------
    ! Compute average of photon recoil energy from capture and
    ! corresponding damage energy for a tabulated section of File 15.
@@ -5849,7 +5846,7 @@ contains
    use endf ! provides terp1
    ! externals
    integer::law
-   real(kr)::g,h,a(*),z,awr,yld
+   real(kr)::g,h,a(*),z,awr
    ! internals
    integer::nr,np,ibase,ir,nbt,inn,i,j
    real(kr)::ein,rein,xl,yl,xh,yh,dx,x,y,xr,s
@@ -5897,17 +5894,17 @@ contains
          enddo
       endif
    enddo
-   g=yld*yld*g/s
-   h=yld*yld*h/s
+   g=g/s
+   h=h/s
    return
    end subroutine tabsqr
 
-   subroutine disgam(e,egam,edam,z,awr,y)
+   subroutine disgam(e,egam,edam,z,awr)
    !-------------------------------------------------------------------
    ! Compute recoil and damage energy of discrete capture photons.
    !-------------------------------------------------------------------
    ! externals
-   real(kr)::e,egam,edam,z,awr,y
+   real(kr)::e,egam,edam,z,awr
    ! internals
    real(kr),parameter::zero=0
 
@@ -5916,8 +5913,6 @@ contains
    else
       egam=e*e*rtm/2
       edam=df(egam,z,awr+1,z,awr)
-      egam=y*y*egam
-      edam=y*y*edam
    endif
    return
    end subroutine disgam
