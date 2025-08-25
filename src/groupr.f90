@@ -7641,7 +7641,7 @@ contains
          n=nint(tmp(ilo+5))
          ex=40
          if (ismooth.gt.0.and.jzap.eq.1.and.lep.eq.1.and.&
-             lang.eq.2.and.ndx.eq.0.and.tmp(ilo+6).le.emin.and.&
+             ndx.eq.0.and.tmp(ilo+6).le.emin.and.&
              tmp(ilo+7).gt.zero.and.tmp(ilo+6+ncyc).gt.ex) then
             fx=.8409
             cx=tmp(ilo+6+ncyc)*tmp(ilo+7)
@@ -7682,7 +7682,7 @@ contains
             enddo
             l=ilo+6+nx
          else if (ismooth.gt.0.and.jzap.eq.1.and.lep.eq.2.and.n.gt.3.and.&
-                  lang.eq.2.and.ndx.eq.0) then
+                  ndx.eq.0) then
              write(nsyso,'('' extending lin-lin as sqrt(E) below'',&
                &1p,e10.2,'' eV for E='',e10.2,'' eV'')')&
                tmp(ilo+6+ncyc),tmp(ilo+1)

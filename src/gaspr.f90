@@ -167,6 +167,7 @@ contains
             call moreio(nendf,0,0,a(ll),nb,nw)
             ll=ll+nw
          enddo
+         nw=ll-1
          if (izap.eq.1001) then
             l203=lsix
             do i=1,nw
@@ -270,7 +271,7 @@ contains
    idone=0
    do while (idone.eq.0)
       call contio(npend,0,0,b(1),nb,nw)
-      if (mth.gt.202.or.mth.eq.0) then
+      if (mth.gt.200.or.mth.eq.0) then
          idone=1
       else
          call tosend(npend,0,0,a(1))
@@ -948,7 +949,7 @@ contains
       i=i+1
       j=k-1+6*(i-1)
       if (nint(a(j+3)).gt.3) idone=1
-      if (nint(a(j+3)).eq.3.and.nint(a(j+4)).gt.202) idone=1
+      if (nint(a(j+3)).eq.3.and.nint(a(j+4)).gt.200) idone=1
    enddo
    if (idone.eq.0) then
       j=k-1+6*nx
@@ -1036,7 +1037,7 @@ contains
       call contio(nscr1,0,0,b(1),nb,nw)
       mfb=mfh
       mtb=mth
-      if (mth.gt.202.or.mth.eq.0) then
+      if (mth.gt.200.or.mth.eq.0) then
          idone=1
       else
          call contio(0,noutp,0,b(1),nb,nw)

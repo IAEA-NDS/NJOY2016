@@ -7056,7 +7056,7 @@ contains
    integer::n,ngn2,mtl,lmtold,nmtold,itp,ldlst,ldold
    integer::irpc,iupc
    integer,dimension(:),allocatable::lmt1,lmt2
-   real(kr)::egtjg,egtjgp,time,denom,epsvar
+   real(kr)::egtjg,egtjgp,time,denom
    character(60)::strng
    real(kr),dimension(:),allocatable::xmu
    real(kr),dimension(:),allocatable::alp
@@ -7575,11 +7575,10 @@ contains
                & ' ---message from covout--- negative variance for mt=',&
                &  mth,' in group=',ig
              write(nsyse,'(27x,a,1pe11.3)')'var=',scr(ibase+ip)
-             epsvar=max(abs(scr(ibase+ip)),epsvar0)
              if (irelco.ne.0) then
-               scr(ibase+ip)=epsvar
+               scr(ibase+ip)=epsvar0
              else
-               scr(ibase+ip)=epsvar*csig(ig,ix)*csig(ig,ix)
+               scr(ibase+ip)=epsvar0*csig(ig,ix)*csig(ig,ix)
              endif
              write(nsyse,'(27x,a,1pe10.3)')'reset to ',scr(ibase+ip)
            endif

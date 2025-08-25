@@ -2462,8 +2462,6 @@ contains
       btp=bt+delta
       i=i+1
       terpk=ska(i)+(be-bt)*(ska(i+1)-ska(i))/(btp-bt)
-   else
-      terpk=1
    endif
    return
    end function terpk
