@@ -214,7 +214,7 @@ contains
 
    !--alternate name when processing incident charged particle files
    if (izai.gt.1) then
-      if (mt.gt.3) then
+      if (mt.gt.3.and.mt.ne.18) then
         if (izai.eq.1001) then
           name(1:2)='(p'
         elseif (izai.eq.1002) then
