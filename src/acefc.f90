@@ -6656,6 +6656,7 @@ contains
    real(kr),allocatable,dimension(:)::xxs,yys
    real(kr),parameter::emev=1.e6_kr
    real(kr),parameter::fm=1.e-12_kr
+   real(kr),parameter::small=1.e-14_kr
 
    !--allocate scratch storage area
    allocate(xxs(ne))
@@ -6694,15 +6695,16 @@ contains
       ltp=nint(scr(lld+2))
       scr(lld+3)=lidp
       nl=nint(scr(lld+5))
-      ien=1
-      do while (xss(esz+ien+1).lt.e.and.ien.lt.nes)
-        ien=ien+1
-      enddo
-      f=(xss(esz+ien+1)-e)/(xss(esz+ien+1)-xss(esz+ien))
-      xelas=xss(esz+3*nes+ien)*f+xss(esz+3*nes+ien+1)*(1-f)
       if (ltp.lt.12) then
+         xelas=1
          call ptlegc(scr(lld),awi,izai,awr,nint(za),spi)
       else
+         ien=1
+         do while (xss(esz+ien+1).lt.e.and.ien.lt.nes)
+           ien=ien+1
+         enddo
+         f=(xss(esz+ien+1)-e)/(xss(esz+ien+1)-xss(esz+ien))
+         xelas=xss(esz+3*nes+ien)*f+xss(esz+3*nes+ien+1)*(1-f)
          call pttabc(scr(lld),awi,izai,awr,nint(za),spi,xelas)
       endif
       nl=nint(scr(lld+5))
@@ -6740,7 +6742,7 @@ contains
                   signi=(ratr-1)*sigc
                else
                   signi=pmu-sigc
-                  if (signi.lt.-sigc) signi=-sigc
+                  if (signi.le.-sigc) signi=-sigc*(1-small)
                endif
                ratr=(sigc+signi)/sigc
                itwo=1
@@ -8381,13 +8383,13 @@ contains
     real(kr),parameter::umax=.995e0_kr
     real(kr),parameter::tol=0.005e0_kr
     real(kr),parameter::tol2=2e0_kr
-    real(kr),parameter::hmax=0.25e0_kr
-    real(kr),parameter::hmin=0.0002e0_kr
-    real(kr),parameter::sigmin=1.0e-20_kr
+    real(kr),parameter::hmax=0.20e0_kr
+    real(kr),parameter::hmin=0.01e0_kr
+    real(kr),parameter::epsig=1.0e-14_kr
     integer::ltp,law,nl,i,j,i2s,l,k,lidp,nostop,iconu
     real(kr)::ai,at,zi,zt,ee,c1,c2,wn,eta,wn2,eta2
-    real(kr)::e,u1,sig1,sigc1,uni1,pni1,u2,sig2,sigc2,uni2,pni2
-    real(kr)::um,sigm,sigcm,pnum,sigl,sigcmin,sigcmax,h,dy
+    real(kr)::e,u1,sig1,sigc1,uni1,pni1,r1,u2,sig2,sigc2,uni2,pni2,r2
+    real(kr)::um,sigm,sigcm,pnum,rm,sigl,sigcmin,sigcmax,h,dy,r,rmin,rmax
     real(kr)::x(kmax),y(kmax),z(kmax)
     real(kr),dimension(:),allocatable::uu,pni
 
@@ -8397,14 +8399,24 @@ contains
     lidp=nint(c(4))
     law=ltp-10
     nl=nint(c(6))
-    allocate(uu(nl),pni(nl))
-    j=6
-    do i=1,nl
-      j=j+1
-      uu(i)=c(j)
-      j=j+1
-      pni(i)=c(j)
-    enddo
+    if (lidp.eq.1.and.c(7).ge.zero) then
+      allocate(uu(2*nl-1),pni(2*nl-1))
+      do i=nl,2,-1
+        uu(nl-i+1)=-c(5+2*i)
+        pni(nl-i+1)=c(6+2*i)
+      enddo
+      do i=1,nl
+        uu(i+nl-1)=c(5+2*i)
+        pni(i+nl-1)=c(6+2*i)
+      enddo
+      nl=2*nl-1
+    else
+      allocate(uu(nl),pni(nl))
+      do i=1,nl
+        uu(i)=c(5+2*i)
+        pni(i)=c(6+2*i)
+      enddo
+    endif
     if (uu(1).le.-one) then
       if (lidp.eq.1) then
         if (-umax.lt.uu(2)) then
@@ -8429,6 +8441,16 @@ contains
       uu(nl)=u2
       pni(nl)=sig2
     endif
+    pni1=zero
+    do i=2,nl
+      pni1=pni1+gral(uu(i-1),pni(i-1),uu(i),pni(i),uu(i-1),uu(i),law)
+    enddo
+    if (pni1.gt.zero) then
+      if (lidp.eq.1) pni1=half*pni1
+      do i=1,nl
+        pni(i)=pni(i)/pni1
+      enddo
+    endif
     i2s=nint(2*spi)
     ai=awp*amassn
     at=awr*amassn
@@ -8452,7 +8474,8 @@ contains
            ((-1)**i2s)/(two*spi+one)*cos(eta*log((one+u1)/(one-u1))))
     endif
     sig1=sigc1+sni*pni1
-    if (sig1.lt.sigmin) sig1=sigmin
+    if (sig1.le.zero) sig1=sigc1*epsig
+    r1=(sig1/sigc1-one)
     l=7
     c(l)=u1
     l=l+1
@@ -8469,29 +8492,35 @@ contains
              ((-1)**i2s)/(two*spi+one)*cos(eta*log((one+u2)/(one-u2))))
       endif
       sig2=sigc2+sni*pni2
-      if (sig2.lt.sigmin) sig2=sigmin
+      if (sig2.le.zero) sig2=sigc2*epsig
+      r2=(sig2/sigc2-one)
+      rmin=min(r1,r2)
+      rmax=max(r1,r2)
       k=0
       nostop=1
       do while (nostop.eq.1)
         um=half*(u2+u1)
         h=u2-u1
-        if (um.gt.u1.and.um.lt.u2.and.h.gt.hmin.and.sig1.gt.sigmin.and.sig2.gt.sigmin.and.k.lt.kmax) then
+        if (um.gt.u1.and.um.lt.u2.and.h.gt.hmin.and.abs(sig1-sig2).gt.tol*sig1.and.k.lt.kmax) then
           ! calculate scattering at midpoint
           sigcm=zero
           if (lidp.eq.0) then
             sigcm=eta2/(wn2*(one-um)*(one-um))
           elseif (lidp.eq.1) then
             sigcm=two*eta2/(wn2*(one-um*um))*((one+um*um)/(one-um*um) + &
-                ((-1)**i2s)/(two*spi+one)*cos(eta*log((one+um)/(one-um))))
+                  ((-1)**i2s)/(two*spi+one)*cos(eta*log((one+um)/(one-um))))
           endif
           call terp1(uni1,pni1,uni2,pni2,um,pnum,law)
-          sigm=sigcm+sni*pnum
-          if (sigm.lt.sigmin) sigm=sigmin
+          rm=sni*pnum/sigcm
+          if (rm.le.-one) rm=-one+epsig
+          call terp1(uni1,r1,uni2,r2,um,r,law)
+          if (rm.lt.rmin.or.rm.gt.rmax.or.(rm.lt.zero.and.rm.lt.r).or.(rm.gt.zero.and.rm.gt.r)) rm=r
+          sigm=sigcm*(one+rm)
           sigl=half*(sig1+sig2)
           dy=abs(sigl-sigm)
           sigcmin=min(sigc1,sigc2)
           sigcmax=max(sigc1,sigc2)
-          if ((dy.le.tol*abs(sigm).and.sigcmax.le.tol2*sigcmin.and.h.le.hmax).or.sigm.le.sigmin) then
+          if ((dy.le.tol*abs(sigm).and.sigcmax.le.tol2*sigcmin.and.h.le.hmax).or.sigm.le.epsig*sigcm) then
             iconu=1
           else
             iconu=0
@@ -8535,20 +8564,9 @@ contains
       sigc1=sigc2
       uni1=uni2
       pni1=pni2
+      r1=r2
     enddo
     nl=(l-6)/2
-    if (lidp.eq.1.and.c(7).ge.zero) then
-      do i=nl,1,-1
-        c(3+2*nl+2*i)=c(5+2*i)
-        c(4+2*nl+2*i)=c(6+2*i)
-      enddo
-      do i=nl,2,-1
-        c(7+2*nl-2*i)=-c(3+2*nl+2*i)
-        c(8+2*nl-2*i)=c(4+2*nl+2*i)
-      enddo
-      nl=2*nl-1
-      l=6+2*nl
-    endif
     c(5)=l
     c(6)=nl
     deallocate(uu,pni)
