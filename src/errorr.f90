@@ -3626,6 +3626,14 @@ contains
       do i=1,nek
          if (ee.ge.ek(i).and.ee.lt.ek(i+1)) k=i
       enddo
+      if (k.eq.0) then
+        if (ee.ge.ek(nek+1)) then
+          k=nek
+        else
+          write(strng1,'(''energy issue for e='',1p,e13.5)') ee
+          call error('rpxsam',strng1,' check ek energy grid')
+        endif
+      endif
       do n1=1,nmt
          do n2=1,nmt
             k2=0
@@ -3640,7 +3648,7 @@ contains
                  (ee-eel)*(sigp(k2)*wt+sigpl(k2)*wtl)/2
             endif
          enddo
-      enddo
+      enddo   
       do n1=1,nmt
          do n2=1,nmt
             k2=0
