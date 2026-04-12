@@ -7,7 +7,7 @@ module thermm
 
    ! global variables
    integer::nendf,nin,nout,nscr,nscr2
-   integer::matde,nbin,iprint,ncds,matdp,natom,ntemp,&
+   integer::matde,nbin,iprint,ncds,matdp,natom,ntemp,ngrid,&
      iinc,iform,ncdse
    real(kr)::za,awr,tol,emax
    real(kr)::sb,az,tevz,teff,sb2,az2,teff2
@@ -19,6 +19,9 @@ module thermm
 
    ! array for user temperatures
    real(kr),dimension(:),allocatable::tempr
+
+   ! array for user incident energy grid
+   real(kr),dimension(:),allocatable::egrid
 
    ! array for thermal elastic data
    real(kr),dimension(:),allocatable::fl
@@ -136,6 +139,15 @@ contains
    !                (for temperatures greater than 3000,
    !                emax and the energy grid are scaled by
    !                temp/3000.  free gas only.)
+   !     mgrid      number of energies in the incident
+   !                energy grid for inelastic reaction
+   !                mgrid <= 0, use the default energy grid
+   !                mgrid  > 0, use the incident energy grid
+   !                provided by the user in the next cards (card 5)
+   !  card 5
+   !     egrid      incident energy grid in eV provided by user
+   !                Note: egrid(1).ge.1.0e-5
+   !
    !
    !       nendf can be ENDF6 format (e.g., from leapr) while
    !       nin and nout are ENDF4 or 5 format, if desired.
@@ -147,10 +159,10 @@ contains
    ! locals
    integer::icoh,i,icopy,idis,nb,nw,iold,inew,indexc,indexi,mtref
    integer::iverp,itemp,nwb,it,ntape,nex,ne,np,isave
-   integer::lthr
+   integer::lthr,mgrid
    real(kr)::e,enext,emaxs,time,sz2,t,templ,s,temp
    real(kr)::ex(2)
-   real(kr),dimension(:),allocatable::eftemp,eftmp2
+   real(kr),dimension(:),allocatable::eftemp,eftmp2,euser
    real(kr),parameter::s1099=3.76e0_kr
    real(kr),parameter::a1099=15.86e0_kr
    real(kr),parameter::s1095=4.74e0_kr
@@ -160,6 +172,28 @@ contains
    real(kr),parameter::small=1.e-10_kr
    real(kr),parameter::up=1.00001e0_kr
    real(kr),parameter::zero=0.e0_kr
+   integer,parameter::ngrid0=118
+   real(kr),dimension(ngrid0),parameter::egrid0=(/&
+    1.e-5_kr,1.78e-5_kr,2.5e-5_kr,3.5e-5_kr,5.0e-5_kr,7.0e-5_kr,1.e-4_kr,&
+    1.26e-4_kr,1.6e-4_kr,2.0e-4_kr,.000253e0_kr,.000297e0_kr,.000350e0_kr,&
+    .00042e0_kr,.000506e0_kr,.000615e0_kr,.00075e0_kr,.00087e0_kr,&
+    .001012e0_kr,.00123e0_kr,.0015e0_kr,.0018e0_kr,.00203e0_kr,.002277e0_kr,&
+    .0026e0_kr,.003e0_kr,.0035e0_kr,.004048e0_kr,.0045e0_kr,.005e0_kr,&
+    .0056e0_kr,.006325e0_kr,.0072e0_kr,.0081e0_kr,.009108e0_kr,.01e0_kr,&
+    .01063e0_kr,.0115e0_kr,.012397e0_kr,.0133e0_kr,.01417e0_kr,.015e0_kr,&
+    .016192e0_kr,.0182e0_kr,.0199e0_kr,.020493e0_kr,.0215e0_kr,.0228e0_kr,&
+    .0253e0_kr,.028e0_kr,.030613e0_kr,.0338e0_kr,.0365e0_kr,.0395e0_kr,&
+    .042757e0_kr,.0465e0_kr,.050e0_kr,.056925e0_kr,.0625e0_kr,.069e0_kr,&
+    .075e0_kr,.081972e0_kr,.09e0_kr,.096e0_kr,.1035e0_kr,.111573e0_kr,&
+    .120e0_kr,.128e0_kr,.1355e0_kr,.145728e0_kr,.160e0_kr,.172e0_kr,&
+    .184437e0_kr,.20e0_kr,.2277e0_kr,.2510392e0_kr,.2705304e0_kr,&
+    .2907501e0_kr,.3011332e0_kr,.3206421e0_kr,.3576813e0_kr,.39e0_kr,&
+    .4170351e0_kr,.45e0_kr,.5032575e0_kr,.56e0_kr,.625e0_kr,&
+    .70e0_kr,.78e0_kr,.86e0_kr,.95e0_kr,1.05e0_kr,1.16e0_kr,1.28e0_kr,&
+    1.42e0_kr,1.55e0_kr,1.70e0_kr,1.855e0_kr,2.02e0_kr,2.18e0_kr,&
+    2.36e0_kr,2.59e0_kr,2.855e0_kr,3.12e0_kr,3.42e0_kr,3.75e0_kr,&
+    4.07e0_kr,4.46e0_kr,4.90e0_kr,5.35e0_kr,5.85e0_kr,6.40e0_kr,&
+    7.00e0_kr,7.65e0_kr,8.40e0_kr,9.15e0_kr,9.85e0_kr,10.00e0_kr/)
 
    !--initialize
    call timer(time)
@@ -187,6 +221,7 @@ contains
    call openz(nout,1)
    iprint=0
    ntemp=1
+   mgrid=0
    read(nsysi,*) matde,matdp,nbin,ntemp,iinc,icoh,iform,natom,mtref,iprint
    if (mtref.lt.221.or.mtref.gt.250)&
      call error('thermr','illegal reference mt.',' ')
@@ -195,11 +230,46 @@ contains
    allocate(eftmp2(ntemp))
    read(nsysi,*) (tempr(i),i=1,ntemp)
    do i=1,ntemp
-      eftemp(i)=0
-      eftmp2(i)=0
-      if (matde.eq.0) eftemp(i)=tempr(i)
+     eftemp(i)=0
+     eftmp2(i)=0
+     if (matde.eq.0) eftemp(i)=tempr(i)
    enddo
-   read(nsysi,*) tol,emax
+   read(nsysi,*) tol,emax,mgrid
+   if (mgrid.le.0) then
+     ngrid=ngrid0
+     allocate(egrid(ngrid))
+     do i=1,ngrid
+       egrid(i)=egrid0(i)
+     enddo
+   else
+     allocate(euser(mgrid))
+     read(nsysi,*) (euser(i),i=1,mgrid)
+     if (euser(1).lt.egrid0(1)) euser(1)=egrid0(1)
+     do i=2,mgrid
+       if (euser(i).le.euser(i-1)) then
+         call error('thermr','incorrect incident energy grid',' ')
+       endif
+     enddo
+     it=ngrid0+1
+     do i=1,ngrid0
+       if (euser(mgrid).lt.egrid0(i)) then
+         it=i
+         exit
+       endif
+     enddo
+     ngrid=mgrid+ngrid0-it+1
+     allocate(egrid(ngrid))
+     do i=1,mgrid
+       egrid(i)=euser(i)
+     enddo
+     if (mgrid.lt.ngrid) then
+       do i=mgrid+1,ngrid
+         egrid(i)=egrid0(it+i-mgrid-1)
+       enddo
+     endif
+     it=0
+     deallocate(euser)
+   endif
 
    !--check for endf-6 format data
    call tpidio(nendf,0,0,scr,nb,nw)
@@ -227,7 +297,6 @@ contains
       if (matde.eq.1095) az2=a1095
       sb2=sz2
       if (az2.ne.zero) sb2=sz2*((az2+1)/az2)**2
-
          !--default effective temperatures to standard values if
          !--available, otherwise set them to the material temperature
          if (matde.ne.0) then
@@ -263,8 +332,12 @@ contains
      (tempr(i),i=2,ntemp)
    write(nsyso,'(&
      &'' tolerance ............................ '',1p,e10.4/&
-     &'' max energy for thermal treatment ..... '',e10.4)')&
-     tol,emax
+     &'' max energy for thermal treatment ..... '', e10.4)')&
+       tol,emax
+   if (mgrid.gt.0) then
+     write(nsyso,'(/'' incident energy grid built from user input.'')')
+   endif
+
    if (iinc.eq.2.and.iverf.lt.6) then
       write(nsyso,'(/&
         &'' parameters for sct app.''/&
@@ -465,6 +538,7 @@ contains
    deallocate(tempr)
    deallocate(eftemp)
    deallocate(eftmp2)
+   deallocate(egrid)
    if (allocated(esi)) deallocate(esi)
    if (allocated(xsi)) deallocate(xsi)
    if (allocated(fl)) deallocate(fl)
@@ -1572,7 +1646,6 @@ contains
    real(kr)::b,diff,enow,ep,sabmin,tev,ylast
    real(kr)::u,xl,yl,sum
    real(kr)::tone,elo
-   integer,parameter::ngrid=118
    integer,parameter::nlmax=65
    integer,parameter::nemax=5000
    integer,parameter::mumax=300
@@ -1584,27 +1657,6 @@ contains
    real(kr)::uj(mumax),sj(mumax)
    real(kr),dimension(:),allocatable::alpha,beta
    real(kr),dimension(:,:),allocatable::sab
-   real(kr),dimension(ngrid),parameter::egrid=(/&
-     1.e-5_kr,1.78e-5_kr,2.5e-5_kr,3.5e-5_kr,5.0e-5_kr,7.0e-5_kr,1.e-4_kr,&
-     1.26e-4_kr,1.6e-4_kr,2.0e-4_kr,.000253e0_kr,.000297e0_kr,.000350e0_kr,&
-     .00042e0_kr,.000506e0_kr,.000615e0_kr,.00075e0_kr,.00087e0_kr,&
-     .001012e0_kr,.00123e0_kr,.0015e0_kr,.0018e0_kr,.00203e0_kr,.002277e0_kr,&
-     .0026e0_kr,.003e0_kr,.0035e0_kr,.004048e0_kr,.0045e0_kr,.005e0_kr,&
-     .0056e0_kr,.006325e0_kr,.0072e0_kr,.0081e0_kr,.009108e0_kr,.01e0_kr,&
-     .01063e0_kr,.0115e0_kr,.012397e0_kr,.0133e0_kr,.01417e0_kr,.015e0_kr,&
-     .016192e0_kr,.0182e0_kr,.0199e0_kr,.020493e0_kr,.0215e0_kr,.0228e0_kr,&
-     .0253e0_kr,.028e0_kr,.030613e0_kr,.0338e0_kr,.0365e0_kr,.0395e0_kr,&
-     .042757e0_kr,.0465e0_kr,.050e0_kr,.056925e0_kr,.0625e0_kr,.069e0_kr,&
-     .075e0_kr,.081972e0_kr,.09e0_kr,.096e0_kr,.1035e0_kr,.111573e0_kr,&
-     .120e0_kr,.128e0_kr,.1355e0_kr,.145728e0_kr,.160e0_kr,.172e0_kr,&
-     .184437e0_kr,.20e0_kr,.2277e0_kr,.2510392e0_kr,.2705304e0_kr,&
-     .2907501e0_kr,.3011332e0_kr,.3206421e0_kr,.3576813e0_kr,.39e0_kr,&
-     .4170351e0_kr,.45e0_kr,.5032575e0_kr,.56e0_kr,.625e0_kr,&
-     .70e0_kr,.78e0_kr,.86e0_kr,.95e0_kr,1.05e0_kr,1.16e0_kr,1.28e0_kr,&
-     1.42e0_kr,1.55e0_kr,1.70e0_kr,1.855e0_kr,2.02e0_kr,2.18e0_kr,&
-     2.36e0_kr,2.59e0_kr,2.855e0_kr,3.12e0_kr,3.42e0_kr,3.75e0_kr,&
-     4.07e0_kr,4.46e0_kr,4.90e0_kr,5.35e0_kr,5.85e0_kr,6.40e0_kr,&
-     7.00e0_kr,7.65e0_kr,8.40e0_kr,9.15e0_kr,9.85e0_kr,10.00e0_kr/)
    real(kr),parameter::unity=1.0e0_kr
    real(kr),parameter::sabflg=-225.e0_kr
    real(kr),parameter::eps=1.e-4_kr
