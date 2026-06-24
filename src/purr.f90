@@ -1940,7 +1940,7 @@ contains
          els(itemp,ie)=spot
       enddo
    enddo
-   call fsort(es,xs,ne,1)
+   call fsort(es,ne)
 
    !--loop over sequences
    do 170 k=1,nseq0
@@ -2351,7 +2351,7 @@ contains
            & ' for ladder=1 ',ntot,' (',dble(ntot)/dble(ne)*100.,&
            & '%) samples with total <',binmin
       endif
-      call fsort(es,xs,ne,1)
+      call fsort(es,ne)
       tmin(itemp)=es(1)
       tmax(itemp)=es(ne)
       nebin=int((nsamp-ntot)/(nbin-10+1.76))
@@ -2888,7 +2888,7 @@ contains
    return
    end subroutine uw2
 
-   subroutine fsort(x,y,n,i)
+   subroutine fsort(x,n)
    !-------------------------------------------------------------------
    ! Floating-point sort routine.
    ! Sort x and y into increasing x order.
@@ -2900,20 +2900,45 @@ contains
    integer::k,j
    real(kr)::xt,yt
 
-   do  k=1,n-1
-      do j=k+1,n
-         if (x(k).gt.x(j)) then
-            xt=x(k)
-            yt=y(k)
-            x(k)=x(j)
-            y(k)=y(j)
-            x(j)=xt
-            y(j)=yt
-         endif
-      enddo
-   enddo
+   if (n <= 1) return
+   call quicksort(x,1,n)
+     
    return
    end subroutine fsort
+
+   recursive subroutine quicksort(a,l,r)
+    real(kr), intent(inout) :: a(:)
+    integer, intent(in) :: l, r
+    integer :: i, j
+    real(kr) :: pivot, ta
+
+    i = l
+    j = r
+    pivot = a((l+r)/2)
+
+    do
+        do while (a(i) < pivot)
+            i = i + 1
+        end do
+        do while (a(j) > pivot)
+            j = j - 1
+        end do
+
+        if (i <= j) then
+            ta = a(i)
+            a(i) = a(j)
+            a(j) = ta
+
+            i = i + 1
+            j = j - 1
+        end if
+
+        if (i > j) exit
+     end do
+
+     if (l < j) call quicksort(a,l,j)
+     if (i < r) call quicksort(a,i,r)
+   end subroutine quicksort
 
    subroutine fsrch(x,xarray,n,i,k)
    !-------------------------------------------------------------------

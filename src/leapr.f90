@@ -3081,7 +3081,7 @@ contains
    scr(6)=6
    call contio(0,nout,nprnt,scr(1),nb,nw)
    scr(1)=1
-   scr(2)=0
+   scr(2)=sigfig(therm*beta(nbeta),7,0)
    scr(3)=0
    scr(4)=0
    scr(5)=12
