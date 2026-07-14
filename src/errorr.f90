@@ -3626,6 +3626,14 @@ contains
       do i=1,nek
          if (ee.ge.ek(i).and.ee.lt.ek(i+1)) k=i
       enddo
+      if (k.eq.0) then
+        if (ee.ge.ek(nek+1)) then
+          k=nek
+        else
+          write(strng1,'(''energy issue for e='',1p,e13.5)') ee
+          call error('rpxsam',strng1,' check ek energy grid')
+        endif
+      endif
       do n1=1,nmt
          do n2=1,nmt
             k2=0
@@ -3640,7 +3648,7 @@ contains
                  (ee-eel)*(sigp(k2)*wt+sigpl(k2)*wtl)/2
             endif
          enddo
-      enddo
+      enddo   
       do n1=1,nmt
          do n2=1,nmt
             k2=0
@@ -5923,13 +5931,14 @@ contains
       b(2)=awr
       ! pass iverf on to covr
       b(3)=iverf
-      b(4)=0
+      b(4)=irelco
       b(5)=-11
       b(6)=0
       call contio(0,nout,0,b,nb,nw)
       b(1)=tempin
       b(2)=0
       b(3)=ngn
+      b(4)=0
       nw=6
       ngnp1=ngn+1
       do i=1,ngnp1
@@ -6094,13 +6103,14 @@ contains
       b(1)=za
       b(2)=awr
       b(3)=iverf
-      b(4)=0
+      b(4)=irelco
       b(5)=-12
       b(6)=0
       call contio(0,nout,0,b,nb,nw)
       b(1)=tempin
       b(2)=0
       b(3)=ngn
+      b(4)=0
       nw=6
       ngnp1=ngn+1
       do i=1,ngnp1
@@ -7054,7 +7064,7 @@ contains
    integer::n,ngn2,mtl,lmtold,nmtold,itp,ldlst,ldold
    integer::irpc,iupc
    integer,dimension(:),allocatable::lmt1,lmt2
-   real(kr)::egtjg,egtjgp,time,denom,epsvar
+   real(kr)::egtjg,egtjgp,time,denom
    character(60)::strng
    real(kr),dimension(:),allocatable::xmu
    real(kr),dimension(:),allocatable::alp
@@ -7573,11 +7583,10 @@ contains
                & ' ---message from covout--- negative variance for mt=',&
                &  mth,' in group=',ig
              write(nsyse,'(27x,a,1pe11.3)')'var=',scr(ibase+ip)
-             epsvar=max(abs(scr(ibase+ip)),epsvar0)
              if (irelco.ne.0) then
-               scr(ibase+ip)=epsvar
+               scr(ibase+ip)=epsvar0
              else
-               scr(ibase+ip)=epsvar*csig(ig,ix)*csig(ig,ix)
+               scr(ibase+ip)=epsvar0*csig(ig,ix)*csig(ig,ix)
              endif
              write(nsyse,'(27x,a,1pe10.3)')'reset to ',scr(ibase+ip)
            endif
@@ -7837,7 +7846,7 @@ contains
       b(1)=za
       b(2)=awr
       b(3)=iverf
-      b(4)=0
+      b(4)=irelco
       b(5)=-11
       if (mfcov.eq.40) b(5)=-14
       b(6)=0
@@ -7845,6 +7854,7 @@ contains
       b(1)=tempin
       b(2)=0
       b(3)=ngn
+      b(4)=0
       nw=6
       ngnp1=ngn+1
       do i=1,ngnp1

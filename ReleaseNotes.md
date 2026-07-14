@@ -1,7 +1,26 @@
 # Release Notes&mdash;NJOY2016
 Given here are some release notes for NJOY2016. Each release is made through a formal [Pull Request](https://github.com/njoy/NJOY2016/pulls) made on GitHub. There are links in this document that point to each of those Pull Requests, where you can see in great details the changes that were made. Often the Pull Requests are made in response to an [issue](https://github.com/njoy/NJOY2016/issues). In such cases, links to those issues are also given.
 
-## NJOY2016.77
+## [NJOY2016.79](https://github.com/njoy/NJOY2016/pull/395)
+This update fixes the following issues:
+  - GROUPR output now correctly distinguishes between level numbers and isomeric numbers when extracting nuclide production.
+  - LEAPR now sets the EMAX value in MF1 MT451 to be equal to the B(4) value in MF7 MT4.
+  - PURR now uses quicksort instead of bubble sort, which leads to a significant speedup in this module. This change should have no effect on the values of the probability table.
+  - ACER now correctly handles discrete primary gammas in File 6 for the ENDF/B-VIII.1 release, which uses a different format than JEFF and JENDL libraries.
+
+In addition, this update added the following features and changes:
+  - Added optional card9a to GROUPR to support extracting MF=9 and MF=10 production channels with resulting level numbers greater than 9.
+  - Two group structures were added to GROUPR (the apollo 99-group structure and the ecco 1962-group structure). The shem epm 295-group structure and shem cea/epm 361-group structure were updated as well.
+
+The cmake files were simplified to allow for the use of LLVM's flang compiler. A minor update was mode to GROUPR as well to allow for compilation with LLVM flang.
+
+## [NJOY2016.78](https://github.com/njoy/NJOY2016/pull/361)
+This update fixes the following issues:
+  - Tape numbers are now allowed to go up to 999 instead of 99 previously. This change was made to accommodate processing of the light water evaluation in ENDF/B-VIII.1 that has 94 temperatures. Test 84 was added to detect this issue in the future.
+  - A few updates were made related to array sizes and array allocation.
+  - Adding a message to signal malformed ENDF files when l-value lists for SLBW/MLBW and Reich-Moore have nrs=0 (no resonances given for this l value).
+
+## [NJOY2016.77](https://github.com/njoy/NJOY2016/pull/347)
 This update fixes the following issues:
   - Background cross section values for reactions other than total, elastic, fission and capture were not handled properly in the unresolved resonance region. The background for total, elastic, fission and capture is integrated into the unresolved resonance cross section values in the genunr subroutine. In the emerge subroutine, the background in the unresolved resonance region was therefore zeroed out for any resonance reaction. This has never been an issue but now we have LRF=7 evaluations that can define reactions other than total, elastic, fission and capture. Test 82 was added to detect this issue in the future.
   - Increased the size of internal arrays in VIEWR.

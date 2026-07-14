@@ -12,10 +12,10 @@ module reconm
    real(kr)::zai,el,eh,err,errmax,errint,za,awr,tempr,q18
    real(kr)::tempi
    real(kr)::elis,sta,efmax
-   integer::lis,lis0,nfor,lrel,nver
+   integer::lis,lis0,nfor,lrel,nver,nsub
    integer::lfw,mata,itype,lrp,lfi,lssf,lrx
    integer,parameter::nmtmax=10
-   integer::mtr4,mtr18,mtr(nmtmax),mtrt(nmtmax),nmtr
+   integer::mtr3,mtr4,mtr18,mtr(nmtmax),mtrt(nmtmax),nmtr
    integer::mt103,mt104,mt105,mt106,mt107
    integer::mpmin,mpmax,mdmin,mdmax,mtmin,mtmax,m3min,m3max,m4min,m4max
    integer::nxc,ngo,mtr522,ncards
@@ -131,7 +131,7 @@ contains
    use samm   ! provides s2sammy,desammy
    use mainio ! provides nsysi,nsyso,nsyse
    ! internals
-   integer::i,nb,nw,nrtot,nwscr,n6,nx,nsub,iold,inew,ngrid
+   integer::i,nb,nw,nrtot,nwscr,n6,nx,iold,inew,ngrid
    integer::nendf,npend,nscr1,nscr2,nscr3,nscr4,intunr
    real(kr)::time
    real(kr)::rlabel(17),z(17)
@@ -372,7 +372,7 @@ contains
          call emerge(nscr1,nscr2,ngrid,nscr3,nrtot,iold,inew,nscr4)
 
          !--write output tape.
-         call recout(iold,nscr4,nrtot,nsub)
+         call recout(iold,nscr4,nrtot)
 
          !--deallocate arrays for this material
          deallocate(card)
@@ -509,8 +509,10 @@ contains
 
    !--select desired redundant reactions.
    igam=0
+   maxres=0
    nxn=0
    nmtr=0
+   mtr3=0
    mtr4=0
    mtr18=0
    mt103=0
@@ -546,23 +548,25 @@ contains
       if (nmtr.ge.nmtmax)&
         call error('anlyzd','too many redundant reactions.',' ')
       mfi=nint(dict(i+2))
-      if (mfi.eq.2) then
-         mti=nint(dict(i+3))
-         if (mti.eq.151) maxres=12*nint(dict(i+4))
+      mti=nint(dict(i+3))
+      if (mfi.eq.2.and. mti.eq.151) then
+          maxres=12*nint(dict(i+4))
       else if (mfi.eq.3) then
          nxn=nxn+1
-         mti=nint(dict(i+3))
-         if (nint(zain).le.1) then
+         if (nsub.eq.10) then
             if (nmtr.eq.0) then
-              mtr(1)=1
-              nmtr=1
+               mtr(1)=1
+               nmtr=1
             endif
-         endif
-         if (nint(zain).eq.1) then
             if (mti.eq.19) then
                nmtr=nmtr+1
                mtr(nmtr)=18
                mtr18=1
+            endif
+            if (mti.eq.3.and.mtr3.eq.0) then
+               nmtr=nmtr+1
+               mtr(nmtr)=3
+               mtr3=1
             endif
             if (mti.ge.51.and.mti.le.91.and.mtr4.eq.0) then
                nmtr=nmtr+1
@@ -575,9 +579,9 @@ contains
                mt103=1
             endif
             if (mti.ge.mdmin.and.mti.le.mdmax.and.mt104.eq.0) then
-               nmtr=nmtr+1
-               mtr(nmtr)=104
-               mt104=1
+                nmtr=nmtr+1
+                mtr(nmtr)=104
+                mt104=1
             endif
             if (mti.ge.mtmin.and.mti.le.mtmax.and.mt105.eq.0) then
                nmtr=nmtr+1
@@ -589,22 +593,21 @@ contains
                mtr(nmtr)=106
                mt106=1
             endif
-            if (mti.ge.m4min.and.mti.le.m4max.and.mt107.eq.0) then
-               nmtr=nmtr+1
-               mtr(nmtr)=107
-               mt107=1
-            endif
-         endif
+           if (mti.ge.m4min.and.mti.le.m4max.and.mt107.eq.0) then
+              nmtr=nmtr+1
+              mtr(nmtr)=107
+              mt107=1
+           endif
+        endif
       else if (mfi.eq.10) then
          nxn=nxn+1
       else if (mfi.eq.12) then
          nxn=nxn+1
          mti=nint(dict(i+3))
-         if (nint(zain).le.1) then
-           if (mti.eq.3) then
-             nmtr=nmtr+1
-             mtr(nmtr)=3
-           endif
+         if (mti.eq.3.and.mtr3.eq.0) then
+           nmtr=nmtr+1
+           mtr(nmtr)=3
+           mtr3=1
          endif
       else if (mfi.eq.13) then
          nxn=nxn+1
@@ -612,11 +615,14 @@ contains
          nxn=nxn+1
          igam=1
          if (iverf.lt.6) then
+            nsub=3
             zain=0
             awin=0
          endif
-         if (nmtr.eq.0) mtr(1)=501
-         if (nmtr.eq.0) nmtr=1
+         if (nmtr.eq.0) then
+            mtr(1)=501
+            nmtr=1
+         endif
          if (mtr522.eq.0) then
             mti=nint(dict(i+3))
             if (mti.ge.534.and.mti.le.572) then
@@ -627,39 +633,27 @@ contains
          endif
       endif
    enddo
+   do i=1,nmtr
+      mtrt(i)=1000000
+   enddo
+   do i=1,nmtr
+      if (mtr(i).eq.1) mtrt(i)=1
+      if (mtr(i).eq.501) mtrt(i)=1
+   enddo
 
-   if (nmtr.gt.0) then
-      do i=1,nmtr
-         mtrt(i)=1000000
-      enddo
-      do i=1,nmtr
-         if (mtr(i).eq.1) mtrt(i)=1
-         if (mtr(i).eq.501) mtrt(i)=1
-      enddo
-
-      !--sort reactions into increasing order.
-      if (nmtr.gt.2) then
-         i2=nmtr-1
-         do i=2,i2
-            j1=i+1
-            do j=j1,nmtr
-               if (mtr(j).le.mtr(i)) then
-                  mtsave=mtr(i)
-                  mtr(i)=mtr(j)
-                  mtr(j)=mtsave
-               endif
-            enddo
+   !--sort reactions into increasing order.
+   if (nmtr.gt.2) then
+      i2=nmtr-1
+      do i=2,i2
+         j1=i+1
+         do j=j1,nmtr
+            if (mtr(j).le.mtr(i)) then
+               mtsave=mtr(i)
+               mtr(i)=mtr(j)
+               mtr(j)=mtsave
+            endif
          enddo
-      elseif (nmtr.eq.2) then
-         if (mtr(2).lt.mtr(1)) then
-            mtsave=mtr(1)
-            mtr(1)=mtr(2)
-            mtr(2)=mtsave
-         endif
-      endif
-   else
-      mtr(1)=0
-      mtrt(1)=0
+      enddo
    endif
 
    !--initialize new dictionary.
@@ -672,7 +666,7 @@ contains
    mts(1)=451
    ncs(1)=ncards+2
    nxc=1
-   if (igam.eq.1) return
+   if (igam.eq.1.or.maxres.eq.0) return
    mfs(2)=2
    mts(2)=151
    ncs(2)=4
@@ -921,6 +915,7 @@ contains
    real(kr),parameter::third=.333333333e0_kr
    real(kr),parameter::gxmin=1.0e-5_kr
    real(kr),parameter::zero=0
+   character::strng*60
    cwaven=sqrt(2*amassn*amu*ev)*1.e-12_kr/hbar
 
    !--check for energy-dependent scattering radius
@@ -970,9 +965,17 @@ contains
          if (jj.gt.maxres) call error('rdf2bw',&
            'res storage exceeded',' ')
       enddo
-      nrs=nint(res(jnow+5))
-      ncyc=nint(res(jnow+4))/nrs
       ll=nint(res(jnow+2))
+      nrs=nint(res(jnow+5))
+      ! some files are malformed and have a list record for l values without
+      ! resonances, issue a warning and move to the next l value
+      if (nrs.eq.0) then
+         write(strng,'(''nrs=0 for SLBW/MLBW and l='',i2)') ll
+         call mess('rdf2bw',strng,'malformed ENDF file, check evaluation')
+         jnow = jnow+6
+         cycle
+      end if
+      ncyc=nint(res(jnow+4))/nrs
       qx=res(jnow+1)
       lrx=nint(res(jnow+3))
       if (lrx.ne.0) then
@@ -1831,8 +1834,13 @@ contains
    if (allocated(scr)) deallocate(scr)
    allocate(scr(npage+50))
 
-   ! this value fits 1/v to within err
-   stpmax=1+sqrt(ovfact*err)
+   if (nsub.eq.10.or.nsub.eq.3) then
+      ! this value fits 1/v to within err for neutrons and photoatomic data
+      stpmax=1+sqrt(ovfact*err)
+   else
+      ! value used for the union grid of incident charged-particles in acefc
+      stpmax=1.2
+   endif
 
    !--copy nodes from the global area to *old* tape
    iold=14
@@ -1893,7 +1901,8 @@ contains
    if (mfh.eq.12) scr(5)=1
    if (mfh.eq.13) scr(5)=1
    if (mfh.ne.3) go to 180
-   if (mth.eq.1.or.mth.eq.3) go to 150
+   if (mth.eq.1.and.nsub.ne.0) go to 150
+   if (mth.eq.3.and.mtr3.gt.0) go to 150
    if (mth.eq.4.and.mtr4.gt.0) go to 150
    if (mth.eq.103.and.mt103.gt.0) go to 150
    if (mth.eq.104.and.mt104.gt.0) go to 150
@@ -1930,19 +1939,20 @@ contains
    if (mth.eq.19.and.mtr18.gt.0) q18=qx
    if (awin.ne.0) then
        thrx=-qx*(awrx+1)/awrx
+       thrxx=sigfig(thrx,7,+1)
    else
        thrx=-qx
+       thrxx=thrx
    endif
    thr6=thrx
    if (thr6.lt.zero) thr6=0
    if (thrx.le.zero) go to 190
-   thrxx=sigfig(thrx,7,+1)
    l=7+2*nint(scr(5))
+   if (scr(l).ge.thrxx) go to 190
    if (scr(l+1).ne.zero) then
       write(text,'(''xsec nonzero at threshold for mt='',i3)') mth
       call mess('lunion',text,'adjusted using jump in xsec')
    endif
-   if (scr(l).ge.thrxx) go to 190
    thrx=thrxx
    write(nsyso,'(/&
      &'' changed threshold from'',1p,e13.6,'' to'',e13.6,&
@@ -1987,7 +1997,7 @@ contains
   207 continue
    ernext=scr(ibase+ir*2+1)
    srnext=scr(ibase+ir*2+2)
-   if (sr.lt.ssmall.and.srnext.lt.ssmall.and.ir.lt.npr-1) go to 205
+   if (sr.lt.ssmall.and.srnext.lt.ssmall.and.(lr+ir).lt.npr-1) go to 205
    ! check for initial discontinuity
    if (abs(er-ernext).gt.small*er) go to 210
    er=sigfig(er,7,0)
@@ -2276,7 +2286,7 @@ contains
    real(kr),dimension(:),allocatable::bufr,bufg,bufl
    real(kr),dimension(:),allocatable::x,y
    real(kr),dimension(:,:),allocatable::sigs
-   integer,parameter::ndim=30
+   integer,parameter::ndim=50
    real(kr),parameter::half=0.5e0_kr
    real(kr),parameter::estp=4.1e0_kr
    real(kr),parameter::small=1.e-10_kr
@@ -3239,6 +3249,7 @@ contains
    real(kr),parameter::four=4.0e0_kr
    real(kr),parameter::small=3.e-4_kr
    real(kr),parameter::zero=0
+   character::strng*60
    cwaven=sqrt(2*amassn*amu*ev)*1.e-12_kr/hbar
 
    !--doppler broadening not provided.
@@ -3275,9 +3286,17 @@ contains
    !--loop over l states
    do l=1,nls
       inowb=inow
-      nrs=nint(res(inow+5))
-      ncyc=nint(res(inow+4))/nrs
       ll=nint(res(inow+2))
+      nrs=nint(res(inow+5))
+      ! some files are malformed and have a list record for l values without
+      ! resonances, issue a warning and move to the next l value
+      if (nrs.eq.0) then
+         write(strng,'(''nrs=0 for Reich-Moore and l='',i2)') ll
+         call mess('csrmat',strng,'malformed ENDF file, check evaluation')
+         inow = inow+6
+         cycle
+      end if
+      ncyc=nint(res(inow+4))/nrs
       apl=res(inow+1)
       rhoc=k*ap
       rho=k*ra
@@ -4662,7 +4681,7 @@ contains
    ! internals
    integer::nneg,ntot,i,in,ig,inn,nss,iss,nb,nw,idis,it
    integer::imtr,itt,k,istart,iend,j,ib,isave,ir,ith
-   real(kr)::er,eg,en,e,thresh,sn,sg,enext,awrx,qx
+   real(kr)::er,eg,en,e,thresh,sn,sg,enext,awrx,qx,onethr
    real(kr)::res(nsig+1),tot(10)
    real(kr)::aa(1)
    real(kr),dimension(:),allocatable::bufo,bufn,bufg,bufr
@@ -4685,6 +4704,7 @@ contains
    do i=1,nmtr
       tot(i+1)=0
    enddo
+   onethr=sigfig(one,7,0)
 
    !--assign scratch units.
    iold=14
@@ -4736,6 +4756,7 @@ contains
    nsc=0
   210 continue
    call contio(nin,0,nscr,scr,nb,nw)
+   if (mfh.ne.23.and.awin.ne.zero) awrx=c2h/awin
    nss=1
    if (mfh.eq.10) nss=n1h
    iss=nss
@@ -4745,7 +4766,6 @@ contains
   220 continue
    if (mth.eq.0) go to 210
    if (iss.eq.nss) then ! needed for MF10
-      if (mfh.ne.23.and.awin.ne.zero) awrx=c2h/awin
       qx=c2h
       if (awin.ne.0) then
           thr6=-qx*(awrx+1)/awrx
@@ -4797,9 +4817,9 @@ contains
    sn=0
    if (thresh-eg.gt.test*thresh.and.itype.eq.0) go to 370
    call gety1(eg,enext,idis,sn,nin,scr)
-   ! set zero cross section at threshold, but mt2 for charge particles
-   if ((mth.ne.2.or.(mth.eq.2.and.nint(zain).le.1)).and.&
-     & thresh.gt.one.and.abs(thresh-eg).lt.test*thresh) sn=0
+   ! set zero cross section at threshold for neutron and photoatomic data
+   if ((nsub.eq.10.or.nsub.eq.3).and.&
+      & thresh.gt.onethr.and.abs(thresh-eg).lt.test*thresh) sn=0
    ! backgrounds in a range of unresolved-smooth overlap
    ! are arbitrarily assigned to the unresolved component
    ! this only applies to total, elastic, fission and capture.
@@ -4839,7 +4859,8 @@ contains
    endif
    sn=sigfig(sn,7,0)
    tot(2)=sn
-   if (ith.eq.0.and.(sn.gt.zero.or.(nint(zain).gt.1.and.mth.eq.2))) ith=in
+   ! negative values are allowed for charged particle scattering if LTP>2
+   if (ith.eq.0.and.(sn.gt.zero.or.(nsub.ge.10010.and.mth.eq.2))) ith=in
    inn=in
    if (ig.eq.ngo) inn=-in
    call loada(inn,tot,2,ngrid,bufg,nbufg)
@@ -4989,18 +5010,18 @@ contains
    return
    end subroutine emerge
 
-   subroutine recout(iold,nscr,nrtot,nsub)
+   subroutine recout(iold,nscr,nrtot)
    !-------------------------------------------------------------------
    ! Add a new material to the output pendf tape.
    !-------------------------------------------------------------------
    use endf   ! provides endf routines and variable
    use util   ! provides error,closz,repoz
    ! externals
-   integer::iold,nscr,nrtot,nsub
+   integer::iold,nscr,nrtot
    ! internals
    integer::i152,nb,nw,nwd,i,j,nc,no2,no3,imtr,np,nxcc
    integer::l,ntot,lis3,lfs,mtl,istart,k,last,iend,ib,mtd
-   integer::mfl,n1l,n2l,mt3
+   integer::mfl,n1l,n2l
    integer::iang,imt,idone
    real(kr)::resl(1+ncoef*nmtres)
    real(kr),dimension(:),allocatable::bufo,bufn,bufl
@@ -5028,7 +5049,7 @@ contains
 !    none found increment nxc since we'll insert a dummy mf3, mt1
 !    section into the output tape later.
    no3=0
-   if (nint(zain).eq.1) then
+   if (nsub.eq.10) then
       do i=1,nxc
          if (mfs(i).eq.3)no3=1
       enddo
@@ -5060,17 +5081,12 @@ contains
       if (iverf.eq.6) scr(6)=6
       call contio(0,nout,0,scr,nb,nw)
    endif
-   if (awin.eq.0.and.nsub.ne.0) then
-      nsub=3
-   else
-      nsub=10*nint(zain)
-   endif
    if (iverf.eq.6) then
       scr(1)=awin
       scr(2)=efmax
       scr(3)=lrel
       scr(4)=0
-      scr(5)=nsub
+      scr(5)=nint(10*zain)
       scr(6)=nver
       call contio(0,nout,0,scr,nb,nw)
    endif
@@ -5104,7 +5120,7 @@ contains
       nc=nc+17
    enddo
    nxcc=nxc
-   if (nint(zain).eq.1.and.no3.eq.0) nxcc=nxcc-1
+   if (nsub.eq.10.and.no3.eq.0) nxcc=nxcc-1
    scr(6)=nxcc+nmtr+i152
    call hdatio(0,nout,0,scr,nb,nw)
    no2=1
@@ -5122,13 +5138,10 @@ contains
                dict(j+1)=0
                dict(j+2)=0
                dict(j+3)=mfs(i)
-               if (mfs(i).eq.3.and.mtr(imtr).eq.1.and.awin.eq.0.and.&
-                   mts(i).ge.3) then
+               if (mfs(i).eq.3.and.mtr(imtr).eq.1.and.awin.eq.0) then
                   dict(j+4)=3
-                  mt3=3
                else
                   dict(j+4)=mtr(imtr)
-                  mt3=1
                endif
                np=ngo-mtrt(imtr)+1
                dict(j+5)=3+int((np+2)/3)
@@ -5137,7 +5150,7 @@ contains
                imtr=imtr+1
             enddo
          endif
-         if (no3.eq.0.and.nint(zain).eq.1.and.mfs(i).gt.3)then
+         if (no3.eq.0.and.nsub.eq.10.and.mfs(i).gt.3)then
              no3=-1
              dict(j+1)=0
              dict(j+2)=0
@@ -5275,9 +5288,13 @@ contains
       if(mfl.eq.0) go to 272
       goto 270
    endif
-   if (nint(zain).gt.1) goto 270
+
+   !--no redundant reaction calculation for incident
+   !  charged particles or photonuclear data
+   if (nsub.ge.10010.or.nsub.eq.0) goto 270
+
    mth=1
-   if (awin.eq.0.and.mt3.eq.3) then
+   if (awin.eq.0) then
       mth=3
    endif
    if (mfh.eq.23) mth=501

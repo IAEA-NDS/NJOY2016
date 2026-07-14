@@ -2462,8 +2462,6 @@ contains
       btp=bt+delta
       i=i+1
       terpk=ska(i)+(be-bt)*(ska(i+1)-ska(i))/(btp-bt)
-   else
-      terpk=1
    endif
    return
    end function terpk
@@ -3083,7 +3081,7 @@ contains
    scr(6)=6
    call contio(0,nout,nprnt,scr(1),nb,nw)
    scr(1)=1
-   scr(2)=0
+   scr(2)=sigfig(therm*beta(nbeta),7,0)
    scr(3)=0
    scr(4)=0
    scr(5)=12
