@@ -12,6 +12,7 @@ module reconm
    real(kr)::zai,el,eh,err,errmax,errint,za,awr,tempr,q18
    real(kr)::tempi
    real(kr)::elis,sta,efmax
+   ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    integer::lis,lis0,nfor,lrel,nver,nsub
    integer::lfw,mata,itype,lrp,lfi,lssf,lrx
    integer,parameter::nmtmax=10
@@ -131,6 +132,7 @@ contains
    use samm   ! provides s2sammy,desammy
    use mainio ! provides nsysi,nsyso,nsyse
    ! internals
+   ! modified (DLA, IAEA)
    integer::i,nb,nw,nrtot,nwscr,n6,nx,iold,inew,ngrid
    integer::nendf,npend,nscr1,nscr2,nscr3,nscr4,intunr
    real(kr)::time
@@ -509,6 +511,7 @@ contains
 
    !--select desired redundant reactions.
    igam=0
+   ! modified (DLA, IAEA)
    maxres=0
    nxn=0
    nmtr=0
@@ -1805,6 +1808,11 @@ contains
    real(kr)::stpmax,awrx,eg,qx,thrx,thrxx,et
    real(kr)::er,sr,ernext,srnext,enl,test,snl,erl,srl
    real(kr)::en,sn,xm,ym,yl,errn,ent,egl,time
+   real(kr)::ab(1)
+   real(kr),dimension(:),allocatable::ekept
+   real(kr),parameter::tkeep=1.e-5_kr
+   integer::nkeep
+   character(40)::textk
    real(kr)::aa(1)
    real(kr),dimension(:),allocatable::bufn,bufo
    real(kr),dimension(:),allocatable::x,y
@@ -1836,6 +1844,7 @@ contains
 
    if (nsub.eq.10.or.nsub.eq.3) then
       ! this value fits 1/v to within err for neutrons and photoatomic data
+      ! (DLA, IAEA)
       stpmax=1+sqrt(ovfact*err)
    else
       ! value used for the union grid of incident charged-particles in acefc
@@ -2197,10 +2206,54 @@ contains
    y(i-1)=ym
    go to 310
   350 continue
+   ! modified (DLA, IAEA, 17 Oct 2026): a section that ends below the top
+   ! of the union grid (e.g. JENDL-5 N-14, N-15, F-19, Al-27: MF13/MT3 to
+   ! 20 MeV, MF3 to 200 MeV) truncated the whole grid at its last energy.
+   ! The grid points of the previous sections above it, up to EMAX of
+   ! MF1/MT451, are now kept when the grid goes on above the end of the
+   ! section by more than tkeep (relative); a top within tkeep (point
+   ! shifted up at a discontinuity at the common end energy) is cut as
+   ! before, and so are points above EMAX (FENDL-3.2 W-184 MF10/MT18).
    in=in+1
-   inx=-in
    aa(1)=en
-   call loada(inx,aa,1,inew,bufn,nbuf)
+   nkeep=0
+   if (ig.le.ngo) then
+      allocate(ekept(ngo-ig+1))
+      do while (ig.le.ngo)
+         if (abs(eg).gt.abs(en)*(1+small).and.(efmax.le.zero.or.&
+           abs(eg).le.efmax*(1+small))) then
+            nkeep=nkeep+1
+            ekept(nkeep)=eg
+         endif
+         ig=ig+1
+         if (ig.le.ngo) then
+            call finda(ig,ab,1,iold,bufo,nbuf)
+            eg=ab(1)
+         endif
+      enddo
+      if (nkeep.gt.0) then
+         if (abs(ekept(nkeep)).le.abs(en)*(1+tkeep)) nkeep=0
+      endif
+   endif
+   if (nkeep.eq.0) then
+      inx=-in
+      call loada(inx,aa,1,inew,bufn,nbuf)
+   else
+      call loada(in,aa,1,inew,bufn,nbuf)
+      do i=1,nkeep
+         in=in+1
+         aa(1)=ekept(i)
+         inx=in
+         if (i.eq.nkeep) inx=-in
+         call loada(inx,aa,1,inew,bufn,nbuf)
+      enddo
+      write(text,'(''mf'',i2,'' mt'',i3,'' ends at'',1p,e12.5,'' eV'')')&
+        mfh,mth,abs(en)
+      write(textk,'(i7,'' points up to'',1p,e12.5,'' kept'')')&
+        nkeep,abs(ekept(nkeep))
+      call mess('lunion',text,textk)
+   endif
+   if (allocated(ekept)) deallocate(ekept)
 
    !--finished with this reaction
    ngn=in
@@ -2286,6 +2339,7 @@ contains
    real(kr),dimension(:),allocatable::bufr,bufg,bufl
    real(kr),dimension(:),allocatable::x,y
    real(kr),dimension(:,:),allocatable::sigs
+   ! modified (DLA, IAEA)
    integer,parameter::ndim=50
    real(kr),parameter::half=0.5e0_kr
    real(kr),parameter::estp=4.1e0_kr
@@ -4818,6 +4872,7 @@ contains
    if (thresh-eg.gt.test*thresh.and.itype.eq.0) go to 370
    call gety1(eg,enext,idis,sn,nin,scr)
    ! set zero cross section at threshold for neutron and photoatomic data
+   ! (DLA, IAEA)
    if ((nsub.eq.10.or.nsub.eq.3).and.&
       & thresh.gt.onethr.and.abs(thresh-eg).lt.test*thresh) sn=0
    ! backgrounds in a range of unresolved-smooth overlap
@@ -4860,6 +4915,7 @@ contains
    sn=sigfig(sn,7,0)
    tot(2)=sn
    ! negative values are allowed for charged particle scattering if LTP>2
+   ! (DLA, IAEA)
    if (ith.eq.0.and.(sn.gt.zero.or.(nsub.ge.10010.and.mth.eq.2))) ith=in
    inn=in
    if (ig.eq.ngo) inn=-in
@@ -4944,6 +5000,11 @@ contains
    if (ig.lt.ngo) go to 340
 
    !--finished with this reaction
+   ! a section that is zero at all grid points (e.g. FENDL-3.2d Cs-133
+   ! MT30) never sets ith: keep all its points (ith=0 wrote an undefined
+   ! first point, index 0 of the grid buffer) - IAEA fix, 9 Oct 2026
+   ! (DLA, IAEA, 9 Oct 2026)
+   if (ith.eq.0) ith=1
    if (ith.gt.1) ith=ith-1
    if (iss.eq.nss) nxc=nxc+1
    mfs(nxc)=mfh
@@ -5290,7 +5351,7 @@ contains
    endif
 
    !--no redundant reaction calculation for incident
-   !  charged particles or photonuclear data
+   !  charged particles or photonuclear data (DLA, IAEA)
    if (nsub.ge.10010.or.nsub.eq.0) goto 270
 
    mth=1
