@@ -3691,7 +3691,7 @@
    0.000E+00   1.200E+01   2.000E+00/
 '<e>nergy (<m>e<v>)'/
   -6.000E-07   6.000E-07   2.000E-07/
-'<h>eating (<m>e<v>/reaction)'/
+'<h>eating (<m>e<v>/collision)'/
 /
 /
 'recoil heating'/
