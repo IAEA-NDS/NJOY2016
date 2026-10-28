@@ -2214,6 +2214,7 @@ contains
    go to 145
   135 do ik=1,ng2
       jg2=noutg-ig2lo-ik+2
+      ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
       a(icdat-1+jg2)=b(irinp+lz+nz*(ik-1)+iz-1)
    enddo
    go to 240
@@ -2358,6 +2359,7 @@ contains
    nx=nwh*11-ntw*4
    nwd=6-nwh
    if (nwd.le.0) go to 120
+     ! modified (DLA, IAEA)
    if (nx.ne.0) write(hfmt,&
      &'(''('',i2,''a4,'',i2,''x,'',i1,''e11.0)'')')&
      ntw,nx,nwd

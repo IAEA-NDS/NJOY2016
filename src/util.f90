@@ -193,6 +193,7 @@ contains
    if (nun.ge.10.and.nun.le.19) then
       ! scratch units
       age='scratch'
+      ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
       inquire(nun,opened=there)
       if (there) close (nun)
       open(nun,form=for,status=age)
@@ -379,7 +380,6 @@ contains
    if (x.ne.zero) then
       aa=log10(abs(x))
       ipwr=int(aa)
-      if ((ndig.eq.9).and.(aa.gt.zero).and.(aa-ipwr.lt.1.0e-6_kr)) ipwr=ipwr-1
       if (aa.lt.zero) ipwr=ipwr-1
       ipwr=ndig-1-ipwr
       ii=nint(x*ten**ipwr+ten**(ndig-11))
@@ -387,7 +387,14 @@ contains
          ii=ii/10
          ipwr=ipwr-1
       endif
-      ii=ii+idig
+      ! shading down from an exact power of ten keeps ndig figures
+      ! (10**n -> 0.999999999*10**n, not 0.99999999*10**n) (DLA, IAEA)
+      if (ndig.eq.9.and.idig.lt.0.and.ii+idig.lt.10**(ndig-1)) then
+         ii=10*ii+idig
+         ipwr=ipwr+1
+      else
+         ii=ii+idig
+      endif
       xx=ii*ten**(-ipwr)
    endif
    xx=xx*bias

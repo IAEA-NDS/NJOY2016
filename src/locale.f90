@@ -11,6 +11,7 @@ module locale
    ! use 1 and 2 instead of 4 and 8 for these two kinds.
    implicit none
    private
+   ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    character(8),public::lab='iaea-nds'
    character(8),public::mx='pc-gfort'
    integer,parameter,public::kr=selected_real_kind(12,300)
