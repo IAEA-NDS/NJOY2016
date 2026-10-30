@@ -521,6 +521,7 @@ contains
    endif
    if (maxn.gt.maxnphon) then
       call timer(time)
+            ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
       write(nsyse,'(/'' performing phonon expansion sum'',&
             &37x,f8.1,''s'')')time
    endif
@@ -1139,6 +1140,7 @@ contains
    terps=0
    if (be.gt.delta*nsd) return
    i=int(be/delta)
+   ! modified (DLA, IAEA)
    if (i.lt.0) return
    if (i.lt.nsd-1) then
       bt=i*delta
@@ -2462,8 +2464,6 @@ contains
       btp=bt+delta
       i=i+1
       terpk=ska(i)+(be-bt)*(ska(i+1)-ska(i))/(btp-bt)
-   else
-      terpk=1
    endif
    return
    end function terpk
@@ -3083,7 +3083,7 @@ contains
    scr(6)=6
    call contio(0,nout,nprnt,scr(1),nb,nw)
    scr(1)=1
-   scr(2)=0
+   scr(2)=sigfig(therm*beta(nbeta),7,0)
    scr(3)=0
    scr(4)=0
    scr(5)=12

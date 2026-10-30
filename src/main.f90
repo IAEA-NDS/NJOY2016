@@ -3,6 +3,7 @@ program njoy
 !
 !    NJOY Nuclear Data Processing System
 !    Version 2016.vers+IAEA/NDS updates (see vers.f90)
+!    (IAEA updates: D. Lopez Aldama, dlopezaldama@gmail.com)
 !
 !-----------------------------------------------------------------------
 !

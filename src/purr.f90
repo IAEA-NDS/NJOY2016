@@ -13,9 +13,28 @@ module purm
    integer::nunr,lssf,iinel,iabso
    integer::iprint,nermax,nladr,nmode
 
-   ! inverse factor for minimum total cross section treatment
-   ! min sigma_t=min(spot,sigma_t_inf)/f0bin
-   real(kr)::f0bin
+   ! minimum total cross section of the samples (input smin):
+   ! 0 none, >0 fraction of min(sigma_t,inf, spot), <0 |smin| barns
+   ! (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
+   real(kr)::smin
+   ! energies at which a barn value (smin<0) was reduced to the limit
+   integer::nsminr
+   ! protection against inconsistent evaluations (DLA, IAEA, 14 Oct
+   ! 2026): energies with negative capture/fission samples raised to
+   ! 1e-6 b (ngbkf), with a negative capture/fission average (ngbk0),
+   ! with the negative part of the other background dropped (ngbkx),
+   ! with negative lssf=1 file-3 values set to 1e-6 b (ngbkl); energies
+   ! with unshielded heating (nghfb) or heating set to 1e-6 (nghz).
+   ! 1e-6 is the LANL lower limit of the sampled elastic (1/big)
+   integer::ngbkf,ngbk0,ngbkx,ngbkl,nghfb,nghz
+   ! fraction of floored samples above which the first probability
+   ! bin is reserved for them; maximum relative floor (also the
+   ! limit of a barn value, times min(sigma_t,inf, spot));
+   ! tolerance of the probability-table check of the bondarenko
+   ! cross sections
+   real(kr),parameter::ffloor=1.e-3_kr
+   real(kr),parameter::fmaxr=0.1e0_kr
+   real(kr),parameter::tolbon=1.e-2_kr
 
    ! arrays for the w function
    real(kr)::tr(41,27),ti(41,27),trs(41,27),tis(41,27)
@@ -100,13 +119,31 @@ contains
    !   nladr   no. of resonance ladders
    !   iprint  print option (0=min, 1=max, def=1)
    !   nunx    no. of energy points desired (def=0=all)
-   !   f0bin   inverse factor for minimum total cross section (def=50.)
-   !           min sigma_t=min(spot,sigma_t_inf)/f0bin
+   !   smin    minimum total cross section of the sampled points
+   !           (default 0 = none): the sampled total is not allowed
+   !           below smin, the difference is added to the elastic;
+   !           then sigma_t+sigma_0 > smin for any sigma_0.
+   !           smin > 0: fraction of min(sigma_t,inf, sigma_pot),
+   !                     smin <= 0.1 (larger values reset to 0.1);
+   !                     recommended 0.02 (= min/50)
+   !           smin < 0: value |smin| in barns, reduced at each
+   !                     energy to min(sigma_t,inf, sigma_pot)/10
+   !                     if larger
+   !           when more than 0.1% of the samples are floored, the
+   !           first probability bin is reserved for them.
+   ! protection against inconsistent evaluations (no input; DLA, IAEA,
+   ! 14 Oct 2026): capture/fission samples made negative by a negative
+   ! file-3 background (lssf=0) are raised to 1e-6 b (as the LANL
+   ! elastic); a total background below the sum of the partials is
+   ! raised to it; negative file-3 values (lssf=1) are set to 1e-6 b;
+   ! the heating column is never negative (1e-6 where mt301<=0,
+   ! unshielded where a bin would be negative).
    ! card 3
    !   temp    temperatures in kelvin (including zero)
    ! card 4
    !   sigz    sigma zero values (including infinity)
    !
+   ! (DLA, IAEA)
    !-------------------------------------------------------------------
    use mainio ! provides nsysi,nsyso
    use util ! provides timer,error,openz,repoz,closz,sigfig
@@ -119,6 +156,11 @@ contains
    real(kr)::time,za,awr,ez,sigx,temz,h
    real(kr)::bkgz(4)
    character(60)::strng1,strng2
+   integer::nng1,nng2
+   logical::lhneg
+   real(kr),parameter::hmin6=1.e-6_kr
+   real(kr)::eng1,eng2,hrest
+   real(kr),parameter::tolht=1.e-5_kr
    real(kr),dimension(:),allocatable::a
    real(kr),dimension(:,:,:),allocatable::tabl
    real(kr),dimension(:,:),allocatable::tval
@@ -132,9 +174,6 @@ contains
    real(kr),parameter::tref=300.e0_kr
    real(kr),parameter::sigmin=1.e-6_kr
    real(kr),parameter::zero=0
-   real(kr),parameter::f0bdef=50.0e0_kr
-   real(kr),parameter::f0bin0=1.0e30_kr
-   real(kr),parameter::f0bmin=5.0e0_kr
 
    !--initialize
    ipl=0
@@ -182,12 +221,19 @@ contains
    ntemp=1
    nsigz=1
    init=0
-   f0bin=f0bdef
-   read(nsysi,*) matd,ntemp,nsigz,nbin,nladr,iprint,nunx,f0bin
-   if (f0bin.le.zero) then
-      f0bin=f0bin0
-   elseif (f0bin.lt.10.0d0) then
-      f0bin=f0bmin
+   smin=0
+   nsminr=0
+   ngbkf=0
+   ngbk0=0
+   ngbkx=0
+   ngbkl=0
+   nghfb=0
+   nghz=0
+   read(nsysi,*) matd,ntemp,nsigz,nbin,nladr,iprint,nunx,smin
+   if (smin.gt.fmaxr) then
+      write(strng1,'(''smin='',1p,e10.3,'' above 0.1'')') smin
+      call mess('purr',strng1,'reset to 0.1 (fraction of sigma_ref)')
+      smin=fmaxr
    endif
    if (matd.eq.0) go to 400
    call repoz(-nscr)
@@ -216,9 +262,24 @@ contains
      &'' number of resonance ladders .......... '',i10/&
      &'' print option (0=min, 1=max) .......... '',i10/&
      &'' no. of energy points (0=all) ......... '',i10/&
-     &'' factor for min. total cross section .. '',1pe10.3)')&
-     nbin,nladr,iprint,nunx,f0bin
+     &'' minimum sampled total (smin) ......... '',1pe10.3)')&
+     nbin,nladr,iprint,nunx,smin
    if (nbin.lt.15) call error('purr','nbin should be 15 or more',' ')
+   ! meaning of smin, printed after the input listing
+   ! (DLA, IAEA, 13 Oct 2026)
+   if (smin.eq.zero) then
+      write(nsyso,'(/'' notes on the input options:''/&
+        &''   smin=0: no floor of the sampled total (as LANL)'')')
+   else if (smin.gt.zero) then
+      write(nsyso,'(/'' notes on the input options:''/&
+        &''   smin>0: sampled total not below smin*min(sigma_t,inf,''/&
+        &''   sigma_pot); difference added to the elastic'')')
+   else
+      write(nsyso,'(/'' notes on the input options:''/&
+        &''   smin<0: sampled total not below |smin| barns (at most''/&
+        &''   min(sigma_t,inf, sigma_pot)/10); difference added to''/&
+        &''   the elastic'')')
+   endif
 
    !--allocate storage for ladders and tables
    allocate(arry(jx))
@@ -294,6 +355,52 @@ contains
      'no partial heating xsecs found on pendf',&
      'ur heating will not selfshield')
 
+   !--consistency of the heating input (DLA, IAEA, 13 October 2026).
+   ! The heating column of the tables (ihave=2) is, for bin j,
+   !   [h301-h302-h318-h402 + h302*sel_j/sel + h318*sf_j/sf
+   !    + h402*sc_j/sc] / st_j
+   ! A negative mt301 gives negative heating in the tables.  A negative
+   ! remainder h301-h302-h318-h402 means partial kermas that do not
+   ! add up to mt301 (e.g. capture photons given only in mt3 and a
+   ! heatr that leaves them out of mt402, or inconsistent photon data):
+   ! the bins with little capture then get negative heating.
+   ! Messages only here; since 14 Oct 2026 the heating column is
+   ! protected when the tables are written (no negative bin).
+   if (ihave.ge.1) then
+      nng1=0
+      nng2=0
+      eng1=0
+      eng2=0
+      do it=1,ntemp
+         do ie=1,nunr
+            if (heat(1,ie,it).lt.zero) then
+               nng1=nng1+1
+               if (eng1.eq.zero) eng1=abs(eunr(ie))
+            endif
+            if (ihave.eq.2) then
+               hrest=heat(1,ie,it)-heat(2,ie,it)-heat(3,ie,it)&
+                 -heat(4,ie,it)
+               if (hrest.lt.-tolht*abs(heat(1,ie,it))) then
+                  nng2=nng2+1
+                  if (eng2.eq.zero) eng2=abs(eunr(ie))
+               endif
+            endif
+         enddo
+      enddo
+      if (nng1.gt.0) then
+         write(strng1,'(''mt301<0 at'',i4,''/'',i4,&
+           &'' ur points, e='',1p,e10.3)') nng1,nunr*ntemp,eng1
+         call mess('purr',strng1,&
+           'ur heating set to 1e-6 there: use heatr kkerma=2')
+      endif
+      if (nng2.gt.0) then
+         write(strng1,'(''h301-h302-h318-h402<0 at'',i4,''/'',i4,&
+           &'' points'')') nng2,nunr*ntemp
+         call mess('purr',strng1,&
+           'partial kermas inconsistent: check heating bins')
+      endif
+   endif
+
    !--compute unresolved resonance cross-sections
    !--for all grid points, temperatures, and sigma zero values.
    if ((nunx.eq.0).or.(nunx.gt.nunr)) nunx=nunr
@@ -328,6 +435,32 @@ contains
       write(nscr) (((tabl(i,j,k),i=1,nbin),j=1,5),k=1,ntemp)
       write(nscr) (((sigu(i,j,k),i=1,5),j=1,nsigz),k=1,ntemp)
    enddo
+   if (nsminr.gt.0) then
+      write(strng1,'(''smin reduced at'',i5,'' of'',i5,'' energies'')')&
+        nsminr,nunx
+      call mess('purr',strng1,'(limit min(sigma_t,inf, sigma_pot)/10)')
+   endif
+   ! protection against inconsistent evaluations (DLA, IAEA, 14 Oct 2026)
+   if (ngbkf.gt.0) then
+      write(strng1,'(''negative capt/fiss samples at'',i5,'' of'',&
+        &i5,'' e'')') ngbkf,nunx
+      call mess('purr',strng1,'raised to 1e-6 b (negative mf3 background)')
+   endif
+   if (ngbk0.gt.0) then
+      write(strng1,'(''capt/fiss average+background<=0 at'',i5,'' of'',&
+        &i5,'' e'')') ngbk0,nunx
+      call mess('purr',strng1,'that reaction is 1e-6 b in the tables')
+   endif
+   if (ngbkx.gt.0) then
+      write(strng1,'(''total background < sum of partials at'',i5,&
+        &'' of'',i5,'' e'')') ngbkx,nunx
+      call mess('purr',strng1,'negative difference dropped')
+   endif
+   if (ngbkl.gt.0) then
+      write(strng1,'(''lssf=1: negative mf3 value at'',i5,'' of'',&
+        &i5,'' e'')') ngbkl,nunx
+      call mess('purr',strng1,'set to 1e-6 b')
+   endif
 
    !--check for previous mt152 and mt153
    new152=1
@@ -573,6 +706,34 @@ contains
             if (lssf.eq.1) a(l)=a(l)/heat(1,ie,it)
          endif
       enddo
+      !--heating column never negative (DLA, IAEA, 14 Oct 2026):
+      !--mt301<=0: heating 1e-6 (ev per collision, or factor with
+      !--lssf=1; positive minimum for log-log interpolation, as the
+      !--LANL elastic limit); a negative bin (partial kermas not
+      !--consistent with mt301, e.g. heatr kkerma=0): unshielded
+      !--heating at this energy (all bins = mt301/sigma_t,inf, or
+      !--factor 1 with lssf=1), which keeps the average
+      if (ihave.ge.1) then
+         lhneg=.false.
+         do j=1,nbin
+            if (a(n1+j+5*nbin).lt.zero) lhneg=.true.
+         enddo
+         if (heat(1,ie,it).le.zero) then
+            if (heat(1,ie,it).lt.zero) nghz=nghz+1
+            do j=1,nbin
+               a(n1+j+5*nbin)=hmin6
+            enddo
+         else if (lhneg) then
+            nghfb=nghfb+1
+            do j=1,nbin
+               if (lssf.eq.1) then
+                  a(n1+j+5*nbin)=1
+               else
+                  a(n1+j+5*nbin)=heat(1,ie,it)/sigu(1,1,1)
+               endif
+            enddo
+         endif
+      endif
    enddo
    call contio(0,nout,0,a(iscr),nb,nw)
    lstart=iscr+6
@@ -596,6 +757,18 @@ contains
    call contio(nin,nout,0,a(iscr),nb,nw)
    call tomend(nin,nout,0,a(iscr))
   350 continue
+
+   ! heating column (DLA, IAEA, 14 Oct 2026)
+   if (nghz.gt.0) then
+      write(strng1,'(''mt301<0 at'',i5,'' energies: ur heating set'',&
+        &'' to 1e-6'')') nghz
+      call mess('purr',strng1,'use heatr kkerma=2')
+   endif
+   if (nghfb.gt.0) then
+      write(strng1,'(''negative heating bin at'',i5,'' energies'')')&
+        nghfb
+      call mess('purr',strng1,'heating not self-shielded there')
+   endif
 
    !--write report of calculation
    call timer(time)
@@ -1212,6 +1385,7 @@ contains
    if (lssf.gt.0) then
       do ie=1,nunr
          total=sb(ie)
+         ! modified (DLA, IAEA)
          sigx=sb(ie)-sb(ie+nunr)-sb(ie+2*nunr)-sb(ie+3*nunr)
          if (sigx.gt.tol*total) then
             !--this can only happen if there is competition and above ecomp
@@ -1826,8 +2000,11 @@ contains
    real(kr)::tempor,q,q2,hq,hq2,ax,aki,p,p2,hp,hp2,pq,tav
    real(kr)::tvar,eav,evar,fav,fvar,cav,cvar,totf,elsf,capf,fisf
    real(kr)::efact,cfact,ffact
+   logical::lneg,lclip
    real(kr)::tot,tem,argt,arge,argf,argc,tnorm,enorm
-   real(kr)::fnorm,cnorm,denom,den,ttt
+   real(kr)::fnorm,cnorm,denom,den,ttt,sref,dbon,dbmx
+   integer::nfl,nb1,kb,jbmx,ibmx
+   real(kr),dimension(:,:,:),allocatable::sdir
    character(3),dimension(4),parameter::nmr=(/&
      'tot','els','fis','cap'/)
    character(60)::strng
@@ -1865,7 +2042,7 @@ contains
    if (init.eq.0) then
       init=1
       navoid=300
-      binmin=spot/f0bin ! spot/50
+      binmin=spot/10
       elow=10
       if (allocated(bval)) then
          deallocate(bval)
@@ -1910,6 +2087,35 @@ contains
      sig3(3)=sigi(3)+bkg(3)
      sig3(4)=sigi(4)+bkg(4)
    endif
+   !--protection against inconsistent evaluations (DLA, IAEA,
+   !--14 Oct 2026)
+   ! lssf=0: the file-3 background is added to every sample (ENDF
+   ! rule).  A negative fission or capture background gives negative
+   ! samples where the resonance part is small (e.g. Cd-106 FENDL-3.2d,
+   ! MF3/MT102 -0.01..-0.06 b moved to the elastic): those samples are
+   ! raised to 1e-6 b, as LANL does for the elastic; the other samples
+   ! are not changed.  A total background below the sum of the partial
+   ! ones (negative "other" part) is raised to that sum.  lssf=1:
+   ! negative file-3 values set to 1e-6 b.  (A positive minimum, not
+   ! zero: the tables may be interpolated log-log, intunr=5.)
+   lclip=.false.
+   if (lssf.eq.0) then
+      if (sig3(3).le.zero.and.bkg(3).lt.zero) ngbk0=ngbk0+1
+      if (sig3(4).le.zero.and.bkg(4).lt.zero) ngbk0=ngbk0+1
+      if (bkg(1)-bkg(2)-bkg(3)-bkg(4).lt.-sigmin) then
+         bkg(1)=bkg(2)+bkg(3)+bkg(4)
+         ngbkx=ngbkx+1
+      endif
+   else
+      lneg=.false.
+      do k=2,4
+         if (sig3(k).lt.zero) then
+            sig3(k)=sigmin
+            lneg=.true.
+         endif
+      enddo
+      if (lneg) ngbkl=ngbkl+1
+   endif
    do itemp=1,ntemp
       do i=nsig0,1,-1
          do j=1,8
@@ -1940,7 +2146,7 @@ contains
          els(itemp,ie)=spot
       enddo
    enddo
-   call fsort(es,xs,ne,1)
+   call fsort(es,ne)
 
    !--loop over sequences
    do 170 k=1,nseq0
@@ -2242,6 +2448,18 @@ contains
    do itemp=1,ntemp
       do ie=1,ne
          if (els(itemp,ie).lt.-bkg(2)) els(itemp,ie)=-bkg(2)+1/big
+         ! negative capture/fission samples raised to 1e-6 b as the
+         ! elastic above (DLA, IAEA, 14 Oct 2026)
+         if (lssf.eq.0) then
+            if (fis(itemp,ie).lt.-bkg(3)) then
+               fis(itemp,ie)=-bkg(3)+1/big
+               lclip=.true.
+            endif
+            if (cap(itemp,ie).lt.-bkg(4)) then
+               cap(itemp,ie)=-bkg(4)+1/big
+               lclip=.true.
+            endif
+         endif
          if (lssf.ne.0) then
            if ((sigi(2)+spot).ne.0.0d0) then
              els(itemp,ie)=els(itemp,ie)/(sigi(2)+spot)*sig3(2)
@@ -2277,12 +2495,31 @@ contains
    elsf=0
    capf=0
    fisf=0
-   binmin=min(sig3(1),spot)
-   binmin=binmin/f0bin     ! min( sig(inf)/50 , spot/50 )
-   !--if total < binmin, correct total and elastic
+   !--minimum total cross section of the samples (input smin):
+   !--0 none (as LANL), >0 fraction of min(sigma_t,inf, spot),
+   !--<0 |smin| barns; never above min(sigma_t,inf, spot)/10
+   !--(DLA, IAEA, Oct 2026)
+   sref=min(sig3(1),spot)
+   binmin=0
+   if (smin.lt.zero) then
+      binmin=-smin
+      if (binmin.gt.fmaxr*sref) then
+         binmin=fmaxr*sref
+         if (iladr.eq.1) then
+            nsminr=nsminr+1
+            write(strng,'(''e='',1p,e10.3,'' smin reduced to'',&
+              &e10.3,'' b'')') e,binmin
+            call mess('unrest',strng,&
+              '(limit min(sigma_t,inf, sigma_pot)/10)')
+         endif
+      endif
+   else if (smin.gt.zero) then
+      binmin=smin*sref
+   endif
+   !--if total < binmin, correct total and elastic (DLA, IAEA)
    do ie=1,ne
       tot=els(1,ie)+fis(1,ie)+cap(1,ie)+bkg(1)
-      if (tot.lt.binmin) then
+      if (binmin.gt.zero.and.tot.lt.binmin) then
          totf=totf+binmin
          elsf=elsf+els(1,ie)+bkg(2)+(binmin-tot)
       else
@@ -2308,7 +2545,7 @@ contains
      iladr,totf,elsf,fisf,capf
 
    !--renormalize reaction cross sections, if nmode=1. (default nmode=0)
-   !--compute total cross section
+   !--compute total cross section (DLA, IAEA)
    if (nmode.eq.1) then
       efact=(sigi(2)+bkg(2))/(elsf-spot)
       cfact=(sigi(4)+bkg(4))/capf
@@ -2329,21 +2566,21 @@ contains
 
    !--choose probability table bounds
    !--and zero accumulators
-   !--if total < binmin, correct total and elastic
+   !--if total < binmin, correct total and elastic (DLA, IAEA)
    if (iladr.eq.1) then
       ntot=0
       do ie=1,ne
          es(ie)=els(itemp,ie)+fis(itemp,ie)+cap(itemp,ie)+bkg(1)
-         if (es(ie).lt.binmin) then
-           es(ie)=binmin*(1.0d0-1.0d0/big)
+         if (binmin.gt.zero.and.es(ie).lt.binmin) then
+           es(ie)=binmin
            ntot=ntot+1
          endif
       enddo
       if (ntot.gt.0) then
          write(nsyso,*)
-         write(nsyso,'(1x,a,1pe10.3,a,1x,i5,a,0pf4.1,a,1pe10.3,/)') &
+         write(nsyso,'(1x,a,1pe10.3,a,/,6x,i5,a,0pf4.1,a,1pe10.3,/)') &
            & '---message from purr--- T=',temp(itemp), &
-           & ' for ladder=1 ---',ntot,' (',dble(ntot)/dble(ne)*100.,&
+           & ' for ladder=1 ',ntot,' (',dble(ntot)/dble(ne)*100.,&
            & '%) samples with total <',binmin
          write(nsyse,*)
          write(nsyse,'(1x,a,1pe10.3,a,/,6x,i5,a,0pf4.1,a,1pe10.3,/)') &
@@ -2351,12 +2588,19 @@ contains
            & ' for ladder=1 ',ntot,' (',dble(ntot)/dble(ne)*100.,&
            & '%) samples with total <',binmin
       endif
-      call fsort(es,xs,ne,1)
+      call fsort(es,ne)
       tmin(itemp)=es(1)
       tmax(itemp)=es(ne)
-      nebin=int((nsamp-ntot)/(nbin-10+1.76))
-      ibin=ntot+nebin/200
-      if (ntot.gt.0.and.ibin.le.ntot) ibin=ntot+1
+      !--more than ffloor*nsamp floored samples: the first bin is
+      !--reserved for them and the other nbin-1 bins follow the usual
+      !--scheme on the remaining samples; otherwise the usual scheme
+      !--on all the samples (identical to LANL when smin=0) (DLA, IAEA)
+      nfl=0
+      if (ntot.gt.ffloor*nsamp) nfl=1
+      nb1=nbin-nfl
+      nebin=int((nsamp-nfl*ntot)/(nb1-10+1.76))
+      ibin=nfl*ntot+nebin/200
+      if (nfl.eq.1) tval(1,itemp)=binmin*(1+1.e-6_kr)
       if (ibin.le.0) then
          if (mflg1.eq.0) then
             mflg1=1
@@ -2366,7 +2610,8 @@ contains
          endif
          ibin=1
       endif
-      do i=1,nbin-1
+      do i=1,nb1-1
+         kb=i+nfl
          if (ibin.gt.nsamp) then
             if (mflg2.eq.0) then
                mflg2=1
@@ -2376,21 +2621,30 @@ contains
             endif
             ibin=nsamp
          endif
-         tval(i,itemp)=es(ibin)
-         if (i.gt.1) then
-            if (tval(i,itemp).le.tval(i-1,itemp))&
-              tval(i,itemp)=tval(i-1,itemp)+tval(i-1,itemp)/20
+         tval(kb,itemp)=es(ibin)
+         ! samples tied at the minimum total (all of them equal to es(1),
+         ! e.g. resonance terms clipped to zero) belong to the first bin;
+         ! with tval(1)=es(1) the first bin was empty (zero probability,
+         ! JEFF-4.0 Cs-134, Sm-150) (DLA, IAEA, 17 Oct 2026)
+         if (kb.eq.1.and.tval(1,itemp).le.es(1))&
+           tval(1,itemp)=es(1)*(1+1.e-6_kr)
+         ! floored samples (tot=binmin) belong to the first bin (DLA, IAEA)
+         if (kb.eq.1.and.binmin.gt.zero)&
+           tval(1,itemp)=max(tval(1,itemp),binmin*(1+1.e-6_kr))
+         if (kb.gt.1) then
+            if (tval(kb,itemp).le.tval(kb-1,itemp))&
+              tval(kb,itemp)=tval(kb-1,itemp)+tval(kb-1,itemp)/20
          endif
          if (i.eq.1) ibin=ibin+nebin/40
          if (i.eq.2) ibin=ibin+nebin/10
          if (i.eq.3) ibin=ibin+nebin/4
          if (i.eq.4) ibin=ibin+nebin/2
-         if (i.gt.4.and.i.lt.nbin-5) ibin=ibin+nebin
-         if (i.eq.nbin-5) ibin=ibin+nebin/2
-         if (i.eq.nbin-4) ibin=ibin+nebin/4
-         if (i.eq.nbin-3) ibin=ibin+nebin/10
-         if (i.eq.nbin-2) ibin=ibin+nebin/40
-         if (i.eq.nbin-1) ibin=ibin+nebin/200
+         if (i.gt.4.and.i.lt.nb1-5) ibin=ibin+nebin
+         if (i.eq.nb1-5) ibin=ibin+nebin/2
+         if (i.eq.nb1-4) ibin=ibin+nebin/4
+         if (i.eq.nb1-3) ibin=ibin+nebin/10
+         if (i.eq.nb1-2) ibin=ibin+nebin/40
+         if (i.eq.nb1-1) ibin=ibin+nebin/200
       enddo
       tval(nbin,itemp)=big
       do i=1,nbin
@@ -2402,10 +2656,10 @@ contains
    endif
 
    !--accumulate cross sections into tables
-   !-- if total < binmin, correct total and elastic
+   !-- if total < binmin, correct total and elastic (DLA, IAEA)
    do ie=1,ne
       tot=els(itemp,ie)+fis(itemp,ie)+cap(itemp,ie)+bkg(1)
-      if (tot.lt.binmin) then
+      if (binmin.gt.zero.and.tot.lt.binmin) then
          els(itemp,ie)=els(itemp,ie)+(binmin-tot)
          tot=binmin
       endif
@@ -2438,6 +2692,7 @@ contains
    !--close loop over ladders
   150 continue
 
+   if (lclip) ngbkf=ngbkf+1
    !--write overall average cross sections
    tav=tav/nladr
    argt=tvar/nladr-tav*tav
@@ -2497,7 +2752,7 @@ contains
    !   tnorm=sigi(1)-sigf(1,1,1)
    !   enorm=sigi(2)-sigf(2,1,1)
    !   fnorm=sigi(3)-sigf(3,1,1)
-   !   cnorm=sigi(4)-sigf(4,1,1)
+   !   cnorm=sigi(4)-sigf(4,1,1) (DLA, IAEA)
    tnorm=0
    enorm=0
    fnorm=0
@@ -2547,6 +2802,12 @@ contains
       call mess('purr',strng,' ')
    endif
 
+   !--keep the direct-sampling bondarenko values for the check of
+   !--the probability table below (DLA, IAEA, Oct 2026)
+   if (allocated(sdir)) deallocate(sdir)
+   allocate(sdir(5,nsig0,ntemp))
+   sdir=sigf
+
    !--compute bondarenko cross sections from prob. table
    if (iprint.gt.0) write(nsyso,'(/&
      &'' bondarenko cross sections from probability table''/&
@@ -2587,6 +2848,36 @@ contains
          enddo
       enddo
    endif
+
+   !--check: bondarenko from the probability table against direct
+   !--sampling (largest relative difference over sigma0, reactions,
+   !--temperatures); message above tolbon (DLA, IAEA)
+   dbmx=0
+   jbmx=0
+   ibmx=0
+   do itemp=1,ntemp
+      do i=1,nsig0
+         do j=1,5
+            if (sdir(j,i,itemp).gt.zero) then
+               dbon=abs(sigf(j,i,itemp)/sdir(j,i,itemp)-1)
+               if (dbon.gt.dbmx) then
+                  dbmx=dbon
+                  jbmx=j
+                  ibmx=i
+               endif
+            endif
+         enddo
+      enddo
+   enddo
+   if (iprint.gt.0) write(nsyso,'(/'' ptable vs direct bondarenko:'',&
+     &'' max. diff.'',f8.3,''% (reaction'',i2,'', sig0 no.'',i3,'')'')')&
+     100*dbmx,jbmx,ibmx
+   if (dbmx.gt.tolbon) then
+      write(strng,'(''e='',1p,e10.3,'' ptable bondarenko differs'',&
+        &0p,f7.2,''%'')') e,100*dbmx
+      call mess('unrest',strng,'from direct sampling (check nbin, smin)')
+   endif
+   deallocate(sdir)
 
    !--renormalize probability table and bondarenko
    !--cross sections to the computed infinitely-dilute values
@@ -2888,7 +3179,7 @@ contains
    return
    end subroutine uw2
 
-   subroutine fsort(x,y,n,i)
+   subroutine fsort(x,n)
    !-------------------------------------------------------------------
    ! Floating-point sort routine.
    ! Sort x and y into increasing x order.
@@ -2900,20 +3191,45 @@ contains
    integer::k,j
    real(kr)::xt,yt
 
-   do  k=1,n-1
-      do j=k+1,n
-         if (x(k).gt.x(j)) then
-            xt=x(k)
-            yt=y(k)
-            x(k)=x(j)
-            y(k)=y(j)
-            x(j)=xt
-            y(j)=yt
-         endif
-      enddo
-   enddo
+   if (n <= 1) return
+   call quicksort(x,1,n)
+     
    return
    end subroutine fsort
+
+   recursive subroutine quicksort(a,l,r)
+    real(kr), intent(inout) :: a(:)
+    integer, intent(in) :: l, r
+    integer :: i, j
+    real(kr) :: pivot, ta
+
+    i = l
+    j = r
+    pivot = a((l+r)/2)
+
+    do
+        do while (a(i) < pivot)
+            i = i + 1
+        end do
+        do while (a(j) > pivot)
+            j = j - 1
+        end do
+
+        if (i <= j) then
+            ta = a(i)
+            a(i) = a(j)
+            a(j) = ta
+
+            i = i + 1
+            j = j - 1
+        end if
+
+        if (i > j) exit
+     end do
+
+     if (l < j) call quicksort(a,l,j)
+     if (i < r) call quicksort(a,i,r)
+   end subroutine quicksort
 
    subroutine fsrch(x,xarray,n,i,k)
    !-------------------------------------------------------------------

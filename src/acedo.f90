@@ -210,6 +210,12 @@ contains
                   endif
                   scr(1:nw)=tmpscr(1:nw)
                   lfs=l2h
+                  ! ACE reaction number: MT+1000*(10+LFS) as LANL;
+                  ! for MT5 the residuals differ by ZAP, not by LFS,
+                  ! so 1000000*(50+LFS)+ZAP is used
+                  ! (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com, IRDFF-II)
+                  ! e.g. 50030065 (Zn-65), 51027058 (Co-58m); the
+                  ! MCNP FM card must use these numbers
                   if (mth.eq.5) then
                     xss(mtr-1+j)=1000000*(50+lfs)+l1h   ! l1h=izap
                   else
@@ -445,6 +451,7 @@ contains
       l=l+1
       if (nr.ne.0) then
          lim=2*nr
+         ! modified (DLA, IAEA)
          if (mt.lt.1000000) then
            write(nsyso,'(''1''///&
            &'' reaction mt = '',i6,3x,a10/'' interpolation: '',12i6)')&
@@ -601,6 +608,7 @@ contains
    !--output directory for mcnp
    call openz(ndir,1)
    if (mcnpx.eq.0) then
+        ! modified (DLA, IAEA)
       write(ndir,&
         '(a10,f12.6,'' filename route'',i2,'' 1 '',i9,2i6,1p,e10.3)')&
         hz(1:10),aw0,itype,len2,lrec,nern,tz

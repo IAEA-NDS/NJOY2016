@@ -7,14 +7,20 @@ module acecm
    private
 
    ! main ace container array
+   ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    integer,parameter,public::nxss=100000000
    real(kr),dimension(:),allocatable,public::xss
+   ! set by pttab2: .true. when the table has a zero integral (no
+   ! angular distribution in the data); used by acensd and acelcp
+   ! (DLA, IAEA, 21 Oct 2026)
+   logical,public::ptnul=.false.
 
    !--Public routines
    public mtname,ptleg2,pttab2,bachaa,eavl,newsuff
    public advance_to_locator
    public write_integer,write_real,write_integer_list,write_real_list
    public typen
+   public mir2t,ubar2t
 
 contains
 
@@ -28,6 +34,7 @@ contains
    character(10)::name
    ! internals
    integer::i
+     ! modified (DLA, IAEA)
    character(10),dimension(500),parameter::hndf=(/&
      'total     ','elastic   ','nonelastic','inelastic ','(n,x)     ',&
      '(n,1/2*1) ','(n,1/2*2) ','(n,1/2*3) ','(n,1/2*4) ','(n,cont)  ',&
@@ -214,7 +221,7 @@ contains
 
    !--alternate name when processing incident charged particle files
    if (izai.gt.1) then
-      if (mt.gt.3) then
+      if (mt.gt.3.and.mt.ne.18.and.(name(1:2).eq.'(n'.or.mt.eq.4)) then
         if (izai.eq.1001) then
           name(1:2)='(p'
         elseif (izai.eq.1002) then
@@ -419,40 +426,168 @@ contains
    !-------------------------------------------------------------------
    ! Like pttab, but works on tabulated sections from File 4 or
    ! LAW2 in File 6 and checks the cummulative normalization.
+   ! modified (DLA, IAEA, 19 Oct 2026): the interpolation law of the
+   ! table is respected.  A table whose regions are all histogram
+   ! (INT=1) stays a histogram (ACE JJ=1); a table with INT=3-5 or
+   ! mixed laws is linearized (lin-lin, ACE JJ=2): histogram intervals
+   ! become steps (left point shaded down in the 7th figure, reconr
+   ! technique) and INT=3-5 intervals are subdivided until linear
+   ! interpolation agrees with the law within 0.1 % (ln(mu) laws with
+   ! mu<=0 and log laws with p<=0 are taken as linear).  The table is
+   ! normalized with the integral of its own law.  LANL wrote every
+   ! table as lin-lin with the original points and normalized with
+   ! the trapezoidal rule.
    !-------------------------------------------------------------------
+   use util ! provides sigfig
+   use endf ! provides terp1
    ! externals
    real(kr)::a(*)
    ! internals
-   integer::nr,np,i
-   real(kr)::cumm
+   integer::nr,np,i,ir,it,iall,k,nout,nst
+   real(kr)::cumm,x1,y1,x2,y2,xl,yl,xh,yh,xm,ym,ylin
    real(kr),allocatable::amu(:),pmu(:)
+   integer,parameter::maxst=40
+   real(kr)::xs(maxst),ys(maxst)
+   real(kr),parameter::tol=1.e-3_kr
+   real(kr),parameter::xtol=1.e-6_kr
+   real(kr),parameter::zero=0
 
-   !--check normalization
    nr=nint(a(5))
    np=nint(a(6))
-   allocate(amu(np))
-   allocate(pmu(np))
+   iall=nint(a(8))
+   do ir=1,nr
+      if (nint(a(6+2*ir)).ne.iall) iall=0
+   enddo
+   if (iall.ne.1) iall=2
+   nout=0
+   allocate(amu(2*np+10),pmu(2*np+10))
+
+   if (iall.eq.1.or.nint(a(8)).eq.2.and.all_lin()) then
+      !--histogram or lin-lin table: points as given
+      do i=1,np
+         call addp(a(5+2*nr+2*i),a(6+2*nr+2*i))
+      enddo
+   else
+      !--linearize
+      call addp(a(7+2*nr),a(8+2*nr))
+      ir=1
+      do k=1,np-1
+         do while (nint(a(5+2*ir)).lt.k+1.and.ir.lt.nr)
+            ir=ir+1
+         enddo
+         it=nint(a(6+2*ir))
+         x1=a(5+2*nr+2*k)
+         y1=a(6+2*nr+2*k)
+         x2=a(7+2*nr+2*k)
+         y2=a(8+2*nr+2*k)
+         if ((it.eq.3.or.it.eq.5).and.(x1.le.zero.or.x2.le.zero)) it=2
+         if ((it.eq.4.or.it.eq.5).and.(y1.le.zero.or.y2.le.zero)) it=2
+         if (it.lt.1.or.it.gt.5) it=2
+         if (it.eq.1) then
+            if (y2.ne.y1.and.k.lt.np-1) then
+               if (x2.ne.zero) then
+                  xm=sigfig(x2,7,-1)
+               else
+                  xm=-1.e-9_kr
+               endif
+               if (xm.gt.amu(nout)) then
+                  call addp(xm,y1)
+               else
+                  pmu(nout)=y1
+               endif
+               call addp(x2,y2)
+            else if (k.eq.np-1) then
+               call addp(x2,y1)
+            else
+               call addp(x2,y2)
+            endif
+         else if (it.eq.2.or.x2.le.x1) then
+            call addp(x2,y2)
+         else
+            xl=x1
+            yl=y1
+            nst=1
+            xs(1)=x2
+            ys(1)=y2
+            do while (nst.gt.0)
+               xh=xs(nst)
+               yh=ys(nst)
+               if (it.eq.3.or.it.eq.5) then
+                  xm=sqrt(xl*xh)
+               else
+                  xm=(xl+xh)/2
+               endif
+               call terp1(x1,y1,x2,y2,xm,ym,it)
+               ylin=yl+(yh-yl)*(xm-xl)/(xh-xl)
+               if (abs(ylin-ym).gt.tol*abs(ym).and.nst.lt.maxst&
+                 .and.(xh-xl).gt.xtol) then
+                  nst=nst+1
+                  xs(nst)=xm
+                  ys(nst)=ym
+               else
+                  call addp(xh,yh)
+                  xl=xh
+                  yl=yh
+                  nst=nst-1
+               endif
+            enddo
+         endif
+      enddo
+   endif
+
+   !--normalization with the law of the output table
    cumm=0
-   do i=1,np
-      amu(i)=a(5+2*nr+2*i)
-      pmu(i)=a(6+2*nr+2*i)
-      if (i.gt.1) then
+   do i=2,nout
+      if (iall.eq.1) then
+         cumm=cumm+(amu(i)-amu(i-1))*pmu(i-1)
+      else
          cumm=cumm+(amu(i)-amu(i-1))*(pmu(i)+pmu(i-1))/2
       endif
    enddo
+   ! zero integral: flagged for the caller (DLA, IAEA, 21 Oct 2026)
+   ptnul=cumm.le.zero
+   if (cumm.le.zero) cumm=1
 
    !--write out the modified record
    a(5)=1
-   a(6)=np
-   a(7)=np
-   a(8)=2
-   do i=1,np
+   a(6)=nout
+   a(7)=nout
+   a(8)=iall
+   do i=1,nout
       a(7+2*i)=amu(i)
       a(8+2*i)=pmu(i)/cumm
    enddo
    deallocate(amu)
    deallocate(pmu)
    return
+
+   contains
+
+      logical function all_lin()
+      ! all regions lin-lin
+      integer::j
+      all_lin=.true.
+      do j=1,nr
+         if (nint(a(6+2*j)).ne.2) all_lin=.false.
+      enddo
+      end function all_lin
+
+      subroutine addp(x,y)
+      real(kr)::x,y
+      real(kr),allocatable::t(:)
+      if (nout.ge.size(amu)) then
+         allocate(t(2*size(amu)))
+         t(1:nout)=amu(1:nout)
+         call move_alloc(t,amu)
+         allocate(t(2*size(pmu)))
+         t(1:nout)=pmu(1:nout)
+         call move_alloc(t,pmu)
+      endif
+      nout=nout+1
+      amu(nout)=x
+      pmu(nout)=y
+      end subroutine addp
+
    end subroutine pttab2
 
    real(kr) function bachaa(iza1i,iza2,izat,e,ep)
@@ -719,6 +854,7 @@ contains
    ! internals
    character(66)::text
    if (l.lt.locator) then
+      ! modified (DLA, IAEA)
       write(text,'(''expected xss index ('',i9,'') > '',&
                    &''current index ('',i9,'')'')') locator, l
       call mess('advance',text,'xss array was padded accordingly')
@@ -815,5 +951,94 @@ contains
    endif
    return
    end subroutine typen
+
+   subroutine mir2t(x,n,lang)
+   !-------------------------------------------------------------------
+   ! Mirror a tabulated (lang=11-15) cm angular distribution of the
+   ! emitted particle into that of the two-body recoil, f_R(mu)=f_p(-mu).
+   ! x holds n (mu,f) pairs in increasing mu; the points are reflected
+   ! (mu -> -mu, order reversed).  For histograms (lang=11) the value of
+   ! each interval stays with the interval (it is the left value of the
+   ! reflected interval).  (DLA, IAEA, 19 Oct 2026)
+   !-------------------------------------------------------------------
+   ! externals
+   integer::n,lang
+   real(kr)::x(*)
+   ! internals
+   integer::i
+   real(kr),dimension(:),allocatable::tm,tf
+   if (n.lt.1) return
+   allocate(tm(n),tf(n))
+   do i=1,n
+      tm(i)=-x(2*(n+1-i)-1)
+      tf(i)=x(2*(n+1-i))
+   enddo
+   if (lang.eq.11.and.n.gt.1) then
+      do i=1,n-1
+         tf(i)=x(2*(n-i))
+      enddo
+      tf(n)=tf(n-1)
+   endif
+   do i=1,n
+      x(2*i-1)=tm(i)
+      x(2*i)=tf(i)
+   enddo
+   deallocate(tm,tf)
+   return
+   end subroutine mir2t
+
+   real(kr) function ubar2t(x,n,lang)
+   !-------------------------------------------------------------------
+   ! Mean cosine of a tabulated (lang=11-15) angular distribution given
+   ! as n (mu,f) pairs.  Histogram and lin-lin exact; log-lin (lang=14)
+   ! by subdivision of each interval (16 lin-lin pieces); laws with ln(mu)
+   ! (lang=13, 15) are not valid for cosines and are taken as lin-lin.
+   ! (DLA, IAEA, 19 Oct 2026)
+   !-------------------------------------------------------------------
+   use endf ! provides terp1
+   ! externals
+   integer::n,lang
+   real(kr)::x(*)
+   ! internals
+   integer::i,j,intl
+   integer,parameter::nsub=16
+   real(kr)::x1,x2,f1,f2,u1,u2,g1,g2,anum,aden
+   real(kr),parameter::zero=0
+   anum=0
+   aden=0
+   intl=lang-10
+   do i=1,n-1
+      x1=x(2*i-1)
+      x2=x(2*i+1)
+      f1=x(2*i)
+      f2=x(2*i+2)
+      if (x2.le.x1) cycle
+      if (intl.eq.1) then
+         aden=aden+f1*(x2-x1)
+         anum=anum+f1*(x2*x2-x1*x1)/2
+      else if (intl.ne.4.or.f1.le.zero.or.f2.le.zero) then
+         aden=aden+(f1+f2)*(x2-x1)/2
+         anum=anum+(x2-x1)*(f1*(2*x1+x2)+f2*(x1+2*x2))/6
+      else
+         u1=x1
+         g1=f1
+         do j=1,nsub
+            u2=x1+(x2-x1)*j/nsub
+            if (j.eq.nsub) then
+               g2=f2
+            else
+               call terp1(x1,f1,x2,f2,u2,g2,intl)
+            endif
+            aden=aden+(g1+g2)*(u2-u1)/2
+            anum=anum+(u2-u1)*(g1*(2*u1+u2)+g2*(u1+2*u2))/6
+            u1=u2
+            g1=g2
+         enddo
+      endif
+   enddo
+   ubar2t=0
+   if (aden.gt.zero) ubar2t=anum/aden
+   return
+   end function ubar2t
 
 end module acecm
