@@ -21,6 +21,7 @@ module thermm
    real(kr),dimension(:),allocatable::tempr
 
    ! array for user incident energy grid
+   ! (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    real(kr),dimension(:),allocatable::egrid
 
    ! array for thermal elastic data
@@ -49,12 +50,19 @@ contains
    !  The pointwise scattering cross sections and distributions are
    !  added to an existing PENDF tape.  Cross sections are added in
    !  MF3 and distributions are written in MF6, both using mtref for
-   !  inelastic and mtref+1 for elastic (if any).
+   !  inelastic and mtref+1 for elastic (if any).  For mixed elastic
+   !  scattering (ENDF-6 LTHR=3, coherent and incoherent) the coherent
+   !  part uses mtref+1 and the incoherent part mtref+2, i.e. three
+   !  consecutive mt numbers.  Without inelastic data (iinc=0) the
+   !  elastic data start at mtref.  The mt numbers used are listed
+   !  in the output (DLA, IAEA, 19 Oct 2026).
    !
    !  Multiple scattering types (i.e., H free and H in H2O) can be
    !  written on one PENDF tape by using different values of mtref
    !  for each thermr run.  If data for one mtref is already on the
-   !  tape, it will be replaced with the new cross sections.
+   !  tape, it will be replaced with the new cross sections (a warning
+   !  is given; leave enough free mt numbers between the mtref values
+   !  of different runs, two after mtref for mixed elastic).
    !
    !  The energy grid for coherent scattering is determined
    !  adaptively so as to represent the sharp Bragg edges to a
@@ -128,6 +136,9 @@ contains
    !                  1      E-mu-E' ordering (MF6/Law7)
    !     natom      number of principal atoms
    !     mtref      mt for inelastic reaction (221-250 only)
+   !                (elastic: mtref+1; mixed elastic: coherent
+   !                mtref+1 and incoherent mtref+2; the last mt used
+   !                must not exceed 250)
    !     iprint     print option (0=minimum, 1=maximum,
    !                2=max. normal + intermediate results)
    !                (default=0)
@@ -152,6 +163,7 @@ contains
    !       nendf can be ENDF6 format (e.g., from leapr) while
    !       nin and nout are ENDF4 or 5 format, if desired.
    !
+   ! (DLA, IAEA)
    !-------------------------------------------------------------------
    use mainio ! provides nsysi,nsyso,nsyse
    use endf   ! provides endf routines and variables
@@ -160,6 +172,7 @@ contains
    integer::icoh,i,icopy,idis,nb,nw,iold,inew,indexc,indexi,mtref
    integer::iverp,itemp,nwb,it,ntape,nex,ne,np,isave
    integer::lthr,mgrid
+   character(60)::strgrd
    real(kr)::e,enext,emaxs,time,sz2,t,templ,s,temp
    real(kr)::ex(2)
    real(kr),dimension(:),allocatable::eftemp,eftmp2,euser
@@ -244,7 +257,14 @@ contains
    else
      allocate(euser(mgrid))
      read(nsysi,*) (euser(i),i=1,mgrid)
-     if (euser(1).lt.egrid0(1)) euser(1)=egrid0(1)
+     ! the first user energy cannot be below 1e-5 eV (lowest
+     ! energy of the default grid): reset with a message
+     ! (DLA, IAEA, 12 Oct 2026)
+     if (euser(1).lt.egrid0(1)) then
+       write(strgrd,'(''first user energy'',1p,e10.3,'' ev'')') euser(1)
+       call mess('thermr',strgrd,'reset to 1.0e-5 ev (lowest energy)')
+       euser(1)=egrid0(1)
+     endif
      do i=2,mgrid
        if (euser(i).le.euser(i-1)) then
          call error('thermr','incorrect incident energy grid',' ')
@@ -332,11 +352,9 @@ contains
      (tempr(i),i=2,ntemp)
    write(nsyso,'(&
      &'' tolerance ............................ '',1p,e10.4/&
-     &'' max energy for thermal treatment ..... '', e10.4)')&
-       tol,emax
-   if (mgrid.gt.0) then
-     write(nsyso,'(/'' incident energy grid built from user input.'')')
-   endif
+     &'' max energy for thermal treatment ..... '', e10.4/&
+     &'' user incident energies (mgrid) ....... '',0p,i10)')&
+       tol,emax,mgrid
 
    if (iinc.eq.2.and.iverf.lt.6) then
       write(nsyso,'(/&
@@ -356,6 +374,19 @@ contains
          if (ntemp.gt.1) write(nsyso,'(40x,1p,e10.4)')&
            (eftmp2(i),i=2,ntemp)
       endif
+   endif
+   ! meaning of mgrid, printed after the input listing
+   ! (DLA, IAEA, 13 Oct 2026)
+   if (mgrid.gt.0) then
+      write(nsyso,'(/'' notes on the input options:''/&
+        &''   mgrid='',i4,'': inelastic incident energies from the''/&
+        &''   user input (from'',1p,e10.3,'' ev), then the default''/&
+        &''   grid above them;'',i5,'' energies in total'')')&
+        mgrid,egrid(1),ngrid
+   else
+      write(nsyso,'(/'' notes on the input options:''/&
+        &''   mgrid<=0: default incident energy grid of the''/&
+        &''   inelastic reaction ('',i3,'' energies)'')') ngrid
    endif
    write(nsyso,'(/'' endf uses endf-'',i1,'' format'')') iverf
 
@@ -486,6 +517,9 @@ contains
          call rdelas(temp,lthr,nendf,nwb,indexc,indexi)
       endif
    endif
+
+   !--mt numbers written by this run (DLA, IAEA, 19 Oct 2026)
+   if (itemp.eq.1) call thrmts(iinc,icoh,mtref)
 
    !--compute incoherent cross sections
    if (iinc.ne.0) then
@@ -3047,6 +3081,48 @@ contains
    return
    end subroutine sigu
 
+   subroutine thrmts(iinc,icoh,mtref)
+   !-------------------------------------------------------------------
+   ! List the mt numbers written by this thermr run (same order as
+   ! tpend: inelastic, coherent elastic, incoherent elastic, starting
+   ! at mtref) and stop if the last one exceeds 250 (mt 251-253 are
+   ! mubar, xi and gamma).  (D. L. Aldama, IAEA, 19 Oct 2026)
+   !-------------------------------------------------------------------
+   use mainio ! provides nsyso
+   use util   ! provides error
+   ! externals
+   integer::iinc,icoh,mtref
+   ! internals
+   integer::n,i
+   character(18)::lab(3)
+   character(60)::strng
+
+   n=0
+   if (iinc.ne.0) then
+      n=n+1
+      lab(n)='inelastic'
+   endif
+   if ((icoh.gt.0.and.icoh.le.10).or.icoh.gt.20) then
+      n=n+1
+      lab(n)='coherent elastic'
+   endif
+   if (icoh.gt.10) then
+      n=n+1
+      lab(n)='incoherent elastic'
+   endif
+   if (n.eq.0) return
+   write(nsyso,'(/'' mt numbers written by this run:'')')
+   do i=1,n
+      write(nsyso,'(4x,''mt'',i4,2x,a)') mtref+i-1,trim(lab(i))
+   enddo
+   if (mtref+n-1.gt.250) then
+      write(strng,'(''mtref='',i3,'' needs mt up to'',i4,&
+        &'' (max 250)'')') mtref,mtref+n-1
+      call error('thrmts',strng,'use a smaller mtref')
+   endif
+   return
+   end subroutine thrmts
+
    subroutine tpend(iold,itemp,ne,nex,icoh,icopy,mtref)
    !-------------------------------------------------------------------
    ! Write the output pendf tape.
@@ -3061,6 +3137,7 @@ contains
    integer::lim,ix,j,mti,mfi,mf,mt,mfn,mtn,mat
    integer::istart,iend,k,ib,ifend,ie,ltt
    integer::nb,nw,indx,nx,nc,nxn,nne,nl1,nmu,imu
+   character(60)::strng
    real(kr)::temp,rxsec,yy,sec
    real(kr)::ex(20)
    real(kr),dimension(:),allocatable::dico,dicn,sav
@@ -3128,6 +3205,19 @@ contains
    allocate(sav(6))
    nc=nx
    call dictio(nin,0,0,dico,nb,nc)
+   ! warn if thermal data of this run replace sections already on the
+   ! input pendf (e.g. another scattering law) (DLA, IAEA, 19 Oct 2026)
+   if (itemp.eq.1) then
+      do i=0,6*(nx-1),6
+         mfi=nint(dico(i+3))
+         mti=nint(dico(i+4))
+         if (mfi.eq.3.and.mti.ge.mtref.and.mti.le.mtref+nex-3) then
+            write(strng,'(''mf3/mt'',i3,'' already on input pendf'',&
+              &'' for mat'',i5)') mti,matd
+            call mess('tpend',strng,'it will be replaced')
+         endif
+      enddo
+   endif
    do i=1,nw
       dicn(i)=0
    enddo
