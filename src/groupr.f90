@@ -378,6 +378,7 @@ contains
    logical::need_name
 
    !--initialize
+   ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    nwscr=20000
    nfscr=10
    nflx=11
@@ -7740,9 +7741,15 @@ contains
          nx=nint(tmp(ilo+4))
          n=nint(tmp(ilo+5))
          ex=40
+         ! sqrt(e) extension of the low-energy neutron spectra: same
+         ! conditions as ACER (acelf6) of LANL NJOY2016.80: no discrete
+         ! lines, first tabulated outgoing energy zero; lin-lin (lep=2)
+         ! also n>3 (DLA, IAEA, 13 Oct 2026; the LANL groupr checks only lep and
+         ! zap, so it also smoothed discrete lines and zeroed the first
+         ! point of spectra not starting at zero; the previous IAEA test
+         ! was first e'<=emin, p1>0, second e'>40 ev)
          if (ismooth.gt.0.and.jzap.eq.1.and.lep.eq.1.and.&
-             ndx.eq.0.and.tmp(ilo+6).le.emin.and.&
-             tmp(ilo+7).gt.zero.and.tmp(ilo+6+ncyc).gt.ex) then
+             ndx.eq.0.and.tmp(ilo+6).eq.zero) then
             fx=.8409
             cx=tmp(ilo+6+ncyc)*tmp(ilo+7)
             do while (n.gt.2)
@@ -7782,7 +7789,7 @@ contains
             enddo
             l=ilo+6+nx
          else if (ismooth.gt.0.and.jzap.eq.1.and.lep.eq.2.and.n.gt.3.and.&
-                  ndx.eq.0) then
+                  ndx.eq.0.and.tmp(ilo+6).eq.zero) then
              write(nsyso,'('' extending lin-lin as sqrt(E) below'',&
                &1p,e10.2,'' eV for E='',e10.2,'' eV'')')&
                tmp(ilo+6+ncyc),tmp(ilo+1)
@@ -9709,6 +9716,7 @@ contains
    character(60)::strng
    integer,parameter::mxlg=65
    real(kr)::flo(mxlg),fhi(mxlg)
+   ! modified (DLA, IAEA)
    integer,parameter::ncmax=7000
    real(kr)::fls(ncmax)
    real(kr),parameter::emax=1.e10_kr
@@ -10337,6 +10345,7 @@ contains
    li=nint(b(3))
    ltt=nint(b(4))
    ni=nint(b(6))
+   ! modified (DLA, IAEA)
    ntmp=20000
    allocate(tmp(ntmp))
    enext=emax
@@ -11150,6 +11159,7 @@ contains
       if (irr26.ne.1) then
          if (mth.le.iabs(mf4r(6,irr26-1))+1) itest=1
       endif
+      ! modified (DLA, IAEA)
       if (mth.ne.18.and.mth.ne.19.and.mth.ne.20.and.&
           mth.ne.21.and.mth.ne.38) then ! exclude fission for residual production
          if (itest.eq.1) then
@@ -11931,6 +11941,7 @@ contains
                   call moreio(nin,0,0,tmp(l),nb,nw)
                   l=l+nw
                enddo
+               ! modified (DLA, IAEA)
                if (l.gt.ntmp) call error('getsed',&
                    'exceeded tmp storage',' ')
                do ip=2,np
