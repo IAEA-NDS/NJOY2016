@@ -17,25 +17,122 @@ module heatm
    integer,parameter::maxmf6=320
 
    ! global variables
-   integer::matd,mgam,npk,mtp(28),nqa,mta(nqamax),mt303,mt19
-   integer::ne,kchk,iprint,lqs(nqamax)
-   integer::kkerma,krecoil
+   integer::matd,mgam,npk,mtp(50),nqa,mta(nqamax),mt303,mt19
+   integer,parameter::maxmf5=500
+   integer,parameter::nrmax=2000
+   integer::nrt
+   real(kr)::ert(nrmax),rrt(nrmax)
+   ! recoil of the mt5 residuals without distribution
+   ! (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com, 6 Oct 2026)
+   integer::n5t
+   real(kr)::e5t(nrmax),d5t(nrmax),h5t(nrmax)
+   integer::n5mt,mt5l(maxmf5)
+   ! File 4 sections and angular tables for the anisotropy correction
+   ! of the multi-neutron recoil (anitab, anipz) (DLA, IAEA, Oct 2026)
+   integer::n4mt,mt4l(maxmf5)
+   integer::n4e,lct4,iso4
+   real(kr),dimension(:),allocatable::e4,f14,mu4,w4
+   integer,dimension(:),allocatable::law4,k4o,k4n
+   ! representation of the File 4 distribution at each energy (for the
+   ! evaluation at arbitrary cosines): kind4=1 Legendre (a_l in rp4),
+   ! kind4=2 table (mu,f pairs in rp4, panel laws in lp4); s4 = norm
+   real(kr),dimension(:),allocatable::rp4,s4
+   integer,dimension(:),allocatable::lp4,kind4,r4o,r4n
+   ! 64-point Gauss-Legendre rule on (-1,1) for anitab/anipz (DLA, IAEA)
+   real(kr),dimension(64),parameter::g64x=(/&
+     -9.99305042E-01_kr,-9.96340117E-01_kr,-9.91013371E-01_kr,&
+     -9.83336254E-01_kr,-9.73326828E-01_kr,-9.61008800E-01_kr,&
+     -9.46411375E-01_kr,-9.29569172E-01_kr,-9.10522137E-01_kr,&
+     -8.89315446E-01_kr,-8.65999398E-01_kr,-8.40629296E-01_kr,&
+     -8.13265315E-01_kr,-7.83972359E-01_kr,-7.52819907E-01_kr,&
+     -7.19881850E-01_kr,-6.85236313E-01_kr,-6.48965471E-01_kr,&
+     -6.11155355E-01_kr,-5.71895646E-01_kr,-5.31279464E-01_kr,&
+     -4.89403146E-01_kr,-4.46366017E-01_kr,-4.02270158E-01_kr,&
+     -3.57220158E-01_kr,-3.11322872E-01_kr,-2.64687162E-01_kr,&
+     -2.17423644E-01_kr,-1.69644420E-01_kr,-1.21462819E-01_kr,&
+     -7.29931218E-02_kr,-2.43502927E-02_kr, 2.43502927E-02_kr,&
+      7.29931218E-02_kr, 1.21462819E-01_kr, 1.69644420E-01_kr,&
+      2.17423644E-01_kr, 2.64687162E-01_kr, 3.11322872E-01_kr,&
+      3.57220158E-01_kr, 4.02270158E-01_kr, 4.46366017E-01_kr,&
+      4.89403146E-01_kr, 5.31279464E-01_kr, 5.71895646E-01_kr,&
+      6.11155355E-01_kr, 6.48965471E-01_kr, 6.85236313E-01_kr,&
+      7.19881850E-01_kr, 7.52819907E-01_kr, 7.83972359E-01_kr,&
+      8.13265315E-01_kr, 8.40629296E-01_kr, 8.65999398E-01_kr,&
+      8.89315446E-01_kr, 9.10522137E-01_kr, 9.29569172E-01_kr,&
+      9.46411375E-01_kr, 9.61008800E-01_kr, 9.73326828E-01_kr,&
+      9.83336254E-01_kr, 9.91013371E-01_kr, 9.96340117E-01_kr,&
+      9.99305042E-01_kr/)
+   real(kr),dimension(64),parameter::g64w=(/&
+      1.78328072E-03_kr, 4.14703326E-03_kr, 6.50445797E-03_kr,&
+      8.84675983E-03_kr, 1.11681395E-02_kr, 1.34630479E-02_kr,&
+      1.57260305E-02_kr, 1.79517158E-02_kr, 2.01348232E-02_kr,&
+      2.22701738E-02_kr, 2.43527026E-02_kr, 2.63774697E-02_kr,&
+      2.83396726E-02_kr, 3.02346571E-02_kr, 3.20579284E-02_kr,&
+      3.38051618E-02_kr, 3.54722133E-02_kr, 3.70551285E-02_kr,&
+      3.85501532E-02_kr, 3.99537411E-02_kr, 4.12625632E-02_kr,&
+      4.24735151E-02_kr, 4.35837245E-02_kr, 4.45905582E-02_kr,&
+      4.54916279E-02_kr, 4.62847966E-02_kr, 4.69681828E-02_kr,&
+      4.75401657E-02_kr, 4.79993886E-02_kr, 4.83447622E-02_kr,&
+      4.85754674E-02_kr, 4.86909570E-02_kr, 4.86909570E-02_kr,&
+      4.85754674E-02_kr, 4.83447622E-02_kr, 4.79993886E-02_kr,&
+      4.75401657E-02_kr, 4.69681828E-02_kr, 4.62847966E-02_kr,&
+      4.54916279E-02_kr, 4.45905582E-02_kr, 4.35837245E-02_kr,&
+      4.24735151E-02_kr, 4.12625632E-02_kr, 3.99537411E-02_kr,&
+      3.85501532E-02_kr, 3.70551285E-02_kr, 3.54722133E-02_kr,&
+      3.38051618E-02_kr, 3.20579284E-02_kr, 3.02346571E-02_kr,&
+      2.83396726E-02_kr, 2.63774697E-02_kr, 2.43527026E-02_kr,&
+      2.22701738E-02_kr, 2.01348232E-02_kr, 1.79517158E-02_kr,&
+      1.57260305E-02_kr, 1.34630479E-02_kr, 1.11681395E-02_kr,&
+      8.84675983E-03_kr, 6.50445797E-03_kr, 4.14703326E-03_kr,&
+      1.78328072E-03_kr/)
+   integer::ne,kchk,iprint,lqs(nqamax),lprk
+   integer::kkerma,mtrec,mtrec1,mtrec2
    real(kr),dimension(:),allocatable::qbar
    real(kr)::qa(nqamax),efirst,elast,za,awr,elist(ilmax)
    real(kr)::break
    real(kr)::qdel,etabmax
    integer::mt103,mt104,mt105,mt106,mt107,mt16
    integer::miss4(250),nmiss4
-   integer::i6,mt6(maxmf6),i6g,mt6no(maxmf6)
+   integer::i6,mt6(maxmf6),i6g,mt6no(maxmf6),mt6bad(maxmf6)
    integer::i6p,mt6yp(maxmf6)
+   ! File 3 and File 12/13 sections (phless)
+   ! (DLA, IAEA, 18 Oct 2026)
+   integer,parameter::maxphl=1000
+   integer::n3d,mt3d(maxphl),ngd,mtgd(maxphl)
    integer::jp,jpn,jpp
    real(kr)::q,zat,awrt,zap,awp
    integer::lct
    integer::idame
+   real(kr),parameter::ysing=1.01e0_kr
    real(kr)::ebot,etop
    integer::mt458,nply,lfc,ifc1,ifc2,ifc3,ifc4,ifc5,ifc6
    real(kr),dimension(:),allocatable::c458,cpoly,hpoly,afr,anp,agp
+   ! fission lower limit: EFR of MT458 up to efrs, above it
+   ! efrst-efrslp*(e-efrs) (DLA, IAEA, 16 Oct 2026); efrslp=0.50, a
+   ! rounded upper bound of the Madland 2006 slopes (17 Oct 2026)
+   real(kr)::efrs,efrst
+   real(kr),parameter::efrslp=0.50e0_kr
+   ! fission damage: recoil of the fissioning nucleus
+   ! (mass awr, charge z) from the emission of one neutron with the
+   ! spectrum of the data (LANL convention, File 5), applied in the same
+   ! way to File 6 without recoil (neutron subsection only; ternary p,
+   ! t, alpha and photons do not contribute).  Fission fragments are
+   ! not included.  Table for File 6: ef6, df6 (nf6 points).
+   ! (DLA, IAEA, 5 Oct 2026)
+   integer::nf6
+   real(kr),dimension(:),allocatable::ef6,df6
    real(kr)::emc2,tm,rtm
+
+   ! exact recoil of several independently emitted
+   ! particles (fnadd, cvcmp, cvemit, cvdam, dirnod): fine-node buffer,
+   ! grid of the compression (cvnb x cvnb bins), azimuths (cvnphi)
+   ! (DLA, IAEA, Oct 2026)
+   integer,parameter::cvnb=12,cvnphi=16,cvmx=2*cvnb*cvnb
+   integer::nfn
+   real(kr),dimension(:),allocatable::fnz,fnt,fnw
+   ! exact path of tabdmn and anadmn (neutron-only reactions with
+   ! Files 4 and 5; set by conbar, never for fission)
+   logical::lcvx=.false.
 
    ! target
    integer::izat
@@ -69,6 +166,10 @@ contains
    ! when available.  A diagnostic message is printed if the
    ! momentum calculation leads to a significant error in
    ! energy conservation.
+   ! the reactions that leave an excited residual and
+   ! have no photon data (own or lumped) are listed with the photon
+   ! energy deposited locally by the energy balance (phless); the
+   ! kermas are not changed (DLA, IAEA, 18 Oct 2026).
    !
    ! If desired, the energy-balance kerma factors can be compared
    ! with conservative kinematic limits (set iprint=2).
@@ -89,6 +190,8 @@ contains
    ! card 2
    !    matd     material to be processed
    !    npk      number of partial kermas desired (default=0)
+   !             (at most 10 with the kinematic limits: iprint=2
+   !             or kkerma=1,2; 34 otherwise)
    !    nqa      number of user q values (default=0)
    !    ntemp    number of temperatures to process
    !             (default=0, meaning all on pendf)
@@ -97,11 +200,96 @@ contains
    !    iprint   print (0 min, 1 max, 2 check) (default=0)
    !    ed       displacement energy for damage
    !             (default from built-in table)
-   !    kkerma   0/1=total (mt301) is energy balance/kinematic limit
-   !             (default=0, balance)
-   !    krecoil  0/1=use/remove recoil angle-energy data from MF6 for
-   !             heating and damage calculation. Use with caution.
-   !             (default=0, use recoil data on MF6 if available)
+   !    kkerma   total kerma mt301 (default=0); summary for users
+   !             (DLA, IAEA, 20 Oct 2026):
+   !             0 = energy balance of the evaluation (as LANL);
+   !                 it can be negative or below the kinematic
+   !                 limits where the evaluation is inconsistent
+   !                 (a warning is printed)
+   !             1 = kinematic upper limit mt443 (as the LANL
+   !                 kinematic kerma), not below the damage mt444
+   !                 nor the sum of the partial kermas
+   !             2 = energy balance changed as little as possible:
+   !                 kept where it is consistent and raised only up
+   !                 to the lower limit it violates (lower kinematic
+   !                 limits, damage mt444, sum of the partials); the
+   !                 upper limit mt443 is not imposed: where photons
+   !                 are missing in the evaluation their energy is
+   !                 deposited locally (total energy conserved, local
+   !                 heating overestimated); for ACE and PURR
+   !             kkerma=1 and 2 correct the heating (mt301) where the
+   !             energy balance of the evaluation fails, so that purr,
+   !             acer and groupr get the best possible heating
+   !             details:
+   !             1: mt301=mt443 and mt302, 304, 318, 402 their
+   !               kinematic limits (upper bounds, as LANL 2016.80);
+   !               for fission (h0=EFR+EGP) and for mt103-107,
+   !               continua and multi-particle reactions without
+   !               File 6 the limit includes the photon energy, which
+   !               is counted twice with photon transport; these
+   !               reactions are listed (k1pho) (18 Oct 2026)
+   !               mt301 = max(mt443, mt444, sum of the disjoint
+   !               partials written) at each energy (20 Oct 2026):
+   !               the largest of the kinematic upper limit, the
+   !               damage energy and the sum of the partials, so that
+   !               mt301 >= mt444 and mt301-mt302-mt318-mt402 >= 0
+   !               (purr) where a reaction of the evaluation makes
+   !               mt443 too low or negative; mt443 and the partials
+   !               are not changed (diagnostics)
+   !             2=energy balance made positive and consistent
+   !               (DLA, IAEA, 14 Oct 2026): at each energy the
+   !               partial kermas are not below their lower kinematic
+   !               limits, mt301 is not below its limit, and mt301
+   !               minus the partials is not below the limit of the
+   !               reactions not requested
+   !               (excesses of the partials reduced by one factor
+   !               where needed; all at the lower limit where the
+   !               balance fails).  Where the balance is consistent it
+   !               is kept.  Lower limit of fission: y*EFR (MT458),
+   !               continued with -0.50 MeV/MeV where MT458 does not
+   !               give EFR decreasing with e (16 Oct 2026); none
+   !               without MT458.
+   !               Photons given only in mt3 (with mt102 photons) go
+   !               to mt304 below the first other nonelastic
+   !               threshold (see kcons2)
+   !               Lower limit of capture: max(LANL limit e/(a+1),
+   !               e/(a+1) + photon recoil kicks of the cascade of
+   !               independent photons), from the mt102 photons (mf12)
+   !               or the mt3 photons attributed to capture,
+   !               the recoil model of mt443/444 (18 Oct 2026)
+   !               Lower limit of every other reaction not below its
+   !               damage energy (18 Oct 2026): mt301 = max(balance,
+   !               sum of the limits) >= max(balance, kinematic
+   !               limit, mt444) and each partial >= its damage
+   !               (kkerma=1 starts from mt443 and kkerma=2 from the
+   !               energy balance; both keep mt301 >= mt444 and
+   !               mt301 >= the sum of the disjoint partials)
+   !             with kkerma=0 a warning is printed where the energy
+   !             balance is below the lower kinematic limit (checked
+   !             for up to 10 partial kermas)
+   !    mtrec    removal of the recoil (residual) subsections given
+   !             in MF6, for studies (replaces krecoil).
+   !             = 0 : recoils given in MF6 are used; missing ones
+   !                   are computed (one-particle recoil with the
+   !                   multi-particle correction, mt5 residual model,
+   !                   mt102 photon momentum) (default)
+   !             0<|mtrec|<1000 : mt=|mtrec|
+   !             |mtrec|>1000   : range of mt's [mt1,mt2] with
+   !                   |mtrec|=1000*mt1+mt2, 1<=mt1<=mt2<=999
+   !             > 0 : the recoils of these mt's are removed and
+   !                   computed with the approximations above
+   !             < 0 : the recoils of these mt's are removed and not
+   !                   computed: no recoil heating and damage for
+   !                   these reactions (diagnostic, not physical)
+   !             Notes:
+   !               - Only MF6 sections are affected.
+   !               - Only recoils with zap > 2004 and law /= 4 are
+   !                 removed (law=4 recoils are always kept).
+   !               - Fission (mt18-21, 38) is never modified; mt18
+   !                 is removed from MF6 when jp>0, as before.
+   !               - Old krecoil values: 2 -> mtrec=5,
+   !                 1 -> mtrec=6999, 3 -> mtrec=1999 (but mt102
+   !                 is now included in these ranges).
    ! card 3      for npk gt 0 only
    !    mtk      mt numbers for partial kermas desired
    !             total (mt301) will be provided automatically.
@@ -130,6 +318,7 @@ contains
    ! card 5a     variable qbar (for reactions with qa flag only)
    !    qbar      tab1 record giving qbar versus e (1000 words max)
    !
+   ! (DLA, IAEA, Oct 2026)
    !-------------------------------------------------------------------
    use mainio ! provides nsysi,nsyso
    use util   ! provides timer,openz,error,mess,repoz,closz
@@ -139,7 +328,10 @@ contains
    integer::ntemp,local,npkk,i,nz,j,isave,iz,loc,nzq,nz0
    integer::nscr,nend4,nend6,iold,inew,itemp,idone,nb,nw
    real(kr)::time,flag
-   integer,parameter::npkmax=28
+   ! up to 10 partial kermas with the kinematic limits
+   ! (kchk=1: 3*npk+7 words), 34 without (npk+3); arrays sized 50
+   ! (DLA, IAEA, Oct 2026)
+   integer,parameter::npkmax=37
    integer::mtk(2+npkmax)
    real(kr)::z(17)
    real(kr),dimension(:),allocatable::tmp
@@ -169,15 +361,54 @@ contains
    iprint=0
    break=0
    kkerma=0
-   krecoil=0
-   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break,kkerma,krecoil
+   mtrec=0
+   read(nsysi,*) matd,npk,nqa,ntemp,local,iprint,break,kkerma,mtrec
+   ! mtrec (replaces krecoil): mt or range of mt's of MF6
+   ! whose recoil subsections are removed (DLA, IAEA, Oct 2026)
+   mtrec1=0
+   mtrec2=0
+   if (mtrec.ne.0) then
+      if (abs(mtrec).lt.1000) then
+         mtrec1=abs(mtrec)
+         mtrec2=mtrec1
+      else
+         mtrec1=abs(mtrec)/1000
+         mtrec2=mod(abs(mtrec),1000)
+      endif
+      if (mtrec1.lt.1.or.mtrec2.lt.mtrec1.or.mtrec2.gt.999)&
+        call error('heatr','illegal mtrec',&
+        '|mtrec|=mt or 1000*mt1+mt2 with 1<=mt1<=mt2<=999')
+      if ((mtrec1.ge.18.and.mtrec2.le.21).or.&
+        (mtrec1.eq.38.and.mtrec2.eq.38))&
+        call mess('heatr','mtrec selects fission only',&
+        'fission is never modified: no recoil removed')
+   endif
    kchk=0
    if (iprint.eq.2) kchk=1
    if (iprint.eq.2) iprint=1
+   ! kkerma=1 replaces mt301, 302, 304, 318, 402 by the
+   ! kinematic limits, which are stored only with kchk=1 (with kchk=2,
+   ! set below when mt443 is requested, hout and gheat used indices
+   ! beyond the stored array: garbage values for mt302, 402)
+   ! kkerma=2 floors the energy-balance kermas by the
+   ! lower kinematic limit (stored with kchk=1) (DLA, IAEA, Oct 2026)
+   if (kkerma.lt.0.or.kkerma.gt.2) call error('heatr',&
+     'illegal kkerma','0 balance, 1 kinematic, 2 balance with floor')
+   if (kkerma.ge.1) kchk=1
+   ! the kinematic limits are also computed with kkerma=0
+   ! (when the storage allows it) to warn where the energy-balance
+   ! kerma is below the lower limit; lprk keeps the iprint=2 listing
+   ! (DLA, IAEA, Oct 2026)
+   lprk=kchk
+   if (kkerma.eq.0.and.kchk.eq.0.and.3*npk+7.le.npkmax) kchk=1
+   if (kkerma.eq.0.and.kchk.eq.0) call mess('heatr',&
+     'too many partial kermas for the kinematic check',&
+     'no check of mt301 against the kinematic limits')
    npkk=npk+3
    if (kchk.eq.1) npkk=3*npk+7
    if (npkk.gt.npkmax) call error('heatr',&
-     'requested too many kerma mt-s (6+mt301 allowed).',' ')
+     'requested too many kerma mt-s.',&
+     'at most 10 with the kinematic check, 34 without')
    if (nqa.gt.nqamax)&
      call error('heatr','requested too many q values.',' ')
    if (npk.gt.0) then
@@ -197,7 +428,8 @@ contains
               npkk=npk+3
             endif
             if (npkk.gt.npkmax) call error('heatr',&
-              'requested too many kerma mt-s (6+mt301 allowed).',' ')
+              'requested too many kerma mt-s.',&
+     'at most 10 with the kinematic check, 34 without')
             mtk(npk)=443
          endif
        else
@@ -302,9 +534,8 @@ contains
         &'' ev'')') break
    endif
    write(nsyso,'(&
-     &'' total kerma (0 balance, 1 kinematic) . '',i10)')kkerma
-   write(nsyso,'(&
-     &'' MF6 recoil data (0 use, 1 ignore) .... '',i10)')krecoil
+     &'' total kerma option (kkerma) .......... '',i10/&
+     &'' MF6 recoil removal (mtrec) ........... '',i10)') kkerma,mtrec
    if (ntemp.eq.0) ntemp=100
    if (npk.ge.3) write(nsyso,'(&
      &'' partial kerma mt-s desired ........... '',i10)') mtp(3)
@@ -327,6 +558,87 @@ contains
                call tab1io(0,nsyso,0,qbar,nb,nw)
             endif
          enddo
+      endif
+   endif
+
+   !--notes on the IAEA input options, printed after the whole input
+   !--listing (DLA, IAEA, 13 Oct 2026)
+   write(nsyso,'(/'' notes on the input options:'')')
+   select case (kkerma)
+   case (0)
+      write(nsyso,'(&
+        &''   kkerma=0: total kerma (mt301) from the energy balance''/&
+        &''   of the evaluation (as LANL); it can be negative or''/&
+        &''   below the kinematic limits where the evaluation is''/&
+        &''   inconsistent: warning where it is below the lower''/&
+        &''   kinematic limit'')')
+   case (1)
+      write(nsyso,'(&
+        &''   kkerma=1: mt301 is the kinematic upper limit (mt443,''/&
+        &''   as the LANL kinematic kerma), not below the damage''/&
+        &''   (mt444) nor the sum of the partial kermas''/&
+        &''   (kkerma=1 and 2 correct the heating where the energy''/&
+        &''   balance of the evaluation fails, for purr, acer and''/&
+        &''   groupr).''/&
+        &''   Details: mt301 and partial kermas replaced by the''/&
+        &''   kinematic limits (mt301=mt443; mt302, 304, 318, 402)''/&
+        &''   (upper bounds, as LANL NJOY2016.80): for fission and''/&
+        &''   for mt103-107, continua and multi-particle reactions''/&
+        &''   without File 6 they include the photon energy, which''/&
+        &''   is counted twice if the photons are also transported''/&
+        &''   (listed by k1pho; kkerma=2 keeps the energy balance);''/&
+        &''   mt301 = max(mt443, mt444, sum of the disjoint partials''/&
+        &''   written) at each energy: mt301 >= mt444 and''/&
+        &''   mt301-mt302-mt318-mt402 >= 0 (purr) also where a''/&
+        &''   reaction of the evaluation makes mt443 too low;''/&
+        &''   mt443 and the partials not changed (kkerma=2 starts''/&
+        &''   from the balance: max(balance, limit, sum of limits))'')')
+   case default
+      write(nsyso,'(&
+        &''   kkerma=2: mt301 is the energy balance changed as''/&
+        &''   little as possible: kept where it is consistent and''/&
+        &''   raised only up to the lower limit it violates (lower''/&
+        &''   kinematic limits, damage mt444, sum of the partials);''/&
+        &''   the upper limit (mt443) is not imposed: where photons''/&
+        &''   are missing in the evaluation their energy is''/&
+        &''   deposited locally (total energy conserved, local''/&
+        &''   heating overestimated); for ACE and PURR''/&
+        &''   (kkerma=1 and 2 correct the heating where the energy''/&
+        &''   balance of the evaluation fails, for purr, acer and''/&
+        &''   groupr).''/&
+        &''   Details: energy balance made positive and consistent''/&
+        &''   at each energy: partials not below their lower''/&
+        &''   kinematic limits, mt301 not below its limit, mt301''/&
+        &''   minus the partials not below the limit of the other''/&
+        &''   reactions (excesses reduced by one factor where''/&
+        &''   needed); the balance is kept where it is consistent;''/&
+        &''   lower limit of fission: fission-product energy EFR''/&
+        &''   (MT458), continued with -0.50 MeV/MeV where MT458''/&
+        &''   does not give it decreasing with e (Madland 2006);''/&
+        &''   lower limit of capture: e/(a+1) plus the recoil kicks''/&
+        &''   of the capture photons (cascade of independent''/&
+        &''   photons, mf12 mt102 or mt3 photons attributed to''/&
+        &''   capture), the recoil model of the damage;''/&
+        &''   lower limit of every other reaction not below its''/&
+        &''   damage energy, so that mt301 >= mt444'')')
+   end select
+   if (mtrec.eq.0) then
+      write(nsyso,'(&
+        &''   mtrec=0: recoils given in MF6 used; missing recoils''/&
+        &''   computed (one-particle with multi-particle correction,''/&
+        &''   mt5 residual model, mt102 photon momentum)'')')
+   else
+      write(nsyso,'(&
+        &''   mtrec: recoils (zap>2004, law/=4) removed from MF6 mt'',&
+        &i4,'' to'',i4/''   (fission mt18-21, 38 excluded)'')')&
+        mtrec1,mtrec2
+      if (mtrec.gt.0) then
+         write(nsyso,'(&
+           &''   removed recoils computed with the approximations'')')
+      else
+         write(nsyso,'(&
+           &''   removed recoils NOT computed: no recoil heating''/&
+           &''   and damage for these mt (diagnostic, not physical)'')')
       endif
    endif
 
@@ -412,6 +724,12 @@ contains
 
             !--analyze dictionary and read energy grids.
             call hinit(iold,nend4,nend6,nscr)
+            ! reactions without photon data (diagnostic)
+            ! (DLA, IAEA, 18 Oct 2026)
+            if (itemp.eq.1) call phless
+            ! kkerma=1, reactions whose kinematic limit
+            ! includes their photon energy (DLA, IAEA, 18 Oct 2026)
+            if (itemp.eq.1.and.kkerma.eq.1) call k1pho
 
             !--calculate heating from neutron files.
             call timer(time)
@@ -495,9 +813,19 @@ contains
    integer::ielem,ik,nr,idnx,nen,law
    integer::lrel,nmod
    integer::i6t,nl,l
-   integer::nscr6,iprec,kpart
+   integer::lct6,iph102,nrec102,n4rec102,npho102,ipm102,lep6,nbad6
+   integer::ie1bad,iok,nwl
+   logical::chk102
+   real(kr)::q102,ekick,ekmax,emx102,elim102
+   real(kr)::e1bad,ek1bad,em1bad,ex1bad,el1bad
+   real(kr),dimension(:),allocatable::rb
+   character(60)::strng2
+   integer::nscr6,l0,nb0,nw0
+   integer::nrm,nrmt,imiss
+   logical::inrec,norec
+   integer::nk6(maxmf6)
    real(kr)::zar,awrr,e,enext,y,yld,test,efix
-   real(kr)::c(30)
+   real(kr)::c(50)
    character(60)::strng
    real(kr),dimension(:),allocatable::scr
    real(kr),dimension(:),allocatable::bufo
@@ -509,6 +837,8 @@ contains
    real(kr),parameter::tol=1.e-5_kr
 
    !--analyze dictionary
+   n3d=0
+   ngd=0
    lrel=0
    nmod=0
    i6=0
@@ -523,7 +853,11 @@ contains
    ifiss=0
    mt19=0
    i519=0
+   n5mt=0
+   n4mt=0
    mt458=0
+   efrs=1.e30_kr
+   efrst=0
    qdel=0
    jp=0
    jpn=0
@@ -589,7 +923,9 @@ contains
                      if (mtd.ge.700.and.mtd.lt.750) mt105=1
                      if (mtd.ge.750.and.mtd.lt.800) mt106=1
                      if (mtd.ge.800.and.mtd.lt.850) mt107=1
-                     if (mtd.ge.875.and.mtd.lt.891) mt16=1
+                     ! mt891 (continuum) included (was .lt.891)
+                     ! (DLA, IAEA, Oct 2026)
+                     if (mtd.ge.875.and.mtd.le.891) mt16=1
                      if (mtd.ge.600.and.mtd.le.850) then
                         j=i
                         idone=0
@@ -650,6 +986,15 @@ contains
                else
                   if (mfd.eq.5) then
                      if (mtd.eq.19) i519=1
+                     if (n5mt.lt.maxmf5) then
+                        n5mt=n5mt+1
+                        mt5l(n5mt)=mtd
+                     endif
+                  else if (mfd.eq.4) then
+                     if (n4mt.lt.maxmf5) then
+                        n4mt=n4mt+1
+                        mt4l(n4mt)=mtd
+                     endif
                   else if (mfd.eq.6) then
                      i6=i6+1
                      if (i6.gt.maxmf6) call error('hinit',&
@@ -660,6 +1005,21 @@ contains
             endif
          endif
          i=i+6
+      enddo
+      ! lists of the File 3 and File 12/13 sections for the
+      ! diagnostic of reactions without photon data (phless)
+      ! (DLA, IAEA, 18 Oct 2026)
+      do j=1,nw,6
+         mfd=nint(scr(j+2))
+         mtd=nint(scr(j+3))
+         if (mfd.eq.3.and.n3d.lt.maxphl) then
+            n3d=n3d+1
+            mt3d(n3d)=mtd
+         else if ((mfd.eq.12.or.mfd.eq.13).and.mtd.ne.460.and.&
+           ngd.lt.maxphl) then
+            ngd=ngd+1
+            mtgd(ngd)=mtd
+         endif
       enddo
    endif
    if (mt19.eq.1.and.i519.eq.0) mt19=2
@@ -810,14 +1170,154 @@ contains
          else
             call error('hinit','bad LFC in mt=458.',' ')
          endif
+         ! fission lower limit: e* above which EFR is not decreasing
+         ! (DLA, IAEA, 16 Oct 2026)
+         call efrcut(etop)
       else
          lfc=0
          nply=0
          allocate(cpoly(0:nply))
          cpoly=0
-         call mess('hinit','mt458 is missing for this mat',' ')
+         ! fission heating from the MF3 q (delayed energy included),
+         ! without lower limit (DLA, IAEA, 16 Oct 2026)
+         call mess('hinit','mt458 is missing for this mat',&
+           'fission heat from mf3 q (delayed incl.), no lower limit')
       endif
    endif
+   !
+   !-- Explore mf6 for implementing the mtrec option (replaces
+   !-- krecoil) (DLA, IAEA, Oct 2026):
+   !--
+   !-- mtrec = 0 : keep recoil data
+   !-- mtrec1 <= mt <= mtrec2 : remove the recoil subsections
+   !--   (zap > 2004 and law /= 4) of mt; fission (mt=18, 19-21, 38)
+   !--   is never modified, but if mt=18 and jp>0, then mt=18 data
+   !--   is removed from mf6.
+   !--   the temporary tape nscr6 is created from the endf tape.
+   ! (DLA, IAEA, Oct 2026)
+   nscr6=16
+   nrmt=0
+   if (nendf.lt.0) nscr6=-nscr6
+   call openz(nscr6,1)
+   call repoz(nscr6)
+   nsp=1
+   math=1
+   call afend(nscr6,0)
+   if (i6.gt.0) then
+     do ii6=1,i6
+       nk6(ii6)=0
+     enddo
+     ii6=0
+     call findf(matd,6,0,nendf)
+     mfh=6
+     do while (mfh.eq.6)
+       call contio(nendf,0,0,scr,nb0,nw0)
+       if (mfh.ne.0.and.mth.ne.0) then
+         nk=n1h
+         if (mth.eq.18) then
+           jp=l1h
+           jpn=mod(jp,10)
+           jpp=jp-10*jpn   ! was jp-10*jp (jpp is not used)
+           ! (DLA, IAEA, Oct 2026)
+         endif
+         inrec=(mtrec.ne.0.and.mth.ge.mtrec1.and.mth.le.mtrec2.and.&
+           .not.((mth.ge.18.and.mth.le.21).or.mth.eq.38))
+         if (.not.inrec) then
+           if (mth.eq.18.and.jp.ne.0) then
+             !--delete mt=18 from mt6 array and skip this section (DLA, IAEA)
+             i6t=i6
+             do i=1,i6t
+               if (mt6(i).lt.18) cycle
+               if (mt6(i).eq.18) i6=i6-1
+               if (mt6(i).gt.18 .and. i6.ne.i6t) mt6(i-1)=mt6(i)
+             enddo
+             call tosend(nendf,0,0,scr)
+           else
+             ii6=ii6+1
+             nk6(ii6)=nk
+             nsh=1
+             call contio(0,nscr6,0,scr,nb0,nw0)
+             call tosend(nendf,nscr6,0,scr)
+           endif
+         else
+           l0=1+nw0
+           idone=0
+           nrm=0
+           do ik=1,nk
+             l=l0
+             call tab1io(nendf,0,0,scr(l),nb,nw)
+             zap=c1h
+             law=l2h
+             if ((zap.ge.0.and.zap.le.2004.0).or.law.eq.4) then
+               if (idone.eq.0) then
+                 ii6=ii6+1
+                 nsh=1
+                 call contio(0,nscr6,0,scr(1),nb0,nw0)
+                 idone=1
+               endif
+               nk6(ii6)=nk6(ii6)+1
+               call tab1io(0,nscr6,0,scr(l),nb,nw)
+               l=l+nw
+               do while (nb.ne.0)
+                  call moreio(nendf,nscr6,0,scr(l),nb,nw)
+                  l=l+nw
+               enddo
+               call skip6(nendf,nscr6,0,scr(l0),law)
+             else
+               nrm=nrm+1
+               l=l+nw
+               do while (nb.ne.0)
+                  call moreio(nendf,0,0,scr(l),nb,nw)
+                  l=l+nw
+               enddo
+               call skip6(nendf,0,0,scr(l0),law)
+             endif
+           enddo
+           if (nrm.gt.0) then
+             nrmt=nrmt+1
+             write(nsyso,'(''   mtrec: mf6 mt'',i4,'':'',i4,'' of'',i4,&
+               &'' subsections removed (recoils)'')') mth,nrm,nk
+           else
+             write(nsyso,'(''   mtrec: mf6 mt'',i4,&
+               &'' has no recoil subsection to remove'')') mth
+           endif
+           if (idone.gt.0) then
+             call asend(nscr6,0)
+           else
+             !--delete mt=mth from mt6 array (DLA, IAEA)
+             write(strng,'(a,i3,a,i7)')'no data in mf6, mt',mth,&
+               ' after mtrec=',mtrec
+             call mess('hinit',strng,'reaction removed from mf6')
+             i6t=i6
+             do i=1,i6t
+               if (mt6(i).lt.mth) cycle
+               if (mt6(i).eq.mth) i6=i6-1
+               if (mt6(i).gt.mth .and. i6.ne.i6t) mt6(i-1)=mt6(i)
+             enddo
+           endif
+         endif
+       endif
+     enddo
+     if (i6.ne.ii6) then ! checking
+       write(strng,'(a,i3,a,i3,a,i7)')' i6 != ii6 -> ',i6,' != ',ii6,&
+         ' after mtrec=',mtrec
+       call mess('hinit',strng,'i6 set equal to ii6')
+       i6=ii6
+     endif
+     if (mtrec.ne.0) then
+       write(strng,'(''mtrec='',i7,'': recoils removed in'',i4,&
+         &'' reactions'')') mtrec,nrmt
+       if (mtrec.gt.0) then
+         call mess('hinit',strng,'removed recoils computed (approx.)')
+       else
+         call mess('hinit',strng,'removed recoils not computed')
+       endif
+     endif
+   endif
+   call afend(nscr6,0)
+   call amend(nscr6,0)
+   call atend(nscr6,0)
+   call repoz(nscr6)
 
    !--prepare a scratch tape for file 6
    !--check for missing recoil subsections
@@ -825,60 +1325,56 @@ contains
    i6p=0
    mt6yp=0
    if (i6.gt.0) then
-      if (krecoil.gt.0) then
-        !--prepare a temporary file for further analysis (krecoil>0)
-        nscr6=16
-        if (nendf.lt.0) nscr6=-nscr6
-        call openz(nscr6,1)
-        call repoz(nscr6)
-        nsp=1
-        math=1
-        call afend(nscr6,0)
-      else
-        nscr6=nend6
-      endif
       call repoz(nend6)
       nsp=1
       math=1
       call afend(nend6,0)
-      call findf(matd,6,0,nendf)
+      ! q value of mt102 (File 3) for the kinematic
+      ! check of File 6 capture recoil distributions (DLA, IAEA, 5 Oct 2026)
+      q102=0
+      do i=1,i6
+         if (mt6(i).eq.102) then
+            call findf(matd,3,102,nendf)
+            call contio(nendf,0,0,scr,nb,nw)
+            call tab1io(nendf,0,0,scr,nb,nw)
+            q102=c2h
+         endif
+      enddo
+      call findf(matd,6,0,nscr6)
       ii6=0
    endif
    mfh=6
    do while (mfh.eq.6)
-      call contio(nendf,0,0,scr,nb,nw)
-      if (mth.eq.18) then
-         jp=l1h
-         jpn=mod(jp,10)
-         jpp=jp-10*jpn
-      endif
-      if (mth.ne.18 .or. (mth.eq.18 .and. jp.eq.0)) then
-         call contio(0,nscr6,0,scr,nb,nw)
-      else
-         !--delete mt=18 from mt6 array and skip this section (for now)
-         i6t=i6
-         do i=1,i6t
-            if (mt6(i).lt.18) cycle
-            if (mt6(i).eq.18) i6=i6-1
-            if (mt6(i).gt.18 .and. i6.ne.i6t) mt6(i-1)=mt6(i)
-         enddo
-         call tosend(nendf,0,0,scr)
-         cycle
-      endif
+      call contio(nscr6,0,0,scr,nb,nw)
       if (mfh.ne.0) then
          if (mth.ne.0) then
-            nk=n1h
             ii6=ii6+1
+            nk=nk6(ii6)
+            n1h=nk
+            scr(5)=nk
+            call contio(0,nend6,0,scr,nb,nw)
             mt6no(ii6)=0
+            mt6bad(ii6)=0
+            ! mtrec<0, no recoil computed for these mt
+            ! (DLA, IAEA, Oct 2026)
+            norec=(mtrec.lt.0.and.mth.ge.mtrec1.and.mth.le.mtrec2.and.&
+              .not.((mth.ge.18.and.mth.le.21).or.mth.eq.38))
+            imiss=0
+            lct6=nint(scr(4))
+            iph102=0
+            nrec102=0
+            n4rec102=0
+            npho102=0
+            ipm102=0
             zar=c1h+1
             awrr=c2h+1
             ielem=mod(nint(c1h),1000)
             do ik=1,nk
                l=1
-               call tab1io(nendf,nscr6,0,scr(l),nb,nw)
+               call tab1io(nscr6,nend6,0,scr(l),nb,nw)
                l=l+nw
                do while (nb.ne.0)
-                  call moreio(nendf,nscr6,0,scr(l),nb,nw)
+                  call moreio(nscr6,nend6,0,scr(l),nb,nw)
                   l=l+nw
                enddo
                nr=n1h
@@ -902,54 +1398,123 @@ contains
                               write(strng,'(''mf6, mt'',i3,&
                                 &'' does not give recoil za='',i6)')&
                                 mth,nint(zar)
-                              if (mth.eq.102) then
+                              if (norec) then
+                                 imiss=nint(zar)
+                              else if (mth.eq.102) then
                                  call mess('hinit',strng,&
                                    'photon momentum recoil used.')
                               else if (mth.ne.10) then
                                  call mess('hinit',strng,&
                                    'one-particle recoil approx. used.')
                               endif
-                              mt6no(ii6)=ik-1
+                              if (mth.ne.102.and..not.norec)&
+                                mt6no(ii6)=ik-1
+                              if (mth.eq.102.and..not.norec) ipm102=1
                               zar=0
                            endif
                         endif
                      endif
                   endif
                endif
-               if (mth.eq.102.and.zap.gt.0.and.lf.eq.0) then
-                  write(strng,'(''mf6, mt'',i3,&
-                   &'' has recoil with no spectrum'')') mth
-                  call mess('hinit',strng,&
-                                  'photon momentum recoil used.')
-                  mt6no(ii6)=nk
+               ! the test for a recoil without distribution
+               ! used lf (LIP) instead of LAW (DLA, IAEA, 5 Oct 2026)
+               if (mth.eq.102) then
+                  if (zap.eq.zero) then
+                     npho102=npho102+1
+                     if (iph102.eq.0) iph102=ik
+                  else
+                     nrec102=nrec102+1
+                     if (law.eq.4) n4rec102=n4rec102+1
+                     if (npho102.gt.0.and.law.ne.4) then
+                        write(strng,'(''mf6, mt'',i3,&
+                          &'' recoil subsection after photons'')') mth
+                        call mess('hinit',strng,&
+                          'ENDF-6 order violated: correct evaluation')
+                     endif
+                     if (law.eq.0) then
+                        write(strng,'(''mf6, mt'',i3,&
+                         &'' has recoil with no spectrum'')') mth
+                        call mess('hinit',strng,&
+                                        'photon momentum recoil used.')
+                        ipm102=1
+                     endif
+                  endif
                endif
                if (zap.eq.zero) mgam=10+mod(mgam,10)
                if (law.eq.6) then
-                  call contio(nendf,nscr6,0,scr,nb,nw)
+                  call contio(nscr6,nend6,0,scr,nb,nw)
                else if (law.eq.1.or.law.eq.2.or.law.eq.5) then
-                  call tab2io(nendf,nscr6,0,scr,nb,nw)
+                  call tab2io(nscr6,nend6,0,scr,nb,nw)
                   ne=n2h
+                  lep6=l2h
+                  chk102=(mth.eq.102.and.zap.gt.zero.and.law.eq.1)
+                  nbad6=0
                   do ie=1,ne
-                     call listio(nendf,nscr6,0,scr,nb,nw)
-                     do while (nb.ne.0)
-                        call moreio(nendf,nscr6,0,scr,nb,nw)
-                     enddo
+                     call listio(nscr6,nend6,0,scr,nb,nw)
+                     if (chk102) then
+                        ! kinematic check of the recoil
+                        ! (DLA, IAEA, 5 Oct 2026)
+                        nwl=nint(scr(5))+6
+                        if (allocated(rb)) deallocate(rb)
+                        allocate(rb(nwl+npage+50))
+                        rb(1:nw)=scr(1:nw)
+                        l=1+nw
+                        do while (nb.ne.0)
+                           call moreio(nscr6,nend6,0,rb(l),nb,nw)
+                           l=l+nw
+                        enddo
+                        call rec102(rb,lep6,q102,zap,lct6,iok,&
+                          ekick,ekmax,emx102,elim102)
+                        if (iok.eq.0) then
+                           if (nbad6.eq.0) then
+                              ie1bad=ie
+                              e1bad=rb(2)
+                              ek1bad=ekick
+                              em1bad=ekmax
+                              ex1bad=emx102
+                              el1bad=elim102
+                           endif
+                           nbad6=nbad6+1
+                        endif
+                     else
+                        do while (nb.ne.0)
+                           call moreio(nscr6,nend6,0,scr,nb,nw)
+                        enddo
+                     endif
                   enddo
+                  if (chk102.and.nbad6.gt.0) then
+                     write(strng,'(''mf6 mt'',i3,'' recoil za'',i6,&
+                       &'' fails kinematic check'')') mth,nint(zap)
+                     write(strng2,'(''at'',i4,'' of'',i4,&
+                       &'' energies: photon momentum recoil'')')&
+                       nbad6,ne
+                     call mess('hinit',strng,strng2)
+                     write(nsyso,'(&
+                       &''   first failure at e='',1p,e11.4,'' ev:''/&
+                       &''   mean kick='',e11.4,'' ev, allowed '',&
+                       &e11.4,'' to '',e11.4,'' ev''/&
+                       &''   max secondary energy='',e11.4,&
+                       &'' ev, allowed '',e11.4,'' ev'')')&
+                       e1bad,ek1bad,em1bad/20,1.1e0_kr*em1bad,&
+                       ex1bad,el1bad
+                     mt6bad(ii6)=ik
+                     ipm102=1
+                  endif
                else if (law.eq.7) then
-                  call tab2io(nendf,nscr6,0,scr,nb,nw)
+                  call tab2io(nscr6,nend6,0,scr,nb,nw)
                   ne=n2h
                   do ie=1,ne
-                     call tab2io(nendf,nscr6,0,scr,nb,nw)
+                     call tab2io(nscr6,nend6,0,scr,nb,nw)
                      nmu=n2h
                      do imu=1,nmu
-                        call tab1io(nendf,nscr6,0,scr,nb,nw)
+                        call tab1io(nscr6,nend6,0,scr,nb,nw)
                         do while (nb.ne.0)
-                           call moreio(nendf,nscr6,0,scr,nb,nw)
+                           call moreio(nscr6,nend6,0,scr,nb,nw)
                         enddo
                      enddo
                   enddo
                else if (law.lt.0) then
-                  call skip6(nendf,nscr6,0,scr,law)
+                  call skip6(nscr6,nend6,0,scr,law)
                endif
             enddo
             if (zar.ne.zero) then
@@ -957,153 +1522,59 @@ contains
                if (ielem.ne.0.or.abs(zar).ge.test) then
                   write(strng,'(''mf6, mt'',i3,&
                     &'' does not give recoil za='',i6)') mth,nint(zar)
-                  if (mth.eq.102) then
+                  if (norec) then
+                     imiss=nint(zar)
+                  else if (mth.eq.102) then
                      call mess('hinit',strng,&
                        'photon momentum recoil used.')
                   else if (mth.ne.10) then
                      call mess('hinit',strng,&
                        'one-particle recoil approx. used.')
                   endif
-                  mt6no(ii6)=nk
+                  if (mth.ne.102.and..not.norec) mt6no(ii6)=nk
+                  if (mth.eq.102.and..not.norec) ipm102=1
                endif
             endif
+            ! the photon-momentum recoil for mt102 is
+            ! computed from the first photon subsection (it was taken
+            ! from the last subsection, wrong when the recoil is last)
+            ! (DLA, IAEA, 5 Oct 2026)
+            if (mth.eq.102) then
+               if (n4rec102.gt.1) then
+                  write(strng,'(''mf6, mt'',i3,'' has'',i3,&
+                    &'' photon/recoil (law 4) pairs'')') mth,n4rec102
+                  call mess('hinit',strng,&
+                    'cascade processed as given: check results')
+               endif
+               if (ipm102.ne.0) then
+                  if (iph102.gt.0) then
+                     mt6no(ii6)=iph102
+                     if (npho102.gt.1) then
+                        write(strng,'(''mf6, mt'',i3,'' has'',i3,&
+                          &'' photon subsections'')') mth,npho102
+                        call mess('hinit',strng,&
+                          'photon momentum from the first one only')
+                     endif
+                  else
+                     write(strng,'(''mf6, mt'',i3,&
+                       &'' has no usable recoil and no photons'')') mth
+                     call mess('hinit',strng,&
+                       'no capture recoil damage from File 6')
+                     mt6no(ii6)=0
+                  endif
+               endif
+            endif
+            if (norec.and.imiss.ne.0) then
+               write(strng,'(''mf6, mt'',i3,&
+                 &'' does not give recoil za='',i6)') mth,imiss
+               call mess('hinit',strng,&
+                 'recoil not computed (mtrec<0)')
+            endif
+            call asend(nend6,0)
          endif
       endif
    enddo
-   if (krecoil.gt.0) then
-      !--prepare scratch file nend6 from the temporary file nscr6
-      !--ignore(remove) MF6 recoil data (ZAP>2004)
-      !--Applies for MT not equal to: 5 or 18-21 or 38 or 102 nor
-      !--a discrete reaction using MF6/LAW=2,3 for the particle
-      !--(MF6/LAW=4 is expected for the recoil in the latter case)
-      call amend(nscr6,0)
-      call atend(nscr6,0)
-      call repoz(nscr6)
-      call findf(matd,6,0,nscr6)
-      ii6=0
-      mfh=6
-      do while (mfh.eq.6)
-         call contio(nscr6,0,0,scr(1),nb,nw)
-         if (mfh.ne.0) then
-            if (mth.ne.0) then
-              ii6=ii6+1
-              nk=n1h
-              i=7
-              do ik=1,nk
-                 l=i
-                 call tab1io(nscr6,0,0,scr(l),nb,nw)
-                 l=l+nw
-                 do while (nb.ne.0)
-                    call moreio(nscr6,0,0,scr(l),nb,nw)
-                    l=l+nw
-                 enddo
-                 zap=c1h
-                 law=l2h
-                 if (ik.eq.1) then
-                   iprec=nk-1
-                   if ((mt6no(ii6).ne.0).or.(iprec.le.0).or.&
-                      (mth.eq.5).or.(mth.ge.18.and.mth.le.21).or.&
-                      (mth.eq.38).or.(mth.eq.102).or.&
-                      ((mt6no(ii6).eq.0).and.(law.eq.2.or.law.eq.3))) then
-                     call contio(0,nend6,0,scr(1),nb,nw)
-                     iprec=0
-                   else
-                     scr(5)=iprec
-                     if (zap.ge.0.and.zap.lt.2004.1) then
-                        call contio(0,nend6,0,scr(1),nb,nw)
-                        iprec=1
-                        kpart=nint(zap)
-                     else
-                        iprec=-1
-                     endif
-                   endif
-                 endif
-                 if (iprec.eq.0.or.&
-                    (iprec.gt.0.and.zap.ge.zero.and.zap.lt.2004.1)) then
-                   l=i
-                   call tab1io(0,nend6,0,scr(l),nb,nw)
-                   l=l+nw
-                   do while (nb.ne.0)
-                      call moreio(0,nend6,0,scr(l),nb,nw)
-                      l=l+nw
-                   enddo
-                   if (law.eq.6) then
-                      call contio(nscr6,nend6,0,scr,nb,nw)
-                   else if (law.eq.1.or.law.eq.2.or.law.eq.5) then
-                      call tab2io(nscr6,nend6,0,scr,nb,nw)
-                      ne=n2h
-                      do ie=1,ne
-                         call listio(nscr6,nend6,0,scr,nb,nw)
-                         do while (nb.ne.0)
-                            call moreio(nscr6,nend6,0,scr,nb,nw)
-                         enddo
-                      enddo
-                   else if (law.eq.7) then
-                      call tab2io(nscr6,nend6,0,scr,nb,nw)
-                      ne=n2h
-                      do ie=1,ne
-                         call tab2io(nscr6,nend6,0,scr,nb,nw)
-                         nmu=n2h
-                         do imu=1,nmu
-                            call tab1io(nscr6,nend6,0,scr,nb,nw)
-                            do while (nb.ne.0)
-                               call moreio(nscr6,nend6,0,scr,nb,nw)
-                            enddo
-                         enddo
-                      enddo
-                   else if (law.lt.0) then
-                      call skip6(nscr6,nend6,0,scr,law)
-                   endif
-                   if (iprec.gt.0.and.zap.gt.0) then
-                     iprec=ik
-                     kpart=nint(zap)
-                   endif
-                 else
-                   if (law.eq.6) then
-                      call contio(nscr6,0,0,scr,nb,nw)
-                   else if (law.eq.1.or.law.eq.2.or.law.eq.5) then
-                      call tab2io(nscr6,0,0,scr,nb,nw)
-                      ne=n2h
-                      do ie=1,ne
-                         call listio(nscr6,0,0,scr,nb,nw)
-                         do while (nb.ne.0)
-                            call moreio(nscr6,0,0,scr,nb,nw)
-                         enddo
-                      enddo
-                   else if (law.eq.7) then
-                      call tab2io(nscr6,0,0,scr,nb,nw)
-                      ne=n2h
-                      do ie=1,ne
-                         call tab2io(nscr6,0,0,scr,nb,nw)
-                         nmu=n2h
-                         do imu=1,nmu
-                            call tab1io(nscr6,0,0,scr,nb,nw)
-                            do while (nb.ne.0)
-                               call moreio(nscr6,0,0,scr,nb,nw)
-                            enddo
-                         enddo
-                      enddo
-                   else if (law.lt.0) then
-                      call skip6(nscr6,0,0,scr,law)
-                   endif
-                 endif
-              enddo
-              if (iprec.gt.0) then
-                mt6no(ii6)=iprec
-                write(strng,'(''mf6, mt'',i3,&
-                   &'' recoil data removed. zap='',i6)')mth,kpart
-                call mess('hinit',strng,&
-                   &'one-particle recoil approx. used.')
-              endif
-            else
-              call asend(nend6,0)
-            endif
-         else
-           call afend(nend6,0)
-         endif
-      enddo
-      call closz(nscr6)
-   endif
+   call afend(nend6,0)
    call amend(nend6,0)
    call atend(nend6,0)
    call repoz(nend6)
@@ -1170,8 +1641,332 @@ contains
    do i=3,npk
       if (mtp(i).eq.303) mt303=i
    enddo
+   call closz(nscr6)
    return
    end subroutine hinit
+
+   subroutine phless
+   !-------------------------------------------------------------------
+   ! Diagnostic of the reactions that leave an excited residual
+   ! nucleus and have no photon data: neither their own (File 12,
+   ! File 13, or a File 6 subsection with zap=0) nor lumped in mt3,
+   ! mt4 (for mt51-91), mt103-107 (for their levels) or mt16 (for
+   ! mt875-891).  Considered: discrete levels with qm-qi>1 keV and
+   ! lr=0, continua (mt91, 649, ..., 849, 891), capture, two-body
+   ! charged-particle reactions without levels (mt103-107) and the
+   ! multi-particle reactions (mt5, 16, 17, 22, 28, ...).  Levels
+   ! with lr>0 (break-up) and residuals with a<=4 are not listed.
+   ! The energy balance deposits the photon energy of these
+   ! reactions locally (all kkerma), so the total energy is kept
+   ! when the photons cannot be transported; the kinematic kerma
+   ! (mt443) leaves it out.  A listed level can be isomeric (no
+   ! prompt photons).  Only a message: no kerma is changed.
+   ! (DLA, IAEA, 18 Oct 2026)
+   !-------------------------------------------------------------------
+   use mainio ! provides nsyso
+   use util   ! provides mess,repoz
+   use endf   ! provides endf routines and variables
+   ! internals
+   integer::i,mt,nb,nw,lr,nr,iat,iar,kind,nn,nc,nfl,nlev
+   integer::zc(3),ac(3)
+   logical::lph(999),lump
+   real(kr)::qm,qi,ex,eth
+   character(12)::styp
+   character(48)::sest
+   character(60)::strng
+   real(kr),dimension(:),allocatable::scr
+   real(kr),parameter::exmin=1.e3_kr
+   real(kr),parameter::tokev=1.e-3_kr
+
+   lph=.false.
+   do i=1,ngd
+      if (mtgd(i).ge.1.and.mtgd(i).le.999) lph(mtgd(i))=.true.
+   enddo
+   do i=1,i6p
+      if (mt6yp(i).ge.1.and.mt6yp(i).le.999) lph(mt6yp(i))=.true.
+   enddo
+   if (lph(3)) return
+   allocate(scr(npage+50))
+   iat=mod(nint(za),1000)
+   nfl=0
+   nlev=0
+   do i=1,n3d
+      mt=mt3d(i)
+      if (mt.lt.1.or.mt.gt.999) cycle
+      kind=0
+      iar=iat
+      lump=.false.
+      if (mt.ge.51.and.mt.le.90) then
+         kind=1
+         lump=lph(4)
+      else if (mt.eq.91) then
+         kind=2
+         lump=lph(4)
+      else if (mt.eq.102) then
+         kind=3
+         iar=iat+1
+      else if (iverf.ge.6.and.mt.ge.600.and.mt.le.849) then
+         kind=1
+         if (mod(mt,50).eq.49) kind=2
+         if (mt.lt.650) then
+            lump=lph(103)
+         else if (mt.lt.700) then
+            iar=iat-1
+            lump=lph(104)
+         else if (mt.lt.750) then
+            iar=iat-2
+            lump=lph(105)
+         else if (mt.lt.800) then
+            iar=iat-2
+            lump=lph(106)
+         else
+            iar=iat-3
+            lump=lph(107)
+         endif
+      else if (iverf.ge.6.and.mt.ge.875.and.mt.le.891) then
+         kind=1
+         if (mt.eq.891) kind=2
+         iar=iat-1
+         lump=lph(16)
+      else if (mt.ge.103.and.mt.le.107) then
+         if (mt.eq.103.and.mt103.eq.0) iar=iat
+         if (mt.eq.104.and.mt104.eq.0) iar=iat-1
+         if (mt.eq.105.and.mt105.eq.0) iar=iat-2
+         if (mt.eq.106.and.mt106.eq.0) iar=iat-2
+         if (mt.eq.107.and.mt107.eq.0) iar=iat-3
+         if ((mt.eq.103.and.mt103.eq.0).or.(mt.eq.104.and.mt104.eq.0)&
+           .or.(mt.eq.105.and.mt105.eq.0).or.(mt.eq.106.and.mt106.eq.0)&
+           .or.(mt.eq.107.and.mt107.eq.0)) kind=4
+      else if (mt.eq.5) then
+         kind=4
+         iar=0
+      else
+         call mulpart(mt,nn,nc,zc,ac)
+         if (nn+nc.gt.0) then
+            kind=4
+            iar=iat+1-nn-sum(ac(1:nc))
+         endif
+      endif
+      if (kind.eq.0) cycle
+      if (lph(mt).or.lump) cycle
+      if (iat.gt.0.and.mt.ne.5.and.iar.le.4) cycle
+      call findf(matd,3,mt,nendf)
+      call contio(nendf,0,0,scr,nb,nw)
+      call tab1io(nendf,0,0,scr,nb,nw)
+      qm=c1h
+      qi=c2h
+      lr=l2h
+      nr=n1h
+      eth=scr(7+2*nr)
+      ex=qm-qi
+      if (lr.ne.0) cycle
+      if (kind.eq.1.and.ex.lt.exmin) cycle
+      nfl=nfl+1
+      if (nfl.eq.1) write(nsyso,'(/&
+        &'' reactions without photon data (own, or lumped in mt3,'',&
+        &'' mt4, mt103-107, mt16)''/&
+        &'' their photon energy is deposited locally by the energy'',&
+        &'' balance (all kkerma);''/&
+        &'' the kinematic kerma (mt443) leaves it out.'',&
+        &'' A level can be isomeric (no prompt photons).''//&
+        &''    mt  reaction       threshold           qm           qi'',&
+        &''   local photon energy per reaction'')')
+      select case (kind)
+      case (1)
+         styp='level'
+         write(sest,'(''ex='',f10.1,'' kev'')') ex*tokev
+         nlev=nlev+1
+      case (2)
+         styp='continuum'
+         sest='not estimated (e+q minus emitted particles)'
+      case (3)
+         styp='capture'
+         write(sest,'(''q+e*a/(a+1), q='',f10.1,'' kev'')') qm*tokev
+      case default
+         styp='multi/2-body'
+         sest='not estimated (e+q minus emitted particles)'
+      end select
+      write(nsyso,'(i6,2x,a12,1p,3e13.4,3x,a)')&
+        mt,styp,eth,qm,qi,trim(sest)
+   enddo
+   if (nfl.gt.0) then
+      write(strng,'(i4,'' reactions without photon data ('',i4,&
+        &'' levels)'')') nfl,nlev
+      call mess('phless',strng,'photon energy deposited locally')
+   endif
+   deallocate(scr)
+   call repoz(nendf)
+   return
+   end subroutine phless
+
+   subroutine k1pho
+   !-------------------------------------------------------------------
+   ! kkerma=1: list of the reactions whose kinematic upper limit (the
+   ! hmax of nheat used for mt443, and so for mt301, mt318) is the
+   ! energy available before the photon correction, hmax = h, while
+   ! photons are given for them (own File 12/13, File 6 subsection
+   ! with zap=0, or lumped in mt3; for fission also the prompt photon
+   ! energy EGP of MT458, which is part of h0).  These reactions are
+   ! fission (Files 4/5 or 6), mt103-107 without levels, the continua
+   ! mt649, 699, 749, 799, 849 and the multi-particle reactions
+   ! (mt11, 16 and 17 for awr<10, 22-45, 108-117, 152-200) given
+   ! without File 6.  Their photon energy is in mt443 but the ACE
+   ! file also produces those photons: with photon transport it is
+   ! counted twice.  hmax is an upper bound (residual in its ground
+   ! state), as in LANL NJOY2016.80; kkerma=2 keeps the energy
+   ! balance.  Only a message: no kerma is changed.
+   ! (DLA, IAEA, 18 Oct 2026)
+   !-------------------------------------------------------------------
+   use mainio ! provides nsyso,nsyse
+   use util   ! provides mess
+   ! internals
+   integer::i,j,mt,nfl,nlmp
+   logical::lph(999),l6,lfis,ok
+   character(30)::sph
+   character(60)::strng
+   real(kr),parameter::ten=10
+
+   lph=.false.
+   do i=1,ngd
+      if (mtgd(i).ge.1.and.mtgd(i).le.999) lph(mtgd(i))=.true.
+   enddo
+   do i=1,i6p
+      if (mt6yp(i).ge.1.and.mt6yp(i).le.999) lph(mt6yp(i))=.true.
+   enddo
+   nfl=0
+   nlmp=0
+   do i=1,n3d
+      mt=mt3d(i)
+      if (mt.lt.1.or.mt.gt.999) cycle
+      lfis=((mt.ge.18.and.mt.le.21).or.mt.eq.38)
+      if (lfis.and.mt.eq.18.and.mt19.eq.1) cycle
+      l6=.false.
+      do j=1,i6
+         if (mt6(j).eq.mt) l6=.true.
+      enddo
+      ok=lfis
+      if (.not.l6) then
+         if (mt.ge.103.and.mt.le.107) then
+            if (mt.eq.103.and.mt103.eq.0) ok=.true.
+            if (mt.eq.104.and.mt104.eq.0) ok=.true.
+            if (mt.eq.105.and.mt105.eq.0) ok=.true.
+            if (mt.eq.106.and.mt106.eq.0) ok=.true.
+            if (mt.eq.107.and.mt107.eq.0) ok=.true.
+         endif
+         if (mt.eq.649.or.mt.eq.699.or.mt.eq.749.or.mt.eq.799.or.&
+           mt.eq.849) ok=.true.
+         if (mt.eq.11.or.(mt.ge.22.and.mt.le.45.and.mt.ne.38).or.&
+           (mt.ge.108.and.mt.le.117).or.(mt.ge.152.and.mt.le.200))&
+           ok=.true.
+         if ((mt.eq.16.or.mt.eq.17).and.awr.lt.ten) ok=.true.
+      endif
+      if (.not.ok) cycle
+      sph=' '
+      if (lph(mt)) then
+         sph='own'
+      else if (lph(3)) then
+         sph='lumped in mt3'
+         nlmp=nlmp+1
+      else if (lfis.and.mt458.eq.1) then
+         sph='egp of mt458 (no photon file)'
+      else
+         cycle
+      endif
+      nfl=nfl+1
+      if (nfl.eq.1) write(nsyso,'(/&
+        &'' kkerma=1: reactions whose kinematic limit (mt443, so'',&
+        &'' mt301, and mt318)''/&
+        &'' includes their photon energy (upper bound, as LANL'',&
+        &'' NJOY2016.80); if the''/&
+        &'' ACE file also transports these photons, their energy'',&
+        &'' is counted twice.''/&
+        &'' kkerma=2 keeps the energy balance.''//&
+        &''    mt  photons'')')
+      write(nsyso,'(i6,2x,a)') mt,trim(sph)
+   enddo
+   if (nfl.gt.0) then
+      write(strng,'(''kkerma=1:'',i4,'' reactions with photons'',&
+        &'' in mt443'')') nfl
+      call mess('k1pho',strng,'photons may be counted twice')
+   endif
+   return
+   end subroutine k1pho
+
+   subroutine rec102(a,lep,q,zap,lct6,iok,ekick,ekmax,emx,elim)
+   !-------------------------------------------------------------------
+   ! Kinematic check of a File 6 LAW=1 recoil distribution
+   ! for radiative capture (mt102) at one incident energy.
+   ! a is the LIST record [0,E,ND,NA,NW,NEP/E'(1),b(0,1),...].
+   ! The photons share the available energy eav=q+e*awr/(awr+1); the
+   ! largest kick (one photon with eav) is ekmax=eav**2/(2*(awr+1)*mc2).
+   ! The mean kick (CM energy, or lab energy minus e/(awr+1)) must lie
+   ! in [ekmax/20, 1.1*ekmax] (1/20 allows cascades of about 20 photons
+   ! sharing eav), and the largest secondary energy with nonzero
+   ! probability must not exceed 1.1*ekmax (CM) or
+   ! 1.1*(sqrt(e/(awr+1))+sqrt(ekmax))**2 (lab).  Frame from LCT (LCT=3:
+   ! lab for A>4).  iok=1 passes, iok=0 fails.
+   ! (DLA, IAEA, 5 Oct 2026)
+   !-------------------------------------------------------------------
+   ! externals
+   integer::lep,lct6,iok
+   real(kr)::a(*),q,zap,ekick,ekmax,emx,elim
+   ! internals
+   integer::nd,na,nep,ncyc,k,ib
+   logical::lab
+   real(kr)::e,en,eav,x0,x1,f0,f1,dx,sn,sd
+   real(kr),parameter::zero=0
+
+   e=a(2)
+   nd=nint(a(3))
+   na=nint(a(4))
+   nep=nint(a(6))
+   ncyc=na+2
+   en=e/(awr+1)
+   eav=q+e*awr/(awr+1)
+   if (eav.lt.zero) eav=0
+   ekmax=eav*eav*rtm/2
+   lab=(lct6.eq.1).or.(lct6.eq.3.and.mod(nint(zap),1000).gt.4)
+   sn=0
+   sd=0
+   emx=0
+   do k=1,nd
+      ib=6+ncyc*(k-1)
+      x0=a(ib+1)
+      f0=a(ib+2)
+      sn=sn+x0*f0
+      sd=sd+f0
+      if (f0.gt.zero.and.x0.gt.emx) emx=x0
+   enddo
+   do k=nd+1,nep-1
+      ib=6+ncyc*(k-1)
+      x0=a(ib+1)
+      f0=a(ib+2)
+      x1=a(ib+ncyc+1)
+      f1=a(ib+ncyc+2)
+      dx=x1-x0
+      if (lep.eq.1) then
+         sn=sn+f0*dx*(x0+x1)/2
+         sd=sd+f0*dx
+         if (f0.gt.zero.and.x1.gt.emx) emx=x1
+      else
+         sn=sn+dx*(f0*(2*x0+x1)+f1*(x0+2*x1))/6
+         sd=sd+dx*(f0+f1)/2
+         if ((f0.gt.zero.or.f1.gt.zero).and.x1.gt.emx) emx=x1
+      endif
+   enddo
+   ekick=0
+   if (sd.gt.zero) ekick=sn/sd
+   elim=1.1e0_kr*ekmax
+   if (lab) then
+      ekick=ekick-en
+      elim=1.1e0_kr*(sqrt(en)+sqrt(ekmax))**2
+   endif
+   iok=1
+   if (sd.le.zero) iok=0
+   if (ekick.lt.ekmax/20.or.ekick.gt.1.1e0_kr*ekmax) iok=0
+   if (emx.gt.elim) iok=0
+   return
+   end subroutine rec102
 
    subroutine nheat(iold,inew,nscr,nend4,nend6,local)
    !-------------------------------------------------------------------
@@ -1188,13 +1983,18 @@ contains
    integer::ipx,irx,ilist,nn,iii,lq0,idx,ii,indxx
    integer::ipfr,irfr,ipnp,irnp,ipgp,irgp
    integer::npkt,intt,isave,npkkk,nwmax,iflag
+   integer::i5add
+   integer::nnr,ncr,zcr(3),acr(3)
+   logical::lf5,lfis
+   real(kr)::dfis
    real(kr)::awfac,aw1fac,e,thresh,y,t,qendf,pnue
    real(kr)::qs,q0,h0,ebar,dame,yld,qsave
    real(kr)::elst,yld0,xxx,test,enext,enx,ebal6,h
    real(kr)::ebarp,yldp,yp,hp,damep,ebal6p,hmin,hmax,tt
-   real(kr)::qfr,qnp,qgp
-   real(kr)::c(30)
-   integer::imt(30)
+   real(kr)::hmx
+   real(kr)::qfr,qnp,qgp,efr
+   real(kr)::c(50)
+   integer::imt(50)
    character(60)::strng,strng1,strng2
    real(kr),dimension(:),allocatable::b
    real(kr),dimension(:),allocatable::a
@@ -1251,6 +2051,8 @@ contains
    n6=0
    j6=0
    i6g=0
+   i5add=0
+   n5t=0
    irec=0
    jrec=0
    last6=0
@@ -1326,7 +2128,36 @@ contains
       call tosend(nend6,0,0,scr)
       go to 105
    endif
+   ! fission given in File 6: damage table from the
+   ! neutron subsection, then position again at the section start
+   ! (DLA, IAEA, 5 Oct 2026)
+   nf6=0
+   if (idame.gt.0.and.((mtd.ge.18.and.mtd.le.21).or.mtd.eq.38)) then
+      call fis6tab(nend6,matd,mtd,za,awr)
+      call findf(matd,6,mtd,nend6)
+      call contio(nend6,0,0,scr,nb,nw)
+   endif
    i6g=i6g+1
+   ! one-particle recoil correction for multi-particle emission
+   nrt=0
+   if (idame.gt.0.and.mt6no(i6g).gt.0.and.mtd.ne.5.and.mtd.ne.102.and.&
+     .not.((mtd.ge.18.and.mtd.le.21).or.mtd.eq.38))&
+     call oprtab(nend6,matd,mtd,scr(1),scr(2),lct,n6,mt6no(i6g))
+   ! mt5 residuals without distribution (LAW=0) or not
+   ! given: recoil from the momentum balance of the light particles,
+   ! added once, in the first subsection processed (DLA, IAEA, 6 Oct 2026)
+   n5t=0
+   i5add=0
+   ! not with mtrec<0 covering mt5 (no recoil computed) (DLA, IAEA, Oct 2026)
+   if (mtd.eq.5) then
+      if (mtrec.lt.0.and.mtrec1.le.5.and.mtrec2.ge.5) then
+         call mess('nheat','mt5 residual recoil model not applied',&
+           'mtrec<0: no residual recoil for mt5')
+      else
+         call mt5tab(nend6,matd,mtd,za,awr,lct,n6,thresh)
+         if (n5t.gt.0) i5add=1
+      endif
+   endif
   123 continue
    j6=j6+1
    if (irec.gt.0.and.mt6no(i6g).gt.0) j6=j6-1
@@ -1366,7 +2197,32 @@ contains
   130 continue
   140 continue
    if (j6.gt.0) go to 175
-   if (mth.gt.15.and.mth.lt.51) go to 150
+   ! mt5 is described only in File 6 (ENDF-6); without
+   ! File 6 the LANL code treated it as a discrete level (disbar)
+   ! (DLA, IAEA, 6 Oct 2026)
+   if (mth.eq.5.and.iverf.ge.6) call error('nheat',&
+     'mt5 without File 6.',&
+     'ENDF-6: mt5 products must be given in File 6.')
+   ! continuum reactions without File 6:
+   !  - with File 5: conbar, also for mt11 (n,2nd) and for the
+   !    multi-particle and multi-neutron reactions mt152-200 and
+   !    mt875-891 ((n,5n), ..., (n,2n) to excited states), which the
+   !    LANL code sent to capdam as (n,p);
+   !  - mt16-50 without File 5 (except fission): capdam -> capmul
+   !    (the LANL code stopped in conbar: File 5 not found);
+   !  - mt11 without File 5 stays with disbar as before. (DLA, IAEA, Oct 2026)
+   call mulpart(mth,nnr,ncr,zcr,acr)
+   lf5=.false.
+   do i=1,n5mt
+      if (mt5l(i).eq.mth) lf5=.true.
+   enddo
+   lfis=((mth.ge.18.and.mth.le.21).or.mth.eq.38)
+   if (lf5.and.(mth.eq.11.or.(mth.ge.152.and.mth.le.200).or.&
+     (mth.ge.875.and.mth.le.891))) go to 150
+   if (mth.gt.15.and.mth.lt.51) then
+      if (.not.lf5.and..not.lfis.and.(ncr.gt.0.or.nnr.ge.2)) go to 170
+      go to 150
+   endif
    if (mth.gt.100) go to 170
    icon=1
    q0=0
@@ -1579,6 +2435,8 @@ contains
    if (icon.eq.0.and.idame.gt.0) call capdam(e,dame,q,za,awr,mtd)
    if (icon.lt.0)&
      call sixbar(e,ebar,yld,dame,nend6,a,nwa,nscr,d,nwm,n6,j6,irec,jrec,iflag)
+   ! one-particle recoil: correction for the other emitted particles (DLA, IAEA)
+   if (icon.lt.0.and.irec.gt.0.and.nrt.gt.0) dame=dame*oprfac(e)
    if (yld0.eq.zero) yld0=yld
    ! correct fission q for current incident energy
    if ((mtd.ge.18.and.mtd.le.21).or.mtd.eq.38) then
@@ -1647,6 +2505,12 @@ contains
       if (izap.eq.1) h=0
       if (izap.eq.0.and.local.eq.0) h=0
       if (izap.le.1) dame=0
+      ! recoil of the mt5 residuals without distribution
+      ! (DLA, IAEA, 6 Oct 2026)
+      if (i5add.eq.1.and.irec.eq.0) then
+         h=h+mt5hm(e)*y
+         dame=dame+mt5dm(e)*y
+      endif
       ebal6=0
       if (last6.eq.1.and.mth.ne.5.and.mth.ne.102)&
         ebal6=(e+q0)*y-c(npkk)
@@ -1657,6 +2521,24 @@ contains
       if (qs.ge.zero) call error('nheat',&
         'binding energy for sequential n2n needed.',' ')
       h=(qs-ebar)*y
+   endif
+   ! fission: damage per fission dfis, the same for File 5
+   ! and File 6; with File 6 the heating h0 and the damage are counted
+   ! once, in the first subsection (the LANL code added h0 once for
+   ! every non-neutron subsection, e.g. 4 times with the ternary p, t,
+   ! alpha and the one-particle recoil, and built a recoil from the last
+   ! particle of the section). (DLA, IAEA, 5 Oct 2026)
+   if ((mtd.ge.18.and.mtd.le.21).or.mtd.eq.38) then
+      if (icon.lt.0) then
+         ebal6=0
+         h=0
+         dfis=0
+         if (j6.eq.1.and.irec.eq.0) then
+            h=h0*y
+            if (idame.gt.0) dfis=fis6dm(e)
+         endif
+         dame=dfis*y
+      endif
    endif
 
    !--accumulate total and partial heating factors.
@@ -1774,10 +2656,68 @@ contains
    hmin=h
    hmax=h
   285 continue
+   ! no lower kinematic limit for fission. Its heating
+   ! comes from MF1/MT458 (h0 = EFR+EGP), not from an energy balance,
+   ! and the prompt-photon energy is removed afterwards when photons
+   ! are given (MF12-15, MT18); hmin=h (MF6) or the old estimate
+   ! y*(e+q0-ebar*yld/2-efis) made kkerma=2 raise MT318 and MT301
+   ! (U-235, U-238 +3.9 %, U-234 up to +60 % at 200 MeV) and gave
+   ! kkerma=0 warnings (DLA, IAEA, 11 Oct 2026)
+   ! 14 Oct 2026: lower limit y*EFR, the kinetic energy of the fission
+   ! products (MF1/MT458, polynomial or table at e, kept in [0,h0]),
+   ! always deposited locally; the prompt-gamma part EGP is not in the
+   ! limit, so photons given in mt18 or lumped in mt3 cannot make it
+   ! too high.  Without MT458: no lower limit (DLA, IAEA, 14 Oct 2026)
+   ! 16 Oct 2026: EFR decreases with e (the total kinetic energy of
+   ! the products falls as symmetric fission grows; Madland, Nucl.
+   ! Phys. A 772 (2006) 113: -0.266 (U-235), -0.323 (U-238), -0.457
+   ! (Pu-239) MeV/MeV).  Where MT458 does not give it decreasing
+   ! (thermal constants, a polynomial past its minimum, the flat end
+   ! of a table) the limit is continued above e* with a slope above
+   ! the steepest one, EFR(e*)-efrslp*(e-e*), so that a constant
+   ! EFR0 does not exceed the balance of a good evaluation at high e
+   ! (e* from hinit) (DLA, IAEA, 16 Oct 2026).  efrslp=0.50 (was
+   ! 0.46, the Pu-239 slope): upper bound for all actinides, margin
+   ! for the fit uncertainty and for nuclides without systematics;
+   ! kkerma=2: mt301 lower by at most 9.4e-4 (ENDF/B-VIII.1 Pu-240),
+   ! mt444 unchanged (DLA, IAEA, 17 Oct 2026)
+   if ((mtd.ge.18.and.mtd.le.21).or.mtd.eq.38) then
+      hmin=0
+      if (mt458.eq.1) then
+         if (lfc.eq.0) then
+            efr=c458(1+nply*18)
+            do i=nply-1,0,-1
+               efr=efr*e+c458(1+i*18)
+            enddo
+         else
+            efr=qfr
+         endif
+         if (e.gt.efrs) efr=efrst-efrslp*(e-efrs)
+         ! h=0 in the MF6 subsections after the first one (h0 counted
+         ! once): no limit added there
+         efr=max(zero,min(efr,h0))
+         if (h.gt.zero) hmin=min(y*efr,h)
+      endif
+   endif
+   ! kkerma=2, the lower limit of each reaction is not
+   ! below its damage energy, dame = y*D(E_R) <= y*E_R <= kerma of the
+   ! reaction (Lindhard D(x) <= x), so that mt301 >= mt444 and every
+   ! partial kerma >= its damage by construction.  The LANL hmin is 0
+   ! for (n,2n), (n,3n) with A >= 10 and only the centre-of-mass
+   ! motion for mt103-107 (ENDF/B-VIII.1 Au-197 at 12-30 MeV: floor
+   ! 12 % below mt444).  Capture is excluded (its limit is set in
+   ! gheat from the photon kicks, 18 Oct 2026).  The upper limits of the
+   ! listing are raised where needed; mt443 keeps hmax.
+   ! (DLA, IAEA, 18 Oct 2026)
+   hmx=hmax
+   if (kkerma.eq.2.and.mtd.ne.102.and.dame.gt.hmin) then
+      hmin=dame
+      hmx=max(hmax,hmin)
+   endif
    npkt=npk-1
    if (kchk.ne.1) go to 283
    c(2+npkt)=c(2+npkt)+hmin
-   c(2+2*npkt)=c(2+2*npkt)+hmax
+   c(2+2*npkt)=c(2+2*npkt)+hmx
   283 continue
    if (nmt.eq.0) go to 290
    do 286 ii=1,nmt
@@ -1787,7 +2727,7 @@ contains
    if (mtp(indxx).ge.444) go to 286
    if (kchk.ne.1) go to 286
    c(indxx+npkt)=c(indxx+npkt)+hmin
-   c(indxx+2*npkt)=c(indxx+2*npkt)+hmax
+   c(indxx+2*npkt)=c(indxx+2*npkt)+hmx
    go to 286
   284 continue
    c(indxx)=c(indxx)+hmax
@@ -1800,6 +2740,7 @@ contains
    call loada(intt,c,npkk,inew,bufn,nbuf)
    if (e.eq.elist(ilist)) ilist=ilist+1
    if (nn.lt.ne) go to 190
+   if (i5add.eq.1.and.irec.eq.0) i5add=0
 
    !--for file 6, loop over subsections
    isave=iold
@@ -1872,6 +2813,7 @@ contains
    !     445=elastic
    !     446=inelastic (MT51-MT91)
    !     447=total capture (MT102-MT120)
+   ! (DLA, IAEA)
    !-------------------------------------------------------------------
    use endf ! provides iverf
    ! externals
@@ -1933,16 +2875,38 @@ contains
    subroutine capdam(ee,dame,q,za,awr,mtd)
    !-------------------------------------------------------------------
    ! Compute damage energy for capture reactions.
+   ! For (n,p),(n,d),(n,t),(n,3He),(n,a) the emitted particle gets
+   ! ea=min(eavail,vc), vc with target Z,A (LANL method).
+   ! Corrections:
+   !  - ENDF-6 continuum mt649,699,749,799,849 are mapped to 103..107
+   !    (they were all treated as (n,p)).
+   !  - mt108-117 (several charged particles: (n,2a), (n,pa), ...) are
+   !    computed with capmul (they were all treated as (n,p)).
+   !  - the damage of the emitted charged particle itself is added
+   !    (lab energy ea+bc+2*sqrt(ea*bc)*mu, bc=ax*e/(awr+1)**2), as
+   !    sixbar does for the particles given in File 6.
+   !  - mt103-107 (not split into levels, no File 4/6)
+   !    whose residual has a mass number <= 4 (He-3(n,p)t, He-3(n,d),
+   !    He-4(n,d)t, Li-6(n,t)a, ...) are two-body reactions to a single
+   !    final state: exact two-body kinematics with the QI of File 3,
+   !    isotropic in the centre of mass, 64-point Gauss rule, Lindhard
+   !    partition of the residual and damage of the emitted particle
+   !    (as disbar).  The barrier limit ea=min(eavail,vc) is a model of
+   !    the continuum and does not apply there.  Other reactions keep the
+   !    LANL model.
+   ! (DLA, IAEA, 5 Oct 2026)
    !-------------------------------------------------------------------
    use endf   ! provides iverf,terp1
-   use mainio ! provides nsyso,nsyse
+   use physics ! provides the light-particle mass ratios
    ! externals
    integer::mtd
    real(kr)::ee,dame,q,za,awr
    ! internals
-   integer::iq,iz
+   integer::iq,iz,mte,nnl,ncl,zcl(3),acl(3),ia
+   logical::lmul,l2b
    real(kr)::e,zx,ax,denom,z,en,aw1fac
-   real(kr)::damn,daml,el,er,ea,ec,et
+   real(kr)::awp2,thr2,afac2,arat2,r2,b2,g2,e2,u
+   real(kr)::damn,daml,el,er,ea,ec,et,bc,ep,dum,epa
    real(kr),dimension(4),parameter::qp=(/&
       -.86114e0_kr,-.33998e0_kr,.33998e0_kr,.86114e0_kr/)
    real(kr),dimension(4),parameter::qw=(/&
@@ -1954,27 +2918,52 @@ contains
    integer,parameter::nq=4
    real(kr),parameter::zero=0
    save en,damn,el,daml
-   save zx,ax,denom,z,aw1fac
+   save zx,ax,denom,z,aw1fac,lmul,l2b,awp2,thr2,afac2,arat2
 
    !--initialize
    e=ee
    if (e.eq.zero) then
+      ! ENDF-6 continuum levels are mapped to the parent reaction;
+      ! without this mapping they were all treated as (n,p) (DLA, IAEA)
+      mte=mtd
+      if (iverf.ge.6.and.mtd.ge.600.and.mtd.le.849) mte=103+(mtd-600)/50
+      ! reactions with several emitted particles (mt108-117, mt152-200,
+      ! mt875-891): capmul.  Without this they were treated as (n,p).
+      call mulpart(mtd,nnl,ncl,zcl,acl)
+      lmul=(ncl.gt.0.or.nnl.ge.2)
       zx=0
-      if (mtd.gt.102) zx=1
-      if (mtd.eq.106.or.mtd.eq.107) zx=2
-      if (iverf.le.5.and.(mtd.eq.778.or.mtd.eq.798)) zx=2
+      if (mte.gt.102) zx=1
+      if (mte.eq.106.or.mte.eq.107) zx=2
+      if (iverf.le.5.and.(mte.eq.778.or.mte.eq.798)) zx=2
       ax=0
-      if (mtd.gt.102) ax=1
-      if (mtd.eq.104) ax=2
-      if (iverf.le.5.and.mtd.eq.738) ax=2
-      if (mtd.eq.105.or.mtd.eq.106) ax=3
-      if (iverf.le.5.and.(mtd.eq.758.or.mtd.eq.778)) ax=3
-      if (mtd.eq.107) ax=4
-      if (iverf.le.5.and.mtd.eq.798) ax=4
+      if (mte.gt.102) ax=1
+      if (mte.eq.104) ax=2
+      if (iverf.le.5.and.mte.eq.738) ax=2
+      if (mte.eq.105.or.mte.eq.106) ax=3
+      if (iverf.le.5.and.(mte.eq.758.or.mte.eq.778)) ax=3
+      if (mte.eq.107) ax=4
+      if (iverf.le.5.and.mte.eq.798) ax=4
       denom=1/awr**third
       if (ax.ne.zero) denom=1/(ax**third+awr**third)
       iz=nint(za/1000)
       z=iz
+      ! two-body reactions to a single final state
+      ! (DLA, IAEA, 5 Oct 2026)
+      l2b=.false.
+      ia=mod(nint(za),1000)
+      if (.not.lmul.and.mtd.ge.103.and.mtd.le.107.and.ia.gt.0) then
+         if (ia+1-nint(ax).le.4) l2b=.true.
+      endif
+      if (l2b) then
+         if (mtd.eq.103) awp2=pnratio
+         if (mtd.eq.104) awp2=dnratio
+         if (mtd.eq.105) awp2=tnratio
+         if (mtd.eq.106) awp2=hnratio
+         if (mtd.eq.107) awp2=anratio
+         thr2=((awr+1)/awr)*(-q)
+         afac2=awp2/((awr+1)**2)
+         arat2=awp2/(awr+1-awp2)
+      endif
       en=0
       damn=df(en,z-zx,awr+1-ax,z,awr)
       dame=0
@@ -1997,22 +2986,60 @@ contains
          ea=awr*er+q
          er=er+ea*ea*rtm/2
          dame=df(er,z,awr+1,z,awr)
+      else if (lmul) then
+         ! emission of several charged particles (DLA, IAEA)
+         call capmul(e,dame,q,za,awr,mtd)
+      else if (l2b) then
+         ! two-body reaction to a single final state:
+         ! recoil e2=e*(1-2*g*u+g*g)*afac/arat, particle
+         ! ep=e*(1+2*b*u+b*b)*afac, u=CM cosine of the particle
+         ! (DLA, IAEA, Oct 2026)
+         if (e.gt.thr2*(1+eps)) then
+            r2=sqrt(1-thr2/e)
+            b2=r2*sqrt(awr/arat2)
+            g2=b2*arat2
+            dum=df(zero,z-zx,awr+1-awp2,z,awr)
+            do iq=1,64
+               u=g64x(iq)
+               e2=e*(1-2*g2*u+g2*g2)*afac2/arat2
+               dame=dame+g64w(iq)*df(e2,z-zx,awr+1-awp2,z,awr)/2
+            enddo
+            dum=df(zero,zx,awp2,z,awr)
+            do iq=1,64
+               u=g64x(iq)
+               ep=e*(1+2*b2*u+b2*b2)*afac2
+               dame=dame+g64w(iq)*df(ep,zx,awp2,z,awr)/2
+            enddo
+            dum=df(zero,z-zx,awr+1-ax,z,awr)
+         endif
       else if (ax.ne.zero) then
          ! capture followed by particle emission
          ea=q+awr*e*aw1fac
          if (ea.ge.zero) then
-            ec=econ*zx*z*denom
             et=(awr+1-ax)*e*aw1fac
-            if (ea.gt.ec*(1+eps)) then
-              ! Just a message on the system console, but ea is not changed                                                             
-              write(nsyse,'(/,a,1p,e11.4,a,i3,/,27x,a,e12.5,a,e12.5,a)') &
-              & ' ---message from capdam--- Ea > Vc at E=',e,' for mt=',mtd, &
-              '(',ea,' > ',ec,')'
-            endif
+            ec=econ*zx*z*denom
+            if (ea.gt.ec*(1+eps)) ea=ec
+            ! recoil of the residual nucleus (Lindhard constants are
+            ! reset because the particle term below changes them) (DLA, IAEA)
+            dum=df(zero,z-zx,awr+1-ax,z,awr)
             do iq=1,nq
                er=(et-2*sqrt(et*ax*ea)*qp(iq)+ax*ea)*aw1fac
                dame=dame+qw(iq)*df(er,z-zx,awr+1-ax,z,awr)/2
             enddo
+            ! damage of the emitted charged particle itself, as done
+            ! in sixbar for File 6 particles: lab energy
+            ! ep=epa+bc+2*sqrt(epa*bc)*mu, bc=ax*e/(awr+1)**2
+            ! epa=ea*(awr+1-ax)/(awr+1) is the cm energy of
+            ! the particle when ea is the cm kinetic energy shared with
+            ! the residual, as in the recoil term above (DLA, IAEA, Oct 2026)
+            bc=ax*e*aw1fac*aw1fac
+            epa=ea*(awr+1-ax)*aw1fac
+            dum=df(zero,zx,ax,z,awr)
+            do iq=1,nq
+               ep=epa+bc+2*sqrt(epa*bc)*qp(iq)
+               dame=dame+qw(iq)*df(ep,zx,ax,z,awr)/2
+            enddo
+            dum=df(zero,z-zx,awr+1-ax,z,awr)
          endif
       endif
       en=e
@@ -2024,13 +3051,320 @@ contains
    return
    end subroutine capdam
 
+   real(kr) function evapmean(uu,ares)
+   !-------------------------------------------------------------------
+   ! Mean of the evaporation spectrum x*exp(-x/T) truncated at U=uu
+   ! (energies in eV), with T=sqrt(U/a) and a=ares/8 1/MeV.  Used for
+   ! the neutrons emitted in (n,nX) reactions (capmul).
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   real(kr)::uu,ares
+   real(kr)::tt,xu,ex
+   real(kr),parameter::bigu=50.e0_kr
+   real(kr),parameter::zero=0
+   evapmean=0
+   if (uu.le.zero.or.ares.le.zero) return
+   tt=1.e6_kr*sqrt(1.e-6_kr*uu/(ares/8))
+   xu=uu/tt
+   if (xu.lt.1.e-3_kr) then
+      evapmean=2*uu/3
+   else if (xu.gt.bigu) then
+      evapmean=2*tt
+   else
+      ex=exp(-xu)
+      evapmean=tt*(2-ex*(xu*xu+2*xu+2))/(1-ex*(1+xu))
+   endif
+   return
+   end function evapmean
+
+   subroutine mulpart(mtd,nn,nc,zc,ac)
+   !-------------------------------------------------------------------
+   ! Number of neutrons nn and list of charged particles (zc,ac) for
+   ! reactions with emission of several particles: (n,np), (n,na),
+   ! ..., (n,2a), (n,pa), ..., the ENDF-6 reactions mt152-200 and the
+   ! neutron-only reactions (n,2n), (n,3n), (n,4n), (n,xn), mt875-891.
+   ! nn=nc=0 for reactions not in the list (single-particle emission,
+   ! fission, capture, ...).
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   integer::mtd,nn,nc,zc(3),ac(3)
+   nn=0
+   nc=0
+   zc=0
+   ac=0
+   select case (mtd)
+   case (11)   ! (n,2nd)
+      nn=2; nc=1; zc(1)=1; ac(1)=2
+   case (22)   ! (n,na)
+      nn=1; nc=1; zc(1)=2; ac(1)=4
+   case (23)   ! (n,n3a)
+      nn=1; nc=3; zc(1:3)=2; ac(1:3)=4
+   case (24)   ! (n,2na)
+      nn=2; nc=1; zc(1)=2; ac(1)=4
+   case (25)   ! (n,3na)
+      nn=3; nc=1; zc(1)=2; ac(1)=4
+   case (28)   ! (n,np)
+      nn=1; nc=1; zc(1)=1; ac(1)=1
+   case (29)   ! (n,n2a)
+      nn=1; nc=2; zc(1:2)=2; ac(1:2)=4
+   case (30)   ! (n,2n2a)
+      nn=2; nc=2; zc(1:2)=2; ac(1:2)=4
+   case (32)   ! (n,nd)
+      nn=1; nc=1; zc(1)=1; ac(1)=2
+   case (33)   ! (n,nt)
+      nn=1; nc=1; zc(1)=1; ac(1)=3
+   case (34)   ! (n,n3He)
+      nn=1; nc=1; zc(1)=2; ac(1)=3
+   case (35)   ! (n,nd2a)
+      nn=1; nc=3; zc(1)=1; ac(1)=2; zc(2:3)=2; ac(2:3)=4
+   case (36)   ! (n,nt2a)
+      nn=1; nc=3; zc(1)=1; ac(1)=3; zc(2:3)=2; ac(2:3)=4
+   case (41)   ! (n,2np)
+      nn=2; nc=1; zc(1)=1; ac(1)=1
+   case (42)   ! (n,3np)
+      nn=3; nc=1; zc(1)=1; ac(1)=1
+   case (44)   ! (n,n2p)
+      nn=1; nc=2; zc(1:2)=1; ac(1:2)=1
+   case (45)   ! (n,npa)
+      nn=1; nc=2; zc(1)=1; ac(1)=1; zc(2)=2; ac(2)=4
+   case (108)  ! (n,2a)
+      nc=2; zc(1:2)=2; ac(1:2)=4
+   case (109)  ! (n,3a)
+      nc=3; zc(1:3)=2; ac(1:3)=4
+   case (111)  ! (n,2p)
+      nc=2; zc(1:2)=1; ac(1:2)=1
+   case (112)  ! (n,pa)
+      nc=2; zc(1)=1; ac(1)=1; zc(2)=2; ac(2)=4
+   case (113)  ! (n,t2a)
+      nc=3; zc(1)=1; ac(1)=3; zc(2:3)=2; ac(2:3)=4
+   case (114)  ! (n,d2a)
+      nc=3; zc(1)=1; ac(1)=2; zc(2:3)=2; ac(2:3)=4
+   case (115)  ! (n,pd)
+      nc=2; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=2
+   case (116)  ! (n,pt)
+      nc=2; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=3
+   case (117)  ! (n,da)
+      nc=2; zc(1)=1; ac(1)=2; zc(2)=2; ac(2)=4
+   case (16)  ! (n,2n)
+      nn=2
+   case (17)  ! (n,3n)
+      nn=3
+   case (37)  ! (n,4n)
+      nn=4
+   case (152)  ! (n,5n)
+      nn=5
+   case (153)  ! (n,6n)
+      nn=6
+   case (154)  ! (n,2nt)
+      nn=2; nc=1; zc(1)=1; ac(1)=3
+   case (155)  ! (n,ta)
+      nc=2; zc(1)=1; ac(1)=3; zc(2)=2; ac(2)=4
+   case (156)  ! (n,4np)
+      nn=4; nc=1; zc(1)=1; ac(1)=1
+   case (157)  ! (n,3nd)
+      nn=3; nc=1; zc(1)=1; ac(1)=2
+   case (158)  ! (n,nda)
+      nn=1; nc=2; zc(1)=1; ac(1)=2; zc(2)=2; ac(2)=4
+   case (159)  ! (n,2npa)
+      nn=2; nc=2; zc(1)=1; ac(1)=1; zc(2)=2; ac(2)=4
+   case (160)  ! (n,7n)
+      nn=7
+   case (161)  ! (n,8n)
+      nn=8
+   case (162)  ! (n,5np)
+      nn=5; nc=1; zc(1)=1; ac(1)=1
+   case (163)  ! (n,6np)
+      nn=6; nc=1; zc(1)=1; ac(1)=1
+   case (164)  ! (n,7np)
+      nn=7; nc=1; zc(1)=1; ac(1)=1
+   case (165)  ! (n,4na)
+      nn=4; nc=1; zc(1)=2; ac(1)=4
+   case (166)  ! (n,5na)
+      nn=5; nc=1; zc(1)=2; ac(1)=4
+   case (167)  ! (n,6na)
+      nn=6; nc=1; zc(1)=2; ac(1)=4
+   case (168)  ! (n,7na)
+      nn=7; nc=1; zc(1)=2; ac(1)=4
+   case (169)  ! (n,4nd)
+      nn=4; nc=1; zc(1)=1; ac(1)=2
+   case (170)  ! (n,5nd)
+      nn=5; nc=1; zc(1)=1; ac(1)=2
+   case (171)  ! (n,6nd)
+      nn=6; nc=1; zc(1)=1; ac(1)=2
+   case (172)  ! (n,3nt)
+      nn=3; nc=1; zc(1)=1; ac(1)=3
+   case (173)  ! (n,4nt)
+      nn=4; nc=1; zc(1)=1; ac(1)=3
+   case (174)  ! (n,5nt)
+      nn=5; nc=1; zc(1)=1; ac(1)=3
+   case (175)  ! (n,6nt)
+      nn=6; nc=1; zc(1)=1; ac(1)=3
+   case (176)  ! (n,2n3He)
+      nn=2; nc=1; zc(1)=2; ac(1)=3
+   case (177)  ! (n,3n3He)
+      nn=3; nc=1; zc(1)=2; ac(1)=3
+   case (178)  ! (n,4n3He)
+      nn=4; nc=1; zc(1)=2; ac(1)=3
+   case (179)  ! (n,3n2p)
+      nn=3; nc=2; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=1
+   case (180)  ! (n,3n2a)
+      nn=3; nc=2; zc(1)=2; ac(1)=4; zc(2)=2; ac(2)=4
+   case (181)  ! (n,3npa)
+      nn=3; nc=2; zc(1)=1; ac(1)=1; zc(2)=2; ac(2)=4
+   case (182)  ! (n,dt)
+      nc=2; zc(1)=1; ac(1)=2; zc(2)=1; ac(2)=3
+   case (183)  ! (n,npd)
+      nn=1; nc=2; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=2
+   case (184)  ! (n,npt)
+      nn=1; nc=2; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=3
+   case (185)  ! (n,ndt)
+      nn=1; nc=2; zc(1)=1; ac(1)=2; zc(2)=1; ac(2)=3
+   case (186)  ! (n,np3He)
+      nn=1; nc=2; zc(1)=1; ac(1)=1; zc(2)=2; ac(2)=3
+   case (187)  ! (n,nd3He)
+      nn=1; nc=2; zc(1)=1; ac(1)=2; zc(2)=2; ac(2)=3
+   case (188)  ! (n,nt3He)
+      nn=1; nc=2; zc(1)=1; ac(1)=3; zc(2)=2; ac(2)=3
+   case (189)  ! (n,nta)
+      nn=1; nc=2; zc(1)=1; ac(1)=3; zc(2)=2; ac(2)=4
+   case (190)  ! (n,2n2p)
+      nn=2; nc=2; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=1
+   case (191)  ! (n,p3He)
+      nc=2; zc(1)=1; ac(1)=1; zc(2)=2; ac(2)=3
+   case (192)  ! (n,d3He)
+      nc=2; zc(1)=1; ac(1)=2; zc(2)=2; ac(2)=3
+   case (193)  ! (n,3Hea)
+      nc=2; zc(1)=2; ac(1)=3; zc(2)=2; ac(2)=4
+   case (194)  ! (n,4n2p)
+      nn=4; nc=2; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=1
+   case (195)  ! (n,4n2a)
+      nn=4; nc=2; zc(1)=2; ac(1)=4; zc(2)=2; ac(2)=4
+   case (196)  ! (n,4npa)
+      nn=4; nc=2; zc(1)=1; ac(1)=1; zc(2)=2; ac(2)=4
+   case (197)  ! (n,3p)
+      nc=3; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=1; zc(3)=1; ac(3)=1
+   case (198)  ! (n,n3p)
+      nn=1; nc=3; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=1; zc(3)=1; ac(3)=1
+   case (199)  ! (n,3n2pa)
+      nn=3; nc=3; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=1; zc(3)=2; ac(3)=4
+   case (200)  ! (n,5n2p)
+      nn=5; nc=2; zc(1)=1; ac(1)=1; zc(2)=1; ac(2)=1
+   case (875:891)  ! (n,2n) to excited states
+      nn=2
+   end select
+   return
+   end subroutine mulpart
+
+   subroutine capmul(ee,dame,q,za,awr,mtd)
+   !-------------------------------------------------------------------
+   ! Damage energy for reactions emitting several particles without
+   ! File 6: (n,np), (n,na), (n,2na), ... given with File 5 (conbar)
+   ! and (n,2a), (n,pa), ... (mt108-117, capdam).  The available
+   ! energy eavail=q+awr*e/(awr+1) is shared by sequential emission:
+   ! first the neutrons, each with the mean of the evaporation
+   ! spectrum x*exp(-x/T) on [0,U], T=sqrt(U/a), a=A/8 1/MeV; then the
+   ! charged particles following the LANL method, each with
+   ! min(vc,U/n), vc=1.029*z*Ze/(a**(1/3)+(Ae-1)**(1/3)) MeV for the
+   ! emitting nucleus (Ze,Ae) and n the number of charged particles
+   ! still to be emitted.  For one charged particle and no neutron this
+   ! is the capdam result.  The momenta of all emitted particles are
+   ! added incoherently (isotropic, uncorrelated): K=sum(m_i*eps_i)/Ar,
+   ! er=B+K-2*sqrt(B*K)*mu, B=Ar*e/(awr+1)**2, averaged over mu with a
+   ! 4-point Gauss rule; the Lindhard partition is computed for the
+   ! true residual nucleus (Zr,Ar).  The damage of each emitted charged
+   ! particle (lab energy eps+bc+2*sqrt(eps*bc)*mu, bc=a*e/(awr+1)**2)
+   ! is added, as sixbar does for File 6 particles.  Neutron-only reactions (nc=0,
+   ! nn>1) without File 4/5/6 data are treated with the neutron part
+   ! only.
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   ! externals
+   integer::mtd
+   real(kr)::ee,dame,q,za,awr
+   ! internals
+   integer::nn,nc,i,iq,zc(3),ac(3),ncp
+   real(kr)::z,ea,u,ae,ze,ex,vc,sk,b,er,bc,ep,dum,epc(3)
+   real(kr),dimension(4),parameter::qp=(/&
+      -.86114e0_kr,-.33998e0_kr,.33998e0_kr,.86114e0_kr/)
+   real(kr),dimension(4),parameter::qw=(/&
+     .34785e0_kr,.65215e0_kr,.65215e0_kr,.34785e0_kr/)
+   real(kr),parameter::third=.333333333e0_kr
+   real(kr),parameter::econ=1.029e6_kr
+   real(kr),parameter::zero=0
+   dame=0
+   if (ee.eq.zero) return
+   call mulpart(mtd,nn,nc,zc,ac)
+   if (nc.eq.0.and.nn.lt.2) return
+   z=nint(za/1000)
+   ea=q+awr*ee/(awr+1)
+   if (ea.le.zero) return
+   u=ea
+   ae=awr+1
+   ze=z
+   sk=0
+   ! neutrons
+   do i=1,nn
+      ex=evapmean(u,ae-1)
+      sk=sk+ex
+      u=u-ex
+      ae=ae-1
+   enddo
+   ! charged particles (LANL method)
+   do i=1,nc
+      if (ae-ac(i).le.zero) return
+      vc=econ*zc(i)*ze/(ac(i)**third+(ae-1)**third)
+      ex=min(vc,u/(nc-i+1))
+      if (ex.lt.zero) ex=0
+      epc(i)=ex
+      sk=sk+ac(i)*ex
+      u=u-ex
+      ae=ae-ac(i)
+      ze=ze-zc(i)
+   enddo
+   if (ae.lt.0.5_kr.or.ze.lt.0.5_kr) return
+   sk=sk/ae
+   b=ae*ee/((awr+1)*(awr+1))
+   ! set the Lindhard constants for this residual nucleus
+   er=df(zero,ze,ae,z,awr)
+   do iq=1,4
+      er=b+sk-2*sqrt(b*sk)*qp(iq)
+      dame=dame+qw(iq)*df(er,ze,ae,z,awr)/2
+   enddo
+   ! damage of each emitted charged particle itself (as in sixbar for
+   ! File 6 particles): lab energy ep=ex+bc+2*sqrt(ex*bc)*mu with
+   ! bc=a*e/(awr+1)**2, Lindhard partition of the particle in the target
+   ncp=nc
+   do i=1,ncp
+      bc=ac(i)*ee/((awr+1)*(awr+1))
+      dum=df(zero,real(zc(i),kr),real(ac(i),kr),z,awr)
+      do iq=1,4
+         ep=epc(i)+bc+2*sqrt(epc(i)*bc)*qp(iq)
+         dame=dame+qw(iq)*df(ep,real(zc(i),kr),real(ac(i),kr),z,awr)/2
+      enddo
+   enddo
+   ! restore the Lindhard constants of the residual nucleus
+   if (ncp.gt.0) dum=df(zero,ze,ae,z,awr)
+   return
+   end subroutine capmul
+
    subroutine disbar(ee,ebar,dame,q,za,awr,ntape,matd,mtd,a,nwa)
    !-------------------------------------------------------------------
    ! Compute ebar and damage energy for discrete scattering.
+   ! For discrete charged-particle levels (File 4 only) the damage of
+   ! the emitted particle is added to the recoil damage, as sixbar does
+   ! for the particles given in File 6.
+   ! for discrete charged-particle levels the Lindhard
+   ! partition of the recoil uses the residual nucleus, zr=z-zp and
+   ! ar=awr+1-awp (the LANL code used the target z and awr), as capdam
+   ! does for the continuum; the kinematics already used the residual
+   ! mass.  The File 4 distribution is used as given in the angular
+   ! integrations (no clipping of negative values, as in tabdmn).
+   ! (DLA, IAEA, 5 Oct 2026)
    !-------------------------------------------------------------------
    use endf ! provides iverf,terp1
    use mathm ! provides legndr
    use physics !get global physics and light particle mass constants
+   use util ! provides mess
    ! externals
    integer::ntape,matd,mtd,nwa
    real(kr)::ee,ebar,dame,q,za,awr,a(*)
@@ -2038,7 +3372,10 @@ contains
    integer::imiss,i,mfd,nld,lcd,idis,iz,iq,il
    real(kr)::e,thresh,awp,afact,arat,en,cn,el,cl,z
    real(kr)::daml,damn,enx,enext,u,f,e2,ce,r,b,g,test,wbar
-   real(kr)::fl(65),p(65)
+   integer::lwmx
+   character(60)::strng
+   real(kr),parameter::wmax=0.999999e0_kr
+   real(kr)::fl(65),p(65),zpd,ep,dum,zr,ar
    integer,parameter::nq=64
    real(kr),dimension(64),parameter::qp=(/&
      -9.99305042E-01_kr,-9.96340117E-01_kr,-9.91013371E-01_kr,&
@@ -2091,11 +3428,13 @@ contains
    real(kr),parameter::small=1.e-10_kr
    real(kr),parameter::zero=0
    save imiss,thresh,awp,afact,arat
-   save en,cn,el,cl,z,daml,damn,enx,enext
+   save en,cn,el,cl,z,daml,damn,enx,enext,zpd,zr,ar
+   save lwmx
 
    !--initialize if e=0.
    e=ee
    if (e.eq.zero) then
+      lwmx=0
       imiss=0
       do i=1,nmiss4
          if (miss4(i).eq.mtd) imiss=1
@@ -2124,6 +3463,13 @@ contains
       if (iverf.ge.6.and.mtd.ge.800.and.mtd.lt.849) awp=anratio
       afact=awp/((awr+1)**2)
       arat=awp/(awr+1-awp)
+      ! charge of the emitted particle (discrete charged-particle levels)
+      ! (DLA, IAEA)
+      zpd=0
+      if (iverf.le.5.and.mtd.ge.700.and.mtd.lt.758) zpd=1
+      if (iverf.le.5.and.mtd.ge.760.and.mtd.lt.798) zpd=2
+      if (iverf.ge.6.and.mtd.ge.600.and.mtd.lt.749) zpd=1
+      if (iverf.ge.6.and.mtd.ge.750.and.mtd.lt.849) zpd=2
       en=0
       cn=0
       el=0
@@ -2132,7 +3478,15 @@ contains
       if (idame.ne.0) then
          iz=nint(za/1000)
          z=iz
-         damn=df(e,z,awr,z,awr)
+         ! recoil nucleus: target for neutron levels, residual
+         ! (z-zp, awr+1-awp) for charged-particle levels (DLA, IAEA)
+         zr=z
+         ar=awr
+         if (zpd.gt.zero) then
+            zr=z-zpd
+            ar=awr+1-awp
+         endif
+         damn=df(e,zr,ar,z,awr)
          daml=damn
          if (mtd.eq.2) then
             daml=0
@@ -2179,7 +3533,18 @@ contains
 
    !--compute ebar
    wbar=fl(2)
-   if (wbar.gt.qp(64)) wbar=qp(64)
+   ! mean cosine limited to 1-1e-6 (was qp(64)=0.999305, which cut
+   ! forward-peaked distributions); message once per mt
+   ! (DLA, IAEA, 20 Oct 2026)
+   if (wbar.gt.wmax) then
+      wbar=wmax
+      if (lwmx.eq.0) then
+         write(strng,'(''mt'',i4,'' mean cosine limited to 0.999999'',&
+           &'' at'',1p,e10.3,'' ev'')') mtd,e
+         call mess('disbar',strng,' ')
+         lwmx=1
+      endif
+   endif
    cn=(1+2*b*wbar+b*b)*afact
    if (idame.eq.0) go to 130
    if (e.lt.enx*(1-small)) go to 130
@@ -2187,6 +3552,9 @@ contains
    !--angle integration by gauss-legendre method.
   120 continue
    dame=0
+   ! charged-particle levels come here also without damage option (DLA, IAEA)
+   if (idame.eq.0) go to 130
+   dum=df(zero,zr,ar,z,awr)
    do iq=1,nq
       u=qp(iq)
       call legndr(u,p,nld)
@@ -2195,8 +3563,25 @@ contains
          f=f+(2*il-1)*fl(il)*p(il)/2
       enddo
       e2=e*(1-2*g*u+g*g)*afact/arat
-      dame=dame+qw(iq)*f*df(e2,z,awr,z,awr)
+      dame=dame+qw(iq)*f*df(e2,zr,ar,z,awr)
    enddo
+   ! damage of the emitted charged particle itself (as in sixbar for
+   ! File 6 particles): lab energy ep=e*afact*(1+2*b*u+b*b) (DLA, IAEA)
+   if (zpd.gt.zero.and.r.gt.zero) then
+      dum=df(zero,zpd,awp,z,awr)
+      do iq=1,nq
+         u=qp(iq)
+         call legndr(u,p,nld)
+         f=0
+         do il=1,nld
+            f=f+(2*il-1)*fl(il)*p(il)/2
+         enddo
+         ep=e*(1+2*b*u+b*b)*afact
+         dame=dame+qw(iq)*f*df(ep,zpd,awp,z,awr)
+      enddo
+      ! restore the Lindhard constants of the recoil nucleus (DLA, IAEA)
+      dum=df(zero,zr,ar,z,awr)
+   endif
    if (dame.lt.zero) dame=zero
    damn=dame
 
@@ -2254,8 +3639,11 @@ contains
    !-------------------------------------------------------------------
    ! Calculate neutron ebar and damage energy
    ! for continuum scattering reactions.
-   ! Damage for (n,np), (n,na), etc., is currently treated like
-   ! damage for (n,p), (n,a), etc.  neutron recoil is ignored.
+   ! Damage: reactions with charged particles ((n,np), (n,na), ...)
+   ! use capmul; neutron-only reactions use tabdmn/anadmn with the
+   ! evaluated neutron spectrum and the momentum of all nu emitted
+   ! neutrons; fission keeps the original tabdam/anadam treatment.
+   ! (DLA, IAEA)
    !-------------------------------------------------------------------
    use util ! provides error
    use endf ! provides endf routines and variables
@@ -2265,7 +3653,9 @@ contains
    ! internals
    integer::l,mf1,mt1,mfd,idis,nb,nw,iz,il,ik,nktot
    integer::ip,ir,idisc,nr,np,ll,nnr,inn,ie,idone,ii,mtt
-   integer::lf,nne,lnow,iraw,ne
+   integer::lf,nne,lnow,iraw,ne,nnm,ncm,zcm(3),acm(3),nun,iout
+   logical::lfis
+   character(60)::strng
    real(kr)::enext,t1,t2,ehi,fhi,dhi,pe,eihi,etp,f,d,s
    real(kr)::awr,awfac,aw1fac,z,za
    integer,parameter::nkmax=12
@@ -2273,9 +3663,10 @@ contains
    real(kr)::d1(nkmax),d2(nkmax),e1(nkmax),e2(nkmax)
    real(kr),parameter::emax=1.e10_kr
    real(kr),parameter::step=1.5e0_kr
+   real(kr),parameter::stepn=1.1e0_kr
    real(kr),parameter::small=1.e-10_kr
    real(kr),parameter::zero=0
-   save nktot,awr,awfac,aw1fac,z,za,mtt
+   save nktot,awr,awfac,aw1fac,z,za,mtt,nun,lfis
    save loc,d1,d2,e1,e2,mf1,mt1
 
    !--initialize if e=0.
@@ -2289,6 +3680,11 @@ contains
          if (mtd.eq.17.or.mtd.eq.25) yld=3
          if (mtd.eq.38.or.mtd.eq.42) yld=3
          if (mtd.eq.37) yld=4
+         ! mt152-200, 875-891: number of emitted neutrons (DLA, IAEA)
+         if (mtd.gt.100) then
+            call mulpart(mtd,nnm,ncm,zcm,acm)
+            yld=max(1,nnm)
+         endif
       else
          mf1=1
          mt1=452
@@ -2298,6 +3694,13 @@ contains
          ! ... but when nply.ne.0, use prompt neutron data only
          call hgtyld(e,enext,idis,yld,matd,mf1,mt1,nscr,b,nbmax)
       endif
+      ! File 4 angular distribution of the emitted neutrons, used to
+      ! correct the isotropic recoil of tabdmn/anadmn (neutron-only,
+      ! non-fission reactions).  Must precede the reading of File 5. (DLA, IAEA)
+      n4e=0
+      call mulpart(mtd,nnm,ncm,zcm,acm)
+      if (idame.gt.0.and.ncm.eq.0.and.&
+        (mtd.lt.18.or.mtd.gt.21).and.mtd.ne.38) call anitab(nin,matd,mtd)
       mfd=5
       call findf(matd,mfd,mtd,nin)
       call contio(nin,0,0,c(l),nb,nw)
@@ -2308,15 +3711,18 @@ contains
       aw1fac=1/(awr+1)
       iz=nint(c(1)/1000)
       z=iz
-      ! treat damage for (n,np) as (n,p),etc.
       za=c(1)
+      ! damage treatment: mtt=mtd for reactions with charged particles
+      ! (capmul); otherwise the neutron spectrum is used with nun
+      ! neutrons (tabdmn/anadmn).  The LANL code treated (n,np), (n,na),
+      ! (n,nd), (n,nt), (n,n3He) as (n,p), ... (neutron ignored, residual
+      ! mass A) and the other (n,nX) reactions and (n,2n), (n,3n), (n,4n)
+      ! as the emission of a single neutron (residual mass A). (DLA, IAEA)
       mtt=0
-      if (mtd.eq.22) mtt=107
-      if (mtd.eq.28) mtt=103
-      if (mtd.eq.32) mtt=104
-      if (mtd.eq.33) mtt=105
-      if (mtd.eq.34) mtt=106
-      if (mtt.gt.0) call capdam(e,dame,q,za,awr,mtt)
+      call mulpart(mtd,nnm,ncm,zcm,acm)
+      if (ncm.gt.0) mtt=mtd
+      nun=max(1,nnm)
+      lfis=((mtd.ge.18.and.mtd.le.21).or.mtd.eq.38)
       ne=0
       il=1
       ik=0
@@ -2337,6 +3743,16 @@ contains
 
          !--analytic subsection.
          if (lf.gt.1) then
+            ! anadmn computes the damage for LF=5, 7, 9,
+            ! 11 and 12 (the other analytic laws are not ENDF-6 laws)
+            ! (DLA, IAEA, Oct 2026)
+            if (idame.gt.0.and.mtt.eq.0.and.lf.ne.5.and.lf.ne.7.and.&
+              lf.ne.9.and.lf.ne.11.and.lf.ne.12) then
+               write(strng,'(''mf5, mt'',i3,'' analytic law lf='',i2)')&
+                 mtd,lf
+               call mess('conbar',strng,&
+                 'damage of this subsection not computed')
+            endif
             if (lf.eq.3) then
                t1=(awr*awr+1)*aw1fac*aw1fac
                t2=awr*aw1fac
@@ -2389,10 +3805,19 @@ contains
                call tabbar(fhi,c(iraw),lf)
                dhi=0
                if (idame.ne.0) then
-                  if (mtt.ne.0) then
-                     call capdam(ehi,dhi,q,za,awr,mtt)
+                  if (mtt.gt.0) then
+                     call capmul(ehi,dhi,q,za,awr,mtt)
+                  else if (lfis) then
+                     ! fission: recoil of the fissioning
+                     ! nucleus (mass awr) from one neutron, as tabdam,
+                     ! with the integration of tabdmn (normalized,
+                     ! interpolation laws of the data) (DLA, IAEA, 5 Oct 2026)
+                     call tabdmn(ehi,dhi,z,awr,1,c(iraw))
                   else
-                     call tabdam(ehi,dhi,z,awr,awfac,c(iraw))
+                     ! exact recoil of the nun neutrons (DLA, IAEA, Oct 2026)
+                     lcvx=nun.le.16
+                     call tabdmn(ehi,dhi,z,awr,nun,c(iraw))
+                     lcvx=.false.
                   endif
                endif
                c(lnow+3*(nne-1))=ehi
@@ -2443,20 +3868,41 @@ contains
             nnr=nint(c(lnow+4))
             inn=2
             lnow=lnow+6+2*nnr
-            ie=0
-            idone=0
-            do while (ie.lt.ne.and.idone.eq.0)
-               ie=ie+1
-               if (c(lnow+3*ie).ge.e*(1-small)) then
-                  ii=lnow+3*(ie-1)
-                  idone=1
+            ! the table has ne entries (e,ebar,dame) at
+            ! lnow+3*(ie-1); outside its range the first or the last
+            ! entry is used (iout=1).  The LANL code tested entry ie+1
+            ! up to ie=ne, i.e. one entry beyond the table, and used it
+            ! to interpolate above the last incident energy; below the
+            ! first one it extrapolated linearly. (DLA, IAEA, Oct 2026)
+            ii=0
+            iout=0
+            if (ne.le.1.or.e.lt.c(lnow)*(1-small)) then
+               ii=lnow
+               iout=1
+            else
+               do ie=2,ne
+                  if (c(lnow+3*(ie-1)).ge.e*(1-small)) then
+                     ii=lnow+3*(ie-2)
+                     exit
+                  endif
+               enddo
+               if (ii.eq.0) then
+                  ii=lnow+3*(ne-1)
+                  iout=1
                endif
-            enddo
-            if (idone.eq.0) ii=lnow+3*(ne-1)
-            call terp1(c(ii),c(ii+1),c(ii+3),c(ii+4),e,f,inn)
+            endif
+            if (iout.eq.0) then
+               call terp1(c(ii),c(ii+1),c(ii+3),c(ii+4),e,f,inn)
+            else
+               f=c(ii+1)
+            endif
             ebar=ebar+f*pe
             if (idame.ne.0) then
-               call terp1(c(ii),c(ii+2),c(ii+3),c(ii+5),e,d,inn)
+               if (iout.eq.0) then
+                  call terp1(c(ii),c(ii+2),c(ii+3),c(ii+5),e,d,inn)
+               else
+                  d=c(ii+2)
+               endif
                dame=dame+d*pe
             endif
 
@@ -2465,18 +3911,25 @@ contains
             call anabar(s,e,c(lnow),t1,t2)
             ebar=ebar+s*pe
             if (idame.ne.0) then
-               if (mtt.ne.0) then
-                  call capdam(e,dame,q,za,awr,mtt)
+               if (mtt.gt.0) then
+                  ! (the LANL code overwrote dame here: call capdam(e,dame,...))
+                  ! (DLA, IAEA)
+                  call capmul(e,d,q,za,awr,mtt)
+                  dame=dame+d*pe
                else
                   if (e.ge.e2(ik)*(1-small)) then
                      idone=0
                      do while (idone.eq.0)
                         d1(ik)=d2(ik)
                         e1(ik)=e2(ik)
-                        e2(ik)=step*e1(ik)
+                        ! energy step 1.1 and anadmn; fission
+                        ! uses anadmn with one neutron (DLA, IAEA, Oct 2026)
+                        e2(ik)=stepn*e1(ik)
                         if (e2(ik).gt.etp*(1+small)) e2(ik)=etp
                         if (e1(ik).eq.zero) e2(ik)=e
-                        call anadam(e2(ik),d2(ik),z,awr,c(lnow))
+                        lcvx=(.not.lfis).and.nun.le.16
+                        call anadmn(e2(ik),d2(ik),z,awr,nun,c(lnow))
+                        lcvx=.false.
                         if (abs(e2(ik)-etp).lt.small*etp) then
                            idone=1
                         else
@@ -2604,8 +4057,11 @@ contains
    ! externals
    real(kr)::s,e,a(*),t1,t2
    ! internals
-   integer::lf,nr,np,lnext,ip,ir,idis,nrn,npn,lnxt
+   integer::lf,nr,np,lnext,ip,ir,idis,nrn,npn,lnxt,i,ipg,irg
    real(kr)::u,theta,enext,b1,b2,b3,expa,test,b,rpi2
+   real(kr)::xmx,s0,s1,x,w,g,ep
+   integer,parameter::nsim=400
+   integer,parameter::nsim5=2000
    real(kr),parameter::thrhaf=1.5e0_kr
    real(kr),parameter::zero=0
    rpi2=sqrt(pi)/2
@@ -2628,11 +4084,33 @@ contains
 
    !--law 5--general evaporation spectrum.
    else if (lf.eq.5) then
+      ! g(x) truncated at x=(e-u)/theta (ENDF-6: the
+      ! secondary energy is limited to e-u); the original code used
+      ! the mean of the whole table (tabbar) (DLA, IAEA, Oct 2026)
       nrn=nint(a(lnext+4))
       npn=nint(a(lnext+5))
       lnxt=lnext+2*nrn+2*npn+6
-      call tabbar(s,a(lnxt),lf)
-      s=s*theta
+      if (theta.gt.zero) then
+         xmx=a(lnxt+6+2*nint(a(lnxt+4))+2*(nint(a(lnxt+5))-1))
+         xmx=min(xmx,(e-u)/theta)
+         if (xmx.gt.zero) then
+            s0=0
+            s1=0
+            ipg=2
+            irg=1
+            do i=0,nsim5
+               x=xmx*i/nsim5
+               w=2
+               if (mod(i,2).eq.1) w=4
+               if (i.eq.0.or.i.eq.nsim5) w=1
+               call terpa(g,x,enext,idis,a(lnxt),ipg,irg)
+               if (g.lt.zero) g=0
+               s0=s0+w*g
+               s1=s1+w*g*x
+            enddo
+            if (s0.gt.zero) s=theta*s1/s0
+         endif
+      endif
 
    !--law 7--simple fission spectrum.
    else if (lf.eq.7) then
@@ -2668,6 +4146,27 @@ contains
       ir=1
       call terpa(b,e,enext,idis,a(lnxt),ip,ir)
       s=theta*(thrhaf+theta*b/4)
+      ! Watt spectrum truncated at e-u (ENDF-6); the
+      ! analytic mean above is used when the truncation is negligible
+      ! (DLA, IAEA, Oct 2026)
+      if (theta.gt.zero.and.b.ge.zero) then
+         x=(sqrt(50*theta)+theta*sqrt(b)/2)**2
+         if (e-u.lt.x) then
+            x=e-u
+            s0=0
+            s1=0
+            do i=0,nsim
+               ep=x*i/nsim
+               w=2
+               if (mod(i,2).eq.1) w=4
+               if (i.eq.0.or.i.eq.nsim) w=1
+               g=exp(-ep/theta)*sinh(sqrt(b*ep))
+               s0=s0+w*g
+               s1=s1+w*g*ep
+            enddo
+            if (s0.gt.zero) s=s1/s0
+         endif
+      endif
 
    !--law 12--energy dependent fission neutron spectrum (madland-nix)
    else if (lf.eq.12) then
@@ -2789,6 +4288,230 @@ contains
    return
    end subroutine anadam
 
+   subroutine anadmn(e,d,z,awr,nu,a)
+   !-------------------------------------------------------------------
+   ! Damage energy for an analytic File 5 section of a reaction that
+   ! emits nu neutrons and no charged particle.  Same as anadam,
+   ! with the momenta of the nu neutrons added incoherently, residual
+   ! mass ar=awr+1-nu, and the Lindhard constants set for the residual.
+   ! the spectrum is integrated with Simpson's rule (nsim
+   ! intervals) and normalized; the adaptive trapezoidal rule of anadam
+   ! (5% tolerance) gave errors of up to 2%.  The same rule gives the
+   ! moments <ep> and <pz> used for the File 4 anisotropy correction
+   ! (as in tabdmn).
+   ! all the analytic laws (anadam and the previous anadmn
+   ! gave no damage except for LF=9):
+   !   LF=5  general, g(ep/theta(e)) tabulated, ep <= e-u
+   !   LF=7  Maxwell, sqrt(ep) exp(-ep/theta), ep <= e-u
+   !   LF=9  evaporation, ep exp(-ep/theta), ep <= e-u
+   !   LF=11 Watt, exp(-ep/a) sinh(sqrt(b ep)), ep <= e-u
+   !   LF=12 Madland-Nix, (g(ep,efl)+g(ep,efh))/2 with
+   !         g(ep,ef)=[u2**1.5 E1(u2) - u1**1.5 E1(u1) + gam(1.5,u2)
+   !         - gam(1.5,u1)]/(3 sqrt(ef tm)), u1,2=(sqrt(ep)-+sqrt(ef))**2/tm
+   ! The shapes need not be normalized (the integral is normalized).
+   ! (lcvx, set by conbar except for fission): the recoil of
+   ! the nu independent neutrons is computed exactly as in tabdmn, with
+   ! nodes at the Simpson points (dirnod, cvcmp, cvdam).
+   ! (DLA, IAEA, 5 Oct 2026)
+   !-------------------------------------------------------------------
+   use endf ! provides terpa
+   ! externals
+   integer::nu
+   real(kr)::e,d,z,awr,a(*)
+   ! internals
+   integer::nr,np,lf,lnext,ip,ir,idis,i,nrn,npn,lnxt,ns,ipg,irg
+   real(kr)::u,awfac,test,theta,enext,ep,ar,dum,emx
+   real(kr)::s0,s1,sz,w,p0,eri,era,bw,efl,efh,xmx,f
+   ! exact path (DLA, IAEA, Oct 2026)
+   integer::m,nsv(16),iov(16)
+   real(kr)::cz(cvmx),ct(cvmx),cw(cvmx),erm
+   integer,parameter::nsim=400
+   integer,parameter::nsim5=2000
+   real(kr),parameter::zero=0
+   real(kr),parameter::delta=1.e-7_kr
+
+   !--retrieve the spectrum parameters
+   d=0
+   u=a(1)
+   nr=nint(a(5))
+   np=nint(a(6))
+   lf=nint(a(4))
+   ar=awr+1-nu
+   if (nu.le.1.or.ar.lt.0.5_kr) ar=awr
+   awfac=1/ar
+   dum=df(zero,z,ar,z,awr)
+   if (lf.ne.5.and.lf.ne.7.and.lf.ne.9.and.lf.ne.11.and.lf.ne.12) return
+   test=10
+   if (lf.ne.12) then
+      if (e.le.u) return
+      if ((e-u).lt.delta*e) return
+      if ((e-u).lt.test) return
+   endif
+   lnext=7+2*nr+2*np
+   ip=2
+   ir=1
+   call terpa(theta,e,enext,idis,a(lnext),ip,ir)
+   if (theta.le.zero) return
+   ns=nsim
+   bw=0
+   efl=0
+   efh=0
+   lnxt=0
+   if (lf.eq.5.or.lf.eq.11) then
+      nrn=nint(a(lnext+4))
+      npn=nint(a(lnext+5))
+      lnxt=lnext+6+2*nrn+2*npn
+   endif
+   if (lf.eq.9.or.lf.eq.7) then
+      emx=min(e-u,50*theta)
+   else if (lf.eq.11) then
+      ip=2
+      ir=1
+      call terpa(bw,e,enext,idis,a(lnxt),ip,ir)
+      if (bw.lt.zero) bw=0
+      emx=min(e-u,(sqrt(50*theta)+theta*sqrt(bw)/2)**2)
+   else if (lf.eq.5) then
+      ! last x of the g(x) table
+      xmx=a(lnxt+6+2*nint(a(lnxt+4))+2*(nint(a(lnxt+5))-1))
+      emx=min(e-u,theta*xmx)
+      ns=nsim5
+   else
+      efl=a(lnext)
+      efh=a(lnext+1)
+      emx=(sqrt(max(efl,efh))+sqrt(50*theta))**2
+   endif
+   if (emx.le.zero) return
+
+   !--Simpson integration over the secondary energy;
+   !--Gauss-Legendre angle integration (tdfn)
+   !--lcvx: laboratory momentum nodes at the Simpson
+   !--points (dirnod) for the exact recoil of the nu neutrons (cvdam)
+   ! (DLA, IAEA, Oct 2026)
+   nfn=0
+   s0=0
+   s1=0
+   sz=0
+   ipg=2
+   irg=1
+   do i=0,ns
+      ep=emx*i/ns
+      w=2
+      if (mod(i,2).eq.1) w=4
+      if (i.eq.0.or.i.eq.ns) w=1
+      if (lf.eq.9) then
+         f=sed(e,ep,theta,u)
+      else if (lf.eq.7) then
+         f=sqrt(ep)*exp(-ep/theta)
+      else if (lf.eq.11) then
+         f=exp(-ep/theta)*sinh(sqrt(bw*ep))
+      else if (lf.eq.5) then
+         call terpa(f,ep/theta,enext,idis,a(lnxt),ipg,irg)
+         if (f.lt.zero) f=0
+      else
+         f=(gmn(ep,efl,theta)+gmn(ep,efh,theta))/2
+      endif
+      w=w*f
+      s0=s0+w
+      if (lcvx) then
+         call dirnod(e,ep,awr,w)
+      else
+         d=d+w*tdfn(e,ep,nu,z,ar,awr)
+      endif
+      s1=s1+w*ep
+      if (n4e.gt.0.and..not.lcvx) sz=sz+w*anipz(e,ep,awr)
+   enddo
+   if (s0.le.zero) then
+      d=0
+      return
+   endif
+   ! exact recoil of the nu independent neutrons (tabdmn) (DLA, IAEA, Oct 2026)
+   if (lcvx) then
+      d=0
+      call cvcmp(nfn,fnz,fnt,fnw,m,cz,ct,cw)
+      if (m.gt.0) then
+         do i=1,max(nu,1)
+            nsv(i)=m
+            iov(i)=0
+         enddo
+         call cvdam(max(nu,1),nsv,iov,cz,ct,cw,sqrt(2*e),z,ar,z,awr,d,erm)
+      endif
+      return
+   endif
+   d=d/s0
+   ! anisotropy of the emitted neutrons (File 4), as in tabdmn
+   if (n4e.gt.0.and.d.gt.zero) then
+      s1=s1/s0
+      sz=sz/s0
+      p0=sqrt(2*e)
+      eri=(e+nu*s1)*awfac
+      era=(p0*p0-2*p0*nu*sz+2*nu*s1+nu*(nu-1)*sz*sz)*awfac/2
+      if (era.gt.zero.and.eri.gt.zero) then
+         d=d*df(era,z,ar,z,awr)/df(eri,z,ar,z,awr)
+      endif
+   endif
+   return
+
+   contains
+
+      real(kr) function gmn(ep,ef,tm)
+      ! Madland-Nix spectrum of one fragment (ENDF-6, File 5 LF=12) (DLA, IAEA)
+      real(kr)::ep,ef,tm
+      real(kr)::u1,u2
+      gmn=0
+      if (ef.le.zero.or.tm.le.zero.or.ep.lt.zero) return
+      u1=(sqrt(ep)-sqrt(ef))**2/tm
+      u2=(sqrt(ep)+sqrt(ef))**2/tm
+      gmn=(u2**1.5_kr*e1x(u2)-u1**1.5_kr*e1x(u1)+gam15(u2)-gam15(u1))&
+        /(3*sqrt(ef*tm))
+      if (gmn.lt.zero) gmn=0
+      end function gmn
+
+      real(kr) function gam15(x)
+      ! lower incomplete gamma function gamma(3/2,x) (DLA, IAEA)
+      real(kr)::x
+      real(kr),parameter::rpi2=0.886226925452758e0_kr
+      gam15=rpi2*erf(sqrt(x))-sqrt(x)*exp(-x)
+      end function gam15
+
+      real(kr) function e1x(x)
+      ! exponential integral E1(x), x>0 (0 for x=0, where x**1.5*E1
+      ! vanishes); series for x<=1, continued fraction for x>1 (DLA, IAEA)
+      real(kr)::x
+      integer::k
+      real(kr)::s,t,b,c,dd,h,an
+      real(kr),parameter::euler=0.5772156649015329e0_kr
+      real(kr),parameter::tiny=1.e-30_kr
+      real(kr),parameter::eps=1.e-12_kr
+      e1x=0
+      if (x.le.zero) return
+      if (x.le.1) then
+         s=0
+         t=1
+         do k=1,100
+            t=-t*x/k
+            s=s+t/k
+            if (abs(t/k).lt.eps*abs(s)) exit
+         enddo
+         e1x=-euler-log(x)-s
+      else
+         b=x+1
+         c=1/tiny
+         dd=1/b
+         h=dd
+         do k=1,200
+            an=-real(k,kr)*k
+            b=b+2
+            dd=1/(an*dd+b)
+            c=b+an/c
+            h=h*c*dd
+            if (abs(c*dd-1).lt.eps) exit
+         enddo
+         e1x=h*exp(-x)
+      endif
+      end function e1x
+
+   end subroutine anadmn
+
    real(kr) function sed(e,ep,theta,u)
    !-------------------------------------------------------------------
    ! Secondary energy distribution function for anadam.
@@ -2903,6 +4626,317 @@ contains
    return
    end subroutine tabbar
 
+   subroutine fis6tab(nin,matd,mtd,za,awr)
+   !-------------------------------------------------------------------
+   ! Fission given in File 6 without recoil: damage per
+   ! fission at each incident energy of the first neutron subsection,
+   ! with the same model as File 5 (conbar/tabdmn with one neutron):
+   ! recoil of the fissioning nucleus (mass awr, charge z) from one
+   ! neutron, emission isotropic in the frame of the data,
+   !   lab (LCT=1, LAW=7): er=(e-2*sqrt(e*ep)*mu+ep)/awr
+   !   CM  (LCT=2,3):      er=(awr**2*v**2-2*awr*v*u*mu+u**2)/(2*awr),
+   !                       v=sqrt(2e)/(awr+1), u=sqrt(2ep)
+   ! 4-point Gauss rule in mu and in each outgoing-energy panel (LEP law
+   ! for LAW=1, the TAB1 laws for LAW=7, trapezoid in mu for LAW=7),
+   ! normalized.  For LAW=7 the recoil is computed at the
+   ! tabulated laboratory cosine (no isotropic average).  The other particles of the section (ternary p, t,
+   ! alpha, photons) are not used.  Results in ef6, df6 (nf6 points).
+   ! (DLA, IAEA, 5 Oct 2026)
+   !-------------------------------------------------------------------
+   use util ! provides error
+   use endf ! provides endf routines and variables
+   ! externals
+   integer::nin,matd,mtd
+   real(kr)::za,awr
+   ! internals
+   integer::nb,nw,nk,lct,ik,l,law,izp,ne,ie,nd,na,nep,ncyc,j,iq
+   integer::nmu,imu,nr1,np1,jr,lw,lep,i,done
+   real(kr)::z,en,x1,x2,fa,fb,fx,s0,s1,dum,amu,amul,t0,t1,t0l,t1l,y,er
+   real(kr),allocatable::b(:)
+   integer,parameter::nbmax=2000000
+   integer,parameter::nemax=2000
+   real(kr),parameter::zero=0
+   real(kr),dimension(4),parameter::q4x=(/&
+      -.861136312e0_kr,-.339981044e0_kr,.339981044e0_kr,.861136312e0_kr/)
+   real(kr),dimension(4),parameter::q4w=(/&
+      .347854845e0_kr,.652145155e0_kr,.652145155e0_kr,.347854845e0_kr/)
+
+   nf6=0
+   if (allocated(ef6)) deallocate(ef6)
+   if (allocated(df6)) deallocate(df6)
+   allocate(ef6(nemax),df6(nemax))
+   allocate(b(nbmax))
+   z=int(za/1000)
+   dum=df(zero,z,awr,z,awr)
+   call findf(matd,6,mtd,nin)
+   call contio(nin,0,0,b,nb,nw)
+   lct=l2h
+   nk=n1h
+   done=0
+   do ik=1,nk
+      if (done.eq.1) exit
+      l=1
+      call tab1io(nin,0,0,b(l),nb,nw)
+      l=l+nw
+      do while (nb.ne.0)
+         call moreio(nin,0,0,b(l),nb,nw)
+         l=l+nw
+      enddo
+      izp=nint(b(1))
+      law=nint(b(4))
+      if (law.eq.1.or.law.eq.2.or.law.eq.5) then
+         call tab2io(nin,0,0,b(1),nb,nw)
+         lep=nint(b(4))
+         ne=nint(b(6))
+         do ie=1,ne
+            l=1
+            call listio(nin,0,0,b(l),nb,nw)
+            l=l+nw
+            do while (nb.ne.0)
+               if (l.gt.nbmax-10000) call error('fis6tab','storage',' ')
+               call moreio(nin,0,0,b(l),nb,nw)
+               l=l+nw
+            enddo
+            if (izp.eq.1.and.law.eq.1.and.nf6.lt.nemax) then
+               en=b(2)
+               nd=nint(b(3))
+               na=nint(b(4))
+               nep=nint(b(6))
+               ncyc=na+2
+               s0=0
+               s1=0
+               do j=1,min(nd,nep)
+                  x1=b(6+ncyc*(j-1)+1)
+                  fa=b(6+ncyc*(j-1)+2)
+                  s0=s0+fa
+                  s1=s1+fa*d1fis(en,x1,awr,z,lct)
+               enddo
+               do j=nd+2,nep
+                  x1=b(6+ncyc*(j-2)+1)
+                  x2=b(6+ncyc*(j-1)+1)
+                  if (x2.le.x1) cycle
+                  fa=b(6+ncyc*(j-2)+2)
+                  fb=b(6+ncyc*(j-1)+2)
+                  do iq=1,4
+                     y=(x1+x2)/2+(x2-x1)/2*q4x(iq)
+                     fx=fa
+                     if (lep.ne.1) fx=fa+(fb-fa)*(y-x1)/(x2-x1)
+                     s0=s0+q4w(iq)*(x2-x1)/2*fx
+                     s1=s1+q4w(iq)*(x2-x1)/2*fx*d1fis(en,y,awr,z,lct)
+                  enddo
+               enddo
+               nf6=nf6+1
+               ef6(nf6)=en
+               df6(nf6)=0
+               if (s0.gt.zero) df6(nf6)=s1/s0
+            endif
+         enddo
+         if (izp.eq.1.and.law.eq.1) done=1
+      else if (law.eq.6) then
+         call contio(nin,0,0,b,nb,nw)
+      else if (law.eq.7) then
+         call tab2io(nin,0,0,b(1),nb,nw)
+         ne=nint(b(6))
+         do ie=1,ne
+            call tab2io(nin,0,0,b(1),nb,nw)
+            en=b(2)
+            nmu=nint(b(6))
+            t0=0
+            t1=0
+            t0l=0
+            t1l=0
+            amul=0
+            do imu=1,nmu
+               l=1
+               call tab1io(nin,0,0,b(l),nb,nw)
+               l=l+nw
+               do while (nb.ne.0)
+                  if (l.gt.nbmax-10000) call error('fis6tab','storage',' ')
+                  call moreio(nin,0,0,b(l),nb,nw)
+                  l=l+nw
+               enddo
+               if (izp.ne.1) cycle
+               amu=b(2)
+               nr1=nint(b(5))
+               np1=nint(b(6))
+               s0=0
+               s1=0
+               do j=2,np1
+                  x1=b(6+2*nr1+2*(j-1)-1)
+                  x2=b(6+2*nr1+2*j-1)
+                  if (x2.le.x1) cycle
+                  fa=b(6+2*nr1+2*(j-1))
+                  fb=b(6+2*nr1+2*j)
+                  lw=nint(b(6+2*nr1))
+                  do jr=nr1,1,-1
+                     if (j.le.nint(b(5+2*jr))) lw=nint(b(6+2*jr))
+                  enddo
+                  do iq=1,4
+                     y=(x1+x2)/2+(x2-x1)/2*q4x(iq)
+                     call terp1(x1,fa,x2,fb,y,fx,lw)
+                     s0=s0+q4w(iq)*(x2-x1)/2*fx
+                     ! recoil at the laboratory cosine amu of
+                     ! this table (the isotropic average d1fis was used)
+                     ! (DLA, IAEA, Oct 2026)
+                     er=(en-2*sqrt(en*max(y,zero))*amu+y)/awr
+                     s1=s1+q4w(iq)*(x2-x1)/2*fx*df(max(er,zero),z,awr,z,awr)
+                  enddo
+               enddo
+               if (imu.gt.1) then
+                  t0=t0+(amu-amul)*(s0+t0l)/2
+                  t1=t1+(amu-amul)*(s1+t1l)/2
+               endif
+               amul=amu
+               t0l=s0
+               t1l=s1
+            enddo
+            if (izp.eq.1.and.nf6.lt.nemax) then
+               nf6=nf6+1
+               ef6(nf6)=en
+               df6(nf6)=0
+               if (t0.gt.zero) df6(nf6)=t1/t0
+            endif
+         enddo
+         if (izp.eq.1) done=1
+      endif
+   enddo
+   deallocate(b)
+   return
+   end subroutine fis6tab
+
+   real(kr) function d1fis(e,ep,awr,z,lct)
+   !-------------------------------------------------------------------
+   ! Damage of the fissioning nucleus (mass awr, charge z) recoiling
+   ! from one neutron of energy ep, isotropic in the frame lct of the
+   ! data (1 laboratory, otherwise centre of mass), 4-point Gauss rule.
+   ! The Lindhard constants must be set with df(0,z,awr,z,awr).
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   real(kr)::e,ep,awr,z
+   integer::lct
+   integer::iq
+   real(kr)::er,v,u
+   real(kr),dimension(4),parameter::q4x=(/&
+      -.861136312e0_kr,-.339981044e0_kr,.339981044e0_kr,.861136312e0_kr/)
+   real(kr),dimension(4),parameter::q4w=(/&
+      .347854845e0_kr,.652145155e0_kr,.652145155e0_kr,.347854845e0_kr/)
+   real(kr),parameter::zero=0
+   d1fis=0
+   v=sqrt(2*e)/(awr+1)
+   u=sqrt(2*max(ep,zero))
+   do iq=1,4
+      if (lct.eq.1) then
+         er=(e-2*sqrt(e*max(ep,zero))*q4x(iq)+ep)/awr
+      else
+         er=(awr*awr*v*v-2*awr*v*u*q4x(iq)+u*u)/(2*awr)
+      endif
+      d1fis=d1fis+q4w(iq)*df(max(er,zero),z,awr,z,awr)/2
+   enddo
+   return
+   end function d1fis
+
+   subroutine efrcut(emx)
+   !-------------------------------------------------------------------
+   ! Energy efrs above which the fission-product energy EFR of MT458
+   ! does not decrease with e, and efrst=EFR(efrs).  Above efrs the
+   ! lower limit of fission is EFR(efrs)-efrslp*(e-efrs) (see nheat).
+   !   thermal constants (lfc=0, nply=0, or lfc=1 without EFR table):
+   !     efrs=0;
+   !   polynomial: first energy where it stops decreasing (steps of
+   !     10 keV up to emx, the upper energy of the material);
+   !   table: last point where it decreases (a rise inside the table,
+   !     e.g. at the second-chance threshold, is kept).
+   ! efrs=1e30 (no change) when EFR decreases over the whole range.
+   ! (DLA, IAEA, 16 Oct 2026)
+   !-------------------------------------------------------------------
+   use util ! provides mess
+   ! externals
+   real(kr)::emx
+   ! internals
+   integer::i,n,nr,np,ib
+   real(kr)::e,f,fp
+   character(60)::strng1,strng2
+   real(kr),parameter::step=1.e4_kr
+
+   efrs=1.e30_kr
+   efrst=0
+   if ((lfc.eq.0.and.nply.eq.0).or.(lfc.eq.1.and.ifc1.eq.0)) then
+      efrs=0
+      efrst=c458(1)
+   else if (lfc.eq.0) then
+      fp=c458(1)
+      n=nint(emx/step)+1
+      do i=1,n
+         e=i*step
+         f=c458(1+nply*18)
+         do ib=nply-1,0,-1
+            f=f*e+c458(1+ib*18)
+         enddo
+         if (f.ge.fp) then
+            efrs=(i-1)*step
+            efrst=fp
+            exit
+         endif
+         fp=f
+      enddo
+   else
+      nr=nint(afr(5))
+      np=nint(afr(6))
+      ib=6+2*nr
+      n=1
+      do i=2,np
+         if (afr(ib+2*i).lt.afr(ib+2*i-2)) n=i
+      enddo
+      if (n.lt.np) then
+         efrs=afr(ib+2*n-1)
+         efrst=afr(ib+2*n)
+      endif
+   endif
+   if (efrs.eq.0) then
+      write(strng1,'(''fission lower limit: EFR0-'',f4.2,''*e'')') efrslp
+      strng2='(mt458 EFR constant; slope from Madland 2006)'
+   else if (efrs.lt.1.e29_kr) then
+      write(strng1,'(''fission lower limit: EFR of mt458 up to'',&
+        &1p,e10.3,'' eV'')') efrs
+      write(strng2,'(''above it'',1p,e10.3,''-'',0p,f4.2,&
+        &''*(e-e*) eV (Madland 2006)'')') efrst,efrslp
+   else
+      strng1='fission lower limit: EFR of mt458 (decreasing with e)'
+      strng2=' '
+   endif
+   call mess('hinit',strng1,strng2)
+   return
+   end subroutine efrcut
+
+   real(kr) function fis6dm(e)
+   !-------------------------------------------------------------------
+   ! Damage per fission at incident energy e from the table of fis6tab
+   ! (linear interpolation; constant outside the table).
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   real(kr)::e
+   integer::i
+   fis6dm=0
+   if (nf6.le.0) return
+   if (e.le.ef6(1)) then
+      fis6dm=df6(1)
+   else if (e.ge.ef6(nf6)) then
+      fis6dm=df6(nf6)
+   else
+      do i=2,nf6
+         if (e.le.ef6(i)) then
+            if (ef6(i).gt.ef6(i-1)) then
+               fis6dm=df6(i-1)+(df6(i)-df6(i-1))*(e-ef6(i-1))/(ef6(i)-ef6(i-1))
+            else
+               fis6dm=df6(i)
+            endif
+            exit
+         endif
+      enddo
+   endif
+   return
+   end function fis6dm
+
    subroutine tabdam(e,d,z,awr,awfac,a)
    !-------------------------------------------------------------------
    ! Compute damage energy for a tabulated section of File 5.
@@ -2950,6 +4984,2742 @@ contains
    return
    end subroutine tabdam
 
+   subroutine tabdmn(e,d,z,awr,nu,a)
+   !-------------------------------------------------------------------
+   ! Damage energy for a tabulated File 5 spectrum of a reaction that
+   ! emits nu neutrons and no charged particle ((n,n'), (n,2n), ...).
+   ! Corrections to tabdam:
+   !  - the momenta of the nu neutrons are added incoherently:
+   !    er=(e-2*sqrt(e*nu*ep)*mu+nu*ep)/ar, ar=awr+1-nu, whose mean
+   !    is the exact isotropic value (e+nu*<ep>)/ar (tabdam used one
+   !    neutron and the target mass awr);
+   !  - the Lindhard constants are set for the residual (z,ar)
+   !    (tabdam used whatever constants df had saved last);
+   !  - the spectrum is integrated with its interpolation law (histogram
+   !    or linear) and the result is normalized (tabdam used the
+   !    trapezoidal rule without normalization); panels with the log
+   !    laws 3-5 are divided into 16 sub-panels;
+   !  - anisotropy of the emitted neutrons from File 4
+   !    (anitab, anipz), see below; centre-of-mass (LCT=2)
+   !    distributions converted to the laboratory with the Jacobian at
+   !    fixed laboratory energy (anipz).
+   ! (lcvx, all neutron-only reactions except fission): the
+   ! recoil of the nu independent neutrons is computed exactly with the
+   ! File 4 x File 5 distribution of one neutron (dirnod, cvcmp, cvdam)
+   ! instead of the isotropic one-vector form of tdfn (|sum p| fixed at
+   ! sqrt(nu) p) and the mean-energy File 4 factor; fission keeps the
+   ! integration above with one neutron (nu=1, no File 4).
+   ! (DLA, IAEA, 5 Oct 2026)
+   !-------------------------------------------------------------------
+   use endf ! provides terp1
+   ! externals
+   integer::nu
+   real(kr)::e,d,z,awr,a(*)
+   ! internals
+   integer::nr,np,ibase,i,ir,nbt,inn
+   real(kr)::ar,xl,yl,fl,xh,yh,fh,sn,dum
+   real(kr)::s1,sz,zl,zh,eri,era,p0
+   real(kr)::xa,ya,fa,za,xb,yb,fb,zb
+   integer::j,lw
+   integer,parameter::nsub=16
+   real(kr),parameter::zero=0
+   ! exact path (DLA, IAEA, Oct 2026)
+   integer::m,iq,nsb,nsv(16),iov(16)
+   real(kr)::cz(cvmx),ct(cvmx),cw(cvmx),erm,x,y
+   real(kr),dimension(4),parameter::q4x=(/&
+      -.861136312e0_kr,-.339981044e0_kr,.339981044e0_kr,.861136312e0_kr/)
+   real(kr),dimension(4),parameter::q4w=(/&
+      .347854845e0_kr,.652145155e0_kr,.652145155e0_kr,.347854845e0_kr/)
+   d=0
+   s1=0
+   sz=0
+   zl=0
+   zh=0
+   ar=awr+1-nu
+   if (nu.le.1.or.ar.lt.0.5_kr) ar=awr
+   dum=df(zero,z,ar,z,awr)
+   nr=nint(a(5))
+   np=nint(a(6))
+   ibase=6+2*nr
+   ir=1
+   nbt=nint(a(7))
+   inn=nint(a(8))
+   ! exact recoil of the nu independently emitted neutrons
+   ! (lcvx, set by conbar for the neutron-only reactions other than
+   ! fission): laboratory momentum nodes of one neutron (4-point Gauss
+   ! rule in each panel of the spectrum with its interpolation law, the
+   ! log laws on nsub linear sub-panels as below; directions from File
+   ! 4 by dirnod), compressed by cvcmp and added nu times by cvdam.
+   ! This replaces the isotropic one-vector form of tdfn and the File 4
+   ! factor below, which are then not used. (DLA, IAEA, Oct 2026)
+   if (lcvx.and.nu.le.16) then
+      nfn=0
+      do i=2,np
+         xl=a(ibase+2*i-3)
+         yl=a(ibase+2*i-2)
+         xh=a(ibase+2*i-1)
+         yh=a(ibase+2*i)
+         do while (i.gt.nbt.and.ir.lt.nr)
+            ir=ir+1
+            nbt=nint(a(5+2*ir))
+            inn=nint(a(6+2*ir))
+         enddo
+         if (xh.le.xl) cycle
+         lw=inn
+         nsb=1
+         if (inn.ge.3) then
+            nsb=nsub
+            if ((lw.eq.4.or.lw.eq.5).and.(yl.le.zero.or.yh.le.zero)) lw=2
+            if ((lw.eq.3.or.lw.eq.5).and.xl.le.zero) lw=2
+         endif
+         xa=xl
+         ya=yl
+         do j=1,nsb
+            xb=xl+(xh-xl)*j/nsb
+            if (inn.eq.1) then
+               yb=yl
+            else if (j.eq.nsb) then
+               yb=yh
+            else
+               call terp1(xl,yl,xh,yh,xb,yb,lw)
+            endif
+            do iq=1,4
+               x=(xa+xb)/2+(xb-xa)/2*q4x(iq)
+               y=ya+(yb-ya)*(x-xa)/(xb-xa)
+               call dirnod(e,x,awr,q4w(iq)*(xb-xa)/2*y)
+            enddo
+            xa=xb
+            ya=yb
+         enddo
+      enddo
+      call cvcmp(nfn,fnz,fnt,fnw,m,cz,ct,cw)
+      if (m.gt.0) then
+         do i=1,max(nu,1)
+            nsv(i)=m
+            iov(i)=0
+         enddo
+         call cvdam(max(nu,1),nsv,iov,cz,ct,cw,sqrt(2*e),z,ar,z,awr,d,erm)
+      endif
+      return
+   endif
+   xl=a(ibase+1)
+   yl=a(ibase+2)
+   fl=tdfn(e,xl,nu,z,ar,awr)
+   if (n4e.gt.0) zl=anipz(e,xl,awr)
+   sn=0
+   do i=2,np
+      xh=a(ibase+2*i-1)
+      yh=a(ibase+2*i)
+      fh=tdfn(e,xh,nu,z,ar,awr)
+      if (n4e.gt.0) zh=anipz(e,xh,awr)
+      do while (i.gt.nbt.and.ir.lt.nr)
+         ir=ir+1
+         nbt=nint(a(5+2*ir))
+         inn=nint(a(6+2*ir))
+      enddo
+      if (inn.eq.1) then
+         d=d+yl*(fl+fh)*(xh-xl)/2
+         sn=sn+yl*(xh-xl)
+         s1=s1+yl*(xl+xh)*(xh-xl)/2
+         sz=sz+yl*(zl+zh)*(xh-xl)/2
+      else if (inn.eq.2.or.xh.le.xl) then
+         d=d+(yl*fl+yh*fh)*(xh-xl)/2
+         sn=sn+(yl+yh)*(xh-xl)/2
+         s1=s1+(yl*xl+yh*xh)*(xh-xl)/2
+         sz=sz+(yl*zl+yh*zh)*(xh-xl)/2
+      else
+         ! log interpolation laws (3,4,5): the panel is divided into
+         ! nsub sub-panels with values from the interpolation law
+         lw=inn
+         if ((lw.eq.4.or.lw.eq.5).and.(yl.le.zero.or.yh.le.zero)) lw=2
+         if ((lw.eq.3.or.lw.eq.5).and.xl.le.zero) lw=2
+         xa=xl
+         ya=yl
+         fa=fl
+         za=zl
+         do j=1,nsub
+            xb=xl+(xh-xl)*j/nsub
+            if (j.eq.nsub) then
+               yb=yh
+               fb=fh
+               zb=zh
+            else
+               call terp1(xl,yl,xh,yh,xb,yb,lw)
+               fb=tdfn(e,xb,nu,z,ar,awr)
+               zb=0
+               if (n4e.gt.0) zb=anipz(e,xb,awr)
+            endif
+            d=d+(ya*fa+yb*fb)*(xb-xa)/2
+            sn=sn+(ya+yb)*(xb-xa)/2
+            s1=s1+(ya*xa+yb*xb)*(xb-xa)/2
+            sz=sz+(ya*za+yb*zb)*(xb-xa)/2
+            xa=xb
+            ya=yb
+            fa=fb
+            za=zb
+         enddo
+      endif
+      xl=xh
+      yl=yh
+      fl=fh
+      zl=zh
+   enddo
+   if (sn.gt.zero) then
+      d=d/sn
+   else
+      d=0
+   endif
+   ! anisotropy of the emitted neutrons (File 4): the damage is scaled
+   ! with the exact mean recoil energy of nu independent neutrons,
+   !   <er> = [p0**2 - 2 p0 nu <pz> + 2 nu <ep> + nu (nu-1) <pz>**2]/(2 ar)
+   ! relative to the isotropic mean (e + nu <ep>)/ar used above
+   ! (<pz>: mean laboratory momentum along the beam per neutron).
+   if (n4e.gt.0.and.d.gt.zero) then
+      s1=s1/sn
+      sz=sz/sn
+      p0=sqrt(2*e)
+      eri=(e+nu*s1)/ar
+      era=(p0*p0-2*p0*nu*sz+2*nu*s1+nu*(nu-1)*sz*sz)/(2*ar)
+      if (era.gt.zero.and.eri.gt.zero) then
+         d=d*df(era,z,ar,z,awr)/df(eri,z,ar,z,awr)
+      endif
+   endif
+   return
+   end subroutine tabdmn
+
+   real(kr) function tdfn(e,ep,nu,z,ar,awr)
+   !-------------------------------------------------------------------
+   ! Damage energy for incident energy e and one point ep of the
+   ! neutron spectrum, averaged over mu with a 4-point Gauss rule,
+   ! for nu neutrons and residual mass ar (df constants already set).
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   ! externals
+   integer::nu
+   real(kr)::e,ep,z,ar,awr
+   ! internals
+   integer::iq
+   real(kr)::er
+   integer,parameter::nq=4
+   real(kr),dimension(nq),parameter::qp=(/&
+     -.86114e0_kr,-.33998e0_kr,.33998e0_kr,.86114e0_kr/)
+   real(kr),dimension(nq),parameter::qw=(/&
+     .34785e0_kr,.65215e0_kr,.65215e0_kr,.34785e0_kr/)
+   tdfn=0
+   do iq=1,nq
+      er=(e-2*sqrt(e*nu*ep)*qp(iq)+nu*ep)/ar
+      if (er.lt.0) er=0
+      tdfn=tdfn+qw(iq)*df(er,z,ar,z,awr)/2
+   enddo
+   return
+   end function tdfn
+
+   subroutine oprtab(nin,matd,mtd,za,awr,lct,nk,idrv)
+   !-------------------------------------------------------------------
+   ! Correction of the one-particle recoil (OPR) of sixbar for File 6
+   ! reactions without residual (or with the residual removed by
+   ! mtrec) that emit several particles: (n,2n), (n,np), (n,na), ...
+   ! sixbar computes the recoil from one particle only (subsection
+   ! idrv) and the residual mass awr+1-awp.  Here the exact mean
+   ! recoil energy of independent emission of all particles k, with
+   ! yields y_k, is computed in the laboratory from the moments
+   ! <p mu>_k and <p**2>_k of their File 6 distributions (LAW=1):
+   !   <er> = [p0**2 - 2 p0 S1 + S2 + S1**2 - Sq]/(2 Ar)
+   !   S1=sum y_k <p mu>_k, Sq=sum y_k <p mu>_k**2, S2=sum y_k <p**2>_k
+   !   Ar=awr+1-sum y_k awp_k, Zr=Z-sum y_k z_k, p0=sqrt(2 e)
+   ! and the OPR damage is multiplied by
+   !   r(e) = df(<er>;Zr,Ar)/df(<er>_1;Z1,A1)
+   ! with <er>_1 the same expression for the particle idrv alone.
+   ! The moments are integrated in the frame of the data (no Jacobian
+   ! is needed) and transformed to the laboratory exactly:
+   !   <p mu>_lab = <p mu>_cm + m V,  <p**2>_lab = <p**2>_cm + 2 m V
+   !   <p mu>_cm + m**2 V**2,  V = sqrt(2 e)/(awr+1),
+   ! for the frames used by sixbar (centre of mass unless LCT=1, or
+   ! LCT=3 for particles heavier than alpha).
+   ! 4-point Gauss rule in each outgoing-energy panel with
+   ! the LEP law for the distribution and its angular parameters
+   ! (Legendre f1, Kalbach r with a from the systematics with incident
+   ! neutron, as in sixbar; tabulated angular distributions LANG=11-15
+   ! included); yields and moments are interpolated in incident energy
+   ! with the laws of the data (unit-base laws 21-25 as 1-5).
+   ! The table (ert,rrt) is built on the incident energies of the
+   ! subsection idrv; nrt=0 (no correction) if a particle is not
+   ! given with LAW=1.  The tape is repositioned after the HEAD record.
+   ! exact recoil of the independently emitted particles.
+   ! The factor above corrects only the mean recoil energy; since D is
+   ! concave it overestimated the damage (+0.1 to +2% per reaction,
+   ! e.g. JENDL-5 Fe-56 (n,2n) +1.2% at 14 MeV, +2.0% at 20 MeV).  Now
+   ! the laboratory momentum distribution of each particle at each of
+   ! its incident energies is represented by nodes (pz, pt, weight):
+   ! LAW=1 (l1nod: discrete lines and 4-point Gauss points of each
+   ! panel with the LEP law, 64 cosines or the panels of a tabulated
+   ! angular distribution, frame as above), LAW=7 (trapezoidal rule in
+   ! mu as getsix, 4-point Gauss in e'), LAW=6 (phase space at e),
+   ! compressed by cvcmp (moments kept).  At each energy of the table
+   ! (getnod: stored table, or the two tables around e mixed with the
+   ! weight of the incident-energy law) the mean damage of the residual
+   ! (Zr, Ar) after all emissions, dN, and the one-particle damage of
+   ! the driving particle, d1, are computed with the same nodes
+   ! (cvdam) and rrt=dN/d1; the one-particle damage of sixbar times rrt
+   ! is the exact damage for independent emission (the quadrature of
+   ! sixbar and of the nodes cancels to first order).  The mean-energy
+   ! factor is kept, with a message, at energies with non-integer
+   ! yields or more than nvmax particles.
+   ! (DLA, IAEA, 5 Oct 2026)
+   !-------------------------------------------------------------------
+   use endf
+   use util ! provides error,mess
+   use mathm ! provides legndr
+   ! externals
+   integer::nin,matd,mtd,lct,nk,idrv
+   real(kr)::za,awr
+   ! internals
+   integer,parameter::npm=12,nem=400,nym=500,nrm=20
+   integer::np,ip,ik,nb,nw,l,law,lang,lep,ne,ie,nd,na,nep,ncyc,i,j
+   integer::izap,izat,nr,ny(npm),nein(npm),ipd,ok,nmu,imu,k,iq,ir,lw
+   integer::nry(npm),nby(npm,nrm),iny(npm,nrm),lwe(npm,nem)
+   integer::nr2,nbt2(nrm),int2(nrm),lfr
+   real(kr)::zp(npm),ap(npm),yx(npm,nym),yy(npm,nym)
+   real(kr)::ein(npm,nem),pmu(npm,nem),p2(npm,nem)
+   real(kr)::en,ep,f,x,s0,s1,sm,mub,aa,vcm,pm,emean,am
+   real(kr)::e,p0,y,ssum1,sq,s2,ar,zr,er,er1,a1,z1,d1,dn,zt,dum,hd(6)
+   real(kr)::x1,x2,fa,fb,ga,gb,g,fx
+   ! LAW=6 (phase space) and LAW=7 (laboratory) particles (DLA, IAEA, Oct 2026)
+   logical::l6(npm)
+   real(kr)::aps6(npm),u,ul,f0,f1,fp,f0l,f1l,fpl
+   integer::nps6(npm),nle,jl
+   real(kr)::elist6(nem)
+   real(kr),allocatable::b(:)
+   ! exact recoil of the independently emitted particles (DLA, IAEA, Oct 2026)
+   integer,parameter::nvmax=8
+   integer::nodo(npm,nem),nodn(npm,nem),nnod,nmult(npm),nv,nsv(nvmax)
+   integer::iov(nvmax),mn,nwk,io1,n1,nfbk,n7c,n7p,nexa,jj
+   logical::lex
+   real(kr),dimension(:),allocatable::ndz,ndt,ndw,r7x,r7w,p7x,p7w
+   real(kr)::wkz(npm*cvmx),wkt(npm*cvmx),wkw(npm*cvmx)
+   real(kr)::cnz(cvmx),cnt(cvmx),cnw(cvmx),pleg(65,64)
+   real(kr)::dex,d1x,erm,arx,zrx
+   character(60)::strng
+   integer,parameter::nbmax=400000
+   real(kr),parameter::zero=0
+   real(kr),dimension(4),parameter::q4x=(/&
+      -.861136312e0_kr,-.339981044e0_kr,.339981044e0_kr,.861136312e0_kr/)
+   real(kr),dimension(4),parameter::q4w=(/&
+      .347854845e0_kr,.652145155e0_kr,.652145155e0_kr,.347854845e0_kr/)
+   nrt=0
+   allocate(b(nbmax))
+   izat=nint(za)
+   zt=int(za/1000)
+   np=0
+   ipd=0
+   ok=1
+   nnod=0
+   nexa=0
+   nfbk=0
+   n7c=0
+   n7p=0
+   nodn=0
+   nodo=0
+   allocate(ndz(20000),ndt(20000),ndw(20000))
+   allocate(r7x(1000),r7w(1000),p7x(1000),p7w(1000))
+   do iq=1,64
+      call legndr(g64x(iq),pleg(1,iq),64)
+   enddo
+   do ik=1,nk
+      l=1
+      call tab1io(nin,0,0,b(l),nb,nw)
+      l=l+nw
+      do while (nb.ne.0)
+         call moreio(nin,0,0,b(l),nb,nw)
+         l=l+nw
+      enddo
+      izap=nint(b(1))
+      law=nint(b(4))
+      nr=nint(b(5))
+      i=0
+      if (izap.gt.0.and.izap.le.2004.and.np.lt.npm) then
+         np=np+1
+         i=np
+         if (ik.eq.idrv) ipd=np
+         zp(np)=int(izap/1000)
+         ap(np)=b(2)
+         ny(np)=min(nint(b(6)),nym)
+         nry(np)=min(nr,nrm)
+         do j=1,nry(np)
+            nby(np,j)=nint(b(5+2*j))
+            iny(np,j)=nint(b(6+2*j))
+         enddo
+         do j=1,ny(np)
+            yx(np,j)=b(6+2*nr+2*j-1)
+            yy(np,j)=b(6+2*nr+2*j)
+         enddo
+         nein(np)=0
+         l6(np)=.false.
+         ! LAW=6 and LAW=7 are also used (moments below) (DLA, IAEA, Oct 2026)
+         if (law.ne.1.and.law.ne.6.and.law.ne.7) ok=0
+      endif
+      if (law.eq.1.or.law.eq.2.or.law.eq.5) then
+         call tab2io(nin,0,0,b(1),nb,nw)
+         lang=nint(b(3))
+         lep=nint(b(4))
+         ne=nint(b(6))
+         nr2=min(nint(b(5)),nrm)
+         do j=1,nr2
+            nbt2(j)=nint(b(5+2*j))
+            int2(j)=nint(b(6+2*j))
+         enddo
+         do ie=1,ne
+            l=1
+            call listio(nin,0,0,b(l),nb,nw)
+            l=l+nw
+            do while (nb.ne.0)
+               if (l.gt.nbmax-10000) call error('oprtab','storage',' ')
+               call moreio(nin,0,0,b(l),nb,nw)
+               l=l+nw
+            enddo
+            if (i.gt.0.and.law.eq.1.and.nein(max(i,1)).lt.nem) then
+               en=b(2)
+               nd=nint(b(3))
+               na=nint(b(4))
+               nep=nint(b(6))
+               ncyc=na+2
+               am=ap(i)
+               s0=0
+               s1=0
+               sm=0
+               ! discrete lines (delta functions)
+               do j=1,min(nd,nep)
+                  ep=b(6+ncyc*(j-1)+1)
+                  f=b(6+ncyc*(j-1)+2)
+                  s0=s0+f
+                  s1=s1+f*ep
+                  sm=sm+gmu(f,angpar(j),ep)*sqrt(2*am*ep)
+               enddo
+               ! continuum panels, 4-point Gauss rule with the LEP law
+               do j=nd+2,nep
+                  x1=b(6+ncyc*(j-2)+1)
+                  x2=b(6+ncyc*(j-1)+1)
+                  if (x2.le.x1) cycle
+                  fa=b(6+ncyc*(j-2)+2)
+                  fb=b(6+ncyc*(j-1)+2)
+                  do iq=1,4
+                     x=(x1+x2)/2+(x2-x1)/2*q4x(iq)
+                     ! distribution and angular parameter interpolated
+                     ! separately with the LEP law, as in h6ddx
+                     ga=angpar(j-1)
+                     if (lep.eq.1) then
+                        fx=fa
+                        g=ga
+                     else
+                        gb=angpar(j)
+                        fx=fa+(fb-fa)*(x-x1)/(x2-x1)
+                        g=ga+(gb-ga)*(x-x1)/(x2-x1)
+                     endif
+                     g=gmu(fx,g,x)
+                     s0=s0+q4w(iq)*(x2-x1)/2*fx
+                     s1=s1+q4w(iq)*(x2-x1)/2*fx*x
+                     sm=sm+q4w(iq)*(x2-x1)/2*g*sqrt(2*am*x)
+                  enddo
+               enddo
+               if (s0.gt.zero) then
+                  nein(i)=nein(i)+1
+                  k=nein(i)
+                  ein(i,k)=en
+                  ! momentum nodes of this table (DLA, IAEA, Oct 2026)
+                  call l1nod(i)
+                  call stonod(i,k)
+                  ! incident-energy interpolation law to the next point
+                  lw=int2(nr2)
+                  do j=nr2,1,-1
+                     if (ie+1.le.nbt2(j)) lw=int2(j)
+                  enddo
+                  if (lw.gt.20) lw=lw-20
+                  lwe(i,k)=lw
+                  emean=s1/s0
+                  pmu(i,k)=sm/s0
+                  p2(i,k)=2*am*emean
+                  ! frame of the data as in sixbar: laboratory for LCT=1
+                  ! and for heavy particles with LCT=3; otherwise CM
+                  lfr=2
+                  if (lct.eq.1.or.(lct.eq.3.and.izap.gt.2004)) lfr=1
+                  if (lfr.eq.2) then
+                     vcm=sqrt(2*en)/(awr+1)
+                     p2(i,k)=p2(i,k)+2*am*vcm*pmu(i,k)+am*am*vcm*vcm
+                     pmu(i,k)=pmu(i,k)+am*vcm
+                  endif
+               endif
+            endif
+         enddo
+      else if (law.eq.6) then
+         ! n-body phase space, isotropic in the cm system;
+         ! the laboratory moments are analytic (see mint):
+         !   <e'>cm = emax/(npsx-1), emax=(apsx-a)/apsx*(awr e/(awr+1)+q)
+         !   <p mu>lab = a V, <p**2>lab = 2 a (<e'>cm + a e/(awr+1)**2)
+         ! (DLA, IAEA, Oct 2026)
+         call contio(nin,0,0,b(1),nb,nw)
+         if (i.gt.0) then
+            l6(i)=.true.
+            aps6(i)=b(1)
+            nps6(i)=nint(b(6))
+         endif
+      else if (law.eq.7) then
+         ! laboratory angle-energy law; for each incident
+         ! energy the moments of f(mu,e') are integrated over e' (each
+         ! TAB1 with its law, 4-point Gauss for linear panels) and over
+         ! mu with the trapezoidal rule (as getsix); no frame change
+         ! (DLA, IAEA, Oct 2026)
+         call tab2io(nin,0,0,b(1),nb,nw)
+         ne=nint(b(6))
+         nr2=min(nint(b(5)),nrm)
+         do j=1,nr2
+            nbt2(j)=nint(b(5+2*j))
+            int2(j)=nint(b(6+2*j))
+         enddo
+         do ie=1,ne
+            call tab2io(nin,0,0,b(1),nb,nw)
+            en=b(2)
+            nmu=nint(b(6))
+            ! momentum nodes (trapezoidal rule in mu) (DLA, IAEA, Oct 2026)
+            nfn=0
+            n7p=0
+            s0=0
+            s1=0
+            sm=0
+            ul=0
+            f0l=0
+            f1l=0
+            fpl=0
+            do imu=1,nmu
+               l=1
+               call tab1io(nin,0,0,b(l),nb,nw)
+               l=l+nw
+               do while (nb.ne.0)
+                  if (l.gt.nbmax-10000) call error('oprtab','storage',' ')
+                  call moreio(nin,0,0,b(l),nb,nw)
+                  l=l+nw
+               enddo
+               if (i.gt.0) then
+                  u=b(2)
+                  call e7mom(ap(i),f0,f1,fp)
+                  ! nodes of this mu and of the previous one
+                  ! with half of the mu interval each (DLA, IAEA, Oct 2026)
+                  call r7row(n7c)
+                  if (imu.gt.1) then
+                     do jj=1,n7p
+                        call addnod(p7x(jj),ul,(u-ul)/2*p7w(jj),ap(i),zero)
+                     enddo
+                     do jj=1,n7c
+                        call addnod(r7x(jj),u,(u-ul)/2*r7w(jj),ap(i),zero)
+                     enddo
+                  endif
+                  if (size(p7x).lt.n7c) then
+                     deallocate(p7x,p7w)
+                     allocate(p7x(n7c),p7w(n7c))
+                  endif
+                  if (n7c.gt.0) then
+                     p7x(1:n7c)=r7x(1:n7c)
+                     p7w(1:n7c)=r7w(1:n7c)
+                  endif
+                  n7p=n7c
+                  if (imu.gt.1) then
+                     s0=s0+(u-ul)*(f0+f0l)/2
+                     s1=s1+(u-ul)*(f1+f1l)/2
+                     sm=sm+(u-ul)*(u*fp+ul*fpl)/2
+                  endif
+                  ul=u
+                  f0l=f0
+                  f1l=f1
+                  fpl=fp
+               endif
+            enddo
+            if (i.gt.0.and.s0.gt.zero.and.nein(max(i,1)).lt.nem) then
+               nein(i)=nein(i)+1
+               k=nein(i)
+               ein(i,k)=en
+               lw=int2(nr2)
+               do j=nr2,1,-1
+                  if (ie+1.le.nbt2(j)) lw=int2(j)
+               enddo
+               if (lw.gt.20) lw=lw-20
+               lwe(i,k)=lw
+               pmu(i,k)=sm/s0
+               p2(i,k)=2*ap(i)*s1/s0
+               ! momentum nodes of this table (DLA, IAEA, Oct 2026)
+               call stonod(i,k)
+            endif
+         enddo
+      else if (law.lt.0) then
+         ok=0
+      endif
+   enddo
+   ! table on the incident energies of the driving particle
+   if (ok.eq.1.and.ipd.gt.0) then
+      ! a LAW=6 driving particle has no table of incident
+      ! energies; the energies of its yield are used (DLA, IAEA, Oct 2026)
+      if (l6(ipd)) then
+         ! geometric grid (ratio 1.02 or larger to fit nem points) from
+         ! the first energy with nonzero yield to the last yield energy
+         x1=yx(ipd,1)
+         do jl=1,ny(ipd)
+            if (yy(ipd,jl).gt.zero) then
+               x1=yx(ipd,max(jl-1,1))
+               exit
+            endif
+         enddo
+         x2=yx(ipd,ny(ipd))
+         if (x1.le.zero) x1=x2/1.e6_kr
+         f=max(1.02_kr,(x2/x1)**(1/real(nem-1,kr)))
+         nle=1
+         elist6(1)=x1
+         do while (elist6(nle)*f.lt.x2.and.nle.lt.nem-1)
+            nle=nle+1
+            elist6(nle)=elist6(nle-1)*f
+         enddo
+         nle=nle+1
+         elist6(nle)=x2
+      else
+         nle=nein(ipd)
+         do jl=1,min(nle,nem)
+            elist6(jl)=ein(ipd,jl)
+         enddo
+      endif
+      do ie=1,min(nle,nrmax)
+         e=elist6(ie)
+         if (e.le.zero) cycle
+         p0=sqrt(2*e)
+         ssum1=0
+         sq=0
+         s2=0
+         ar=awr+1
+         zr=zt
+         do i=1,np
+            y=yint(i,e)
+            if (nein(i).eq.0.and..not.l6(i)) cycle
+            call mint(i,e,pm,emean)
+            ssum1=ssum1+y*pm
+            sq=sq+y*pm*pm
+            s2=s2+y*emean
+            ar=ar-y*ap(i)
+            zr=zr-y*zp(i)
+         enddo
+         call mint(ipd,e,pm,emean)
+         a1=awr+1-ap(ipd)
+         z1=zt-zp(ipd)
+         er1=(p0*p0-2*p0*pm+emean)/(2*a1)
+         er=(p0*p0-2*p0*ssum1+s2+ssum1*ssum1-sq)/(2*ar)
+         nrt=nrt+1
+         ert(nrt)=e
+         rrt(nrt)=1
+         if (ar.gt.0.5_kr.and.zr.gt.0.5_kr.and.er.gt.zero.and.er1.gt.zero) then
+            dum=df(zero,zr,ar,zt,awr)
+            dn=df(er,zr,ar,zt,awr)
+            dum=df(zero,z1,a1,zt,awr)
+            d1=df(er1,z1,a1,zt,awr)
+            if (d1.gt.zero) rrt(nrt)=dn/d1
+         endif
+         ! exact recoil of the independent particles (DLA, IAEA, Oct 2026)
+         call exrec(e,p0,a1,z1)
+      enddo
+      if (nfbk.gt.0) then
+         write(strng,'(''mt'',i3,'': exact recoil at'',i5,'' of'',i5,&
+           &'' energies'')') mtd,nexa,nexa+nfbk
+         call mess('oprtab',strng,&
+           'mean-energy factor used at the others (yields)')
+      endif
+   endif
+   deallocate(b)
+   deallocate(ndz,ndt,ndw,r7x,r7w,p7x,p7w)
+   ! reposition the tape after the HEAD record of the section
+   call findf(matd,6,mtd,nin)
+   call contio(nin,0,0,hd,nb,nw)
+   return
+   contains
+      subroutine stonod(ip,kk)
+      ! compress the fine nodes of particle ip at its
+      ! incident energy kk (cvcmp) and store them (ndz,ndt,ndw)
+      ! (DLA, IAEA, Oct 2026)
+      integer::ip,kk,mm,nn
+      real(kr),dimension(:),allocatable::tmp
+      call cvcmp(nfn,fnz,fnt,fnw,mm,cnz,cnt,cnw)
+      if (nnod+mm.gt.size(ndz)) then
+         nn=max(2*size(ndz),nnod+mm)
+         allocate(tmp(nn))
+         tmp(1:nnod)=ndz(1:nnod)
+         call move_alloc(tmp,ndz)
+         allocate(tmp(nn))
+         tmp(1:nnod)=ndt(1:nnod)
+         call move_alloc(tmp,ndt)
+         allocate(tmp(nn))
+         tmp(1:nnod)=ndw(1:nnod)
+         call move_alloc(tmp,ndw)
+      endif
+      nodo(ip,kk)=nnod
+      nodn(ip,kk)=mm
+      if (mm.gt.0) then
+         ndz(nnod+1:nnod+mm)=cnz(1:mm)
+         ndt(nnod+1:nnod+mm)=cnt(1:mm)
+         ndw(nnod+1:nnod+mm)=cnw(1:mm)
+      endif
+      nnod=nnod+mm
+      end subroutine stonod
+      subroutine addnod(xx,mu,ww,amp,vv)
+      ! node of a particle of mass amp with energy xx and
+      ! cosine mu in the frame of the data, moving with velocity vv
+      ! along the beam (cm velocity, or 0 for laboratory data)
+      ! (DLA, IAEA, Oct 2026)
+      real(kr)::xx,mu,ww,amp,vv,uu
+      uu=sqrt(2*max(xx,zero)/amp)
+      call fnadd(amp*(vv+uu*mu),amp*uu*sqrt(max(1-mu*mu,zero)),ww)
+      end subroutine addnod
+      subroutine l1nod(ip)
+      ! fine laboratory momentum nodes (fnadd) of the LAW=1
+      ! table in b for particle ip: the discrete lines and the 4-point
+      ! Gauss points of each continuum panel (as the moments above),
+      ! each with its angular distribution (angn).  Frame as above.
+      ! (DLA, IAEA, Oct 2026)
+      integer::ip,jj,iqq
+      real(kr)::amp,vv,xa,xb,xx,tt,wq
+      nfn=0
+      amp=ap(ip)
+      vv=0
+      if (.not.(lct.eq.1.or.(lct.eq.3.and.izap.gt.2004)))&
+        vv=sqrt(2*en)/(awr+1)
+      do jj=1,min(nd,nep)
+         call angn(jj,0,zero,abs(b(6+ncyc*(jj-1)+1)),1.e0_kr,amp,vv)
+      enddo
+      do jj=nd+2,nep
+         xa=b(6+ncyc*(jj-2)+1)
+         xb=b(6+ncyc*(jj-1)+1)
+         if (xb.le.xa) cycle
+         do iqq=1,4
+            xx=(xa+xb)/2+(xb-xa)/2*q4x(iqq)
+            tt=(xx-xa)/(xb-xa)
+            wq=q4w(iqq)*(xb-xa)/2
+            if (lep.eq.1) then
+               call angn(jj-1,0,zero,xx,wq,amp,vv)
+            else
+               call angn(jj-1,jj,tt,xx,wq,amp,vv)
+            endif
+         enddo
+      enddo
+      end subroutine l1nod
+      subroutine angn(j1,j2,tt,xx,wq,amp,vv)
+      ! nodes at the secondary energy xx with the
+      ! distribution of point j1 (j2=0) or interpolated linearly
+      ! between the points j1 and j2 (fraction tt of j2), weight wq:
+      ! Legendre (LANG=1) and Kalbach (LANG=2, a from bacha as in
+      ! h6ddx) at the 64 cosines of g64x; tabulated (LANG=11-15,
+      ! histogram or linear in mu, log laws as linear) with a 4-point
+      ! Gauss rule in each mu panel, normalized, times f0.  Negative
+      ! values are set to zero (fnadd). (DLA, IAEA, Oct 2026)
+      integer::j1,j2,iqq,il,lt,nmp,ia,kt,lb1,lb2,jt
+      real(kr)::tt,xx,wq,amp,vv,f0v,dens,c,rr,aak,mu,u1,u2,v1,v2
+      real(kr)::sn,pv,wt1
+      lb1=6+ncyc*(j1-1)
+      lb2=0
+      if (j2.gt.0) lb2=6+ncyc*(j2-1)
+      f0v=b(lb1+2)
+      if (j2.gt.0) f0v=(1-tt)*b(lb1+2)+tt*b(lb2+2)
+      if (lang.eq.1) then
+         do iqq=1,64
+            dens=f0v/2
+            do il=1,min(na,64)
+               c=b(lb1+2+il)
+               if (j2.gt.0) c=(1-tt)*b(lb1+2+il)+tt*b(lb2+2+il)
+               dens=dens+(2*il+1)*c*pleg(il+1,iqq)/2
+            enddo
+            call addnod(xx,g64x(iqq),wq*g64w(iqq)*dens,amp,vv)
+         enddo
+      else if (lang.eq.2) then
+         rr=0
+         if (na.ge.1) then
+            rr=b(lb1+3)
+            if (j2.gt.0) rr=(1-tt)*b(lb1+3)+tt*b(lb2+3)
+         endif
+         aak=bacha(1,izap,izat,en,xx)
+         do iqq=1,64
+            mu=g64x(iqq)
+            if (aak.gt.1.e-6_kr) then
+               dens=f0v*aak*(cosh(aak*mu)+rr*sinh(aak*mu))/(2*sinh(aak))
+            else
+               dens=f0v/2
+            endif
+            call addnod(xx,mu,wq*g64w(iqq)*dens,amp,vv)
+         enddo
+      else if (lang.ge.11.and.lang.le.15) then
+         lt=lang-10
+         nmp=na/2
+         do kt=1,2
+            if (kt.eq.1) then
+               jt=lb1
+               wt1=1
+               if (j2.gt.0) wt1=1-tt
+            else
+               if (j2.eq.0) exit
+               jt=lb2
+               wt1=tt
+            endif
+            if (wt1.le.zero) cycle
+            sn=0
+            do ia=1,nmp-1
+               u1=b(jt+2+2*ia-1)
+               v1=b(jt+2+2*ia)
+               u2=b(jt+2+2*ia+1)
+               v2=b(jt+2+2*ia+2)
+               if (u2.le.u1) cycle
+               if (lt.eq.1) then
+                  sn=sn+v1*(u2-u1)
+               else
+                  sn=sn+(v1+v2)*(u2-u1)/2
+               endif
+            enddo
+            if (sn.le.zero) cycle
+            do ia=1,nmp-1
+               u1=b(jt+2+2*ia-1)
+               v1=b(jt+2+2*ia)
+               u2=b(jt+2+2*ia+1)
+               v2=b(jt+2+2*ia+2)
+               if (u2.le.u1) cycle
+               do iqq=1,4
+                  mu=(u1+u2)/2+(u2-u1)/2*q4x(iqq)
+                  pv=v1
+                  if (lt.ne.1) pv=v1+(v2-v1)*(mu-u1)/(u2-u1)
+                  call addnod(xx,mu,wq*f0v*wt1*pv/sn*q4w(iqq)*(u2-u1)/2,&
+                    amp,vv)
+               enddo
+            enddo
+         enddo
+      endif
+      end subroutine angn
+      subroutine r7row(n7)
+      ! 4-point Gauss nodes (e', weight) of the LAW=7 TAB1
+      ! in b (histogram panels exact, other laws on the linear form, as
+      ! e7mom) in r7x, r7w (DLA, IAEA, Oct 2026)
+      integer::n7,nr7,np7,ib7,jp,ir7,int7,iq7
+      real(kr)::xa,xb,ya,yb,xm,ym,dx
+      n7=0
+      nr7=nint(b(5))
+      np7=nint(b(6))
+      if (size(r7x).lt.4*np7) then
+         deallocate(r7x,r7w)
+         allocate(r7x(4*np7),r7w(4*np7))
+      endif
+      ib7=6+2*nr7
+      ir7=1
+      do jp=2,np7
+         xa=b(ib7+2*jp-3)
+         ya=b(ib7+2*jp-2)
+         xb=b(ib7+2*jp-1)
+         yb=b(ib7+2*jp)
+         do while (jp.gt.nint(b(5+2*ir7)).and.ir7.lt.nr7)
+            ir7=ir7+1
+         enddo
+         int7=nint(b(6+2*ir7))
+         dx=xb-xa
+         if (dx.le.zero) cycle
+         if (xa.lt.zero) xa=0
+         do iq7=1,4
+            xm=(xa+xb)/2+(xb-xa)/2*q4x(iq7)
+            ym=ya
+            if (int7.ne.1) ym=ya+(yb-ya)*(xm-xa)/(xb-xa)
+            n7=n7+1
+            r7x(n7)=xm
+            r7w(n7)=q4w(iq7)*(xb-xa)/2*ym
+         enddo
+      enddo
+      end subroutine r7row
+      subroutine l6nod(ip,ee)
+      ! LAW=6 nodes at the incident energy ee: phase space
+      ! f(e') = sqrt(e') (emax-e')**(3n/2-4), isotropic in the cm,
+      ! 64 x 64 Gauss points, emax as in mint (n<3: e'=emax)
+      ! (DLA, IAEA, Oct 2026)
+      integer::ip,i1,i2
+      real(kr)::ee,vc,emx,pw,xx,fx
+      nfn=0
+      vc=sqrt(2*ee)/(awr+1)
+      emx=0
+      if (aps6(ip).gt.ap(ip).and.nps6(ip).gt.1)&
+        emx=(aps6(ip)-ap(ip))/aps6(ip)*(awr*ee/(awr+1)+q)
+      if (emx.le.zero) then
+         call fnadd(ap(ip)*vc,zero,1.e0_kr)
+         return
+      endif
+      if (nps6(ip).lt.3) then
+         do i2=1,64
+            call addnod(emx,g64x(i2),g64w(i2)/2,ap(ip),vc)
+         enddo
+         return
+      endif
+      pw=1.5e0_kr*nps6(ip)-4
+      do i1=1,64
+         xx=emx*(1+g64x(i1))/2
+         fx=sqrt(xx)*(emx-xx)**pw*g64w(i1)*emx/2
+         do i2=1,64
+            call addnod(xx,g64x(i2),fx*g64w(i2)/2,ap(ip),vc)
+         enddo
+      enddo
+      end subroutine l6nod
+      subroutine getnod(ip,ee,m)
+      ! compressed nodes (cnz,cnt,cnw; m nodes) of particle
+      ! ip at the incident energy ee: LAW=6 computed at ee; otherwise
+      ! the stored table at ee, or the two tables around ee mixed with
+      ! the weight of the incident-energy law (law 1: lower table; 2,4:
+      ! linear; 3,5: linear in ln e) and compressed again.  Outside the
+      ! table the first or the last table is used (as mint).
+      ! (DLA, IAEA, Oct 2026)
+      integer::ip,m,jj,ka,kb,lw
+      real(kr)::ee,tt
+      m=0
+      if (l6(ip)) then
+         call l6nod(ip,ee)
+         call cvcmp(nfn,fnz,fnt,fnw,m,cnz,cnt,cnw)
+         return
+      endif
+      if (nein(ip).le.0) return
+      ka=0
+      kb=0
+      tt=0
+      do jj=1,nein(ip)
+         if (abs(ee-ein(ip,jj)).le.1.e-9_kr*ee) then
+            ka=jj
+            exit
+         endif
+      enddo
+      if (ka.eq.0) then
+         if (ee.le.ein(ip,1)) then
+            ka=1
+         else if (ee.ge.ein(ip,nein(ip))) then
+            ka=nein(ip)
+         else
+            do jj=2,nein(ip)
+               if (ee.lt.ein(ip,jj)) then
+                  ka=jj-1
+                  kb=jj
+                  lw=lwe(ip,jj-1)
+                  tt=(ee-ein(ip,jj-1))/(ein(ip,jj)-ein(ip,jj-1))
+                  if ((lw.eq.3.or.lw.eq.5).and.ein(ip,jj-1).gt.zero)&
+                    tt=log(ee/ein(ip,jj-1))/log(ein(ip,jj)/ein(ip,jj-1))
+                  if (lw.eq.1) tt=0
+                  exit
+               endif
+            enddo
+         endif
+      endif
+      if (kb.gt.0.and.tt.le.zero) kb=0
+      if (kb.eq.0) then
+         m=nodn(ip,ka)
+         if (m.gt.0) then
+            cnz(1:m)=ndz(nodo(ip,ka)+1:nodo(ip,ka)+m)
+            cnt(1:m)=ndt(nodo(ip,ka)+1:nodo(ip,ka)+m)
+            cnw(1:m)=ndw(nodo(ip,ka)+1:nodo(ip,ka)+m)
+         endif
+      else
+         nfn=0
+         do jj=nodo(ip,ka)+1,nodo(ip,ka)+nodn(ip,ka)
+            call fnadd(ndz(jj),ndt(jj),(1-tt)*ndw(jj))
+         enddo
+         do jj=nodo(ip,kb)+1,nodo(ip,kb)+nodn(ip,kb)
+            call fnadd(ndz(jj),ndt(jj),tt*ndw(jj))
+         enddo
+         call cvcmp(nfn,fnz,fnt,fnw,m,cnz,cnt,cnw)
+      endif
+      end subroutine getnod
+      subroutine exrec(ee,pp0,aa1,zz1)
+      ! exact mean damage of the residual after the
+      ! independent emission of all the particles (integer
+      ! multiplicities from the yields), dN, and of the one-particle
+      ! recoil of the driving particle, d1, with the same nodes;
+      ! rrt(nrt)=dN/d1.  With one particle in total the one-particle
+      ! recoil is already exact (rrt=1 from the moments); with
+      ! non-integer yields, more than nvmax particles or a particle
+      ! without nodes the mean-energy factor above is kept (nfbk).
+      ! (DLA, IAEA, Oct 2026)
+      real(kr)::ee,pp0,aa1,zz1
+      integer::ip,jj,jm
+      real(kr)::yv
+      nv=0
+      lex=.true.
+      do ip=1,np
+         yv=yint(ip,ee)
+         nmult(ip)=max(nint(yv),0)
+         if (abs(yv-nmult(ip)).gt.1.e-4_kr*max(1.e0_kr,yv)) lex=.false.
+         nv=nv+nmult(ip)
+      enddo
+      if (nv.le.1) return
+      if (.not.lex.or.nv.gt.nvmax.or.nmult(ipd).lt.1) then
+         nfbk=nfbk+1
+         return
+      endif
+      nwk=0
+      jm=0
+      arx=awr+1
+      zrx=zt
+      io1=0
+      n1=0
+      do ip=1,np
+         if (nmult(ip).eq.0) cycle
+         call getnod(ip,ee,mn)
+         if (mn.le.0) then
+            nfbk=nfbk+1
+            return
+         endif
+         wkz(nwk+1:nwk+mn)=cnz(1:mn)
+         wkt(nwk+1:nwk+mn)=cnt(1:mn)
+         wkw(nwk+1:nwk+mn)=cnw(1:mn)
+         if (ip.eq.ipd) then
+            io1=nwk
+            n1=mn
+         endif
+         do jj=1,nmult(ip)
+            jm=jm+1
+            nsv(jm)=mn
+            iov(jm)=nwk
+         enddo
+         nwk=nwk+mn
+         arx=arx-nmult(ip)*ap(ip)
+         zrx=zrx-nmult(ip)*zp(ip)
+      enddo
+      ! no residual nucleus (all the products are light particles):
+      ! no correction, as with the moments
+      if (arx.le.0.5_kr.or.zrx.le.0.5_kr) return
+      if (n1.eq.0) then
+         nfbk=nfbk+1
+         return
+      endif
+      call cvdam(nv,nsv,iov,wkz,wkt,wkw,pp0,zrx,arx,zt,awr,dex,erm)
+      nsv(1)=n1
+      iov(1)=io1
+      call cvdam(1,nsv,iov,wkz,wkt,wkw,pp0,zz1,aa1,zt,awr,d1x,erm)
+      rrt(nrt)=1
+      if (d1x.gt.zero) rrt(nrt)=dex/d1x
+      nexa=nexa+1
+      end subroutine exrec
+      real(kr) function angpar(jj)
+      ! angular parameter of point jj: Legendre f1 (not normalized),
+      ! Kalbach r, or the mean cosine of a tabulated distribution (DLA, IAEA)
+      integer::jj,ia,lt,nmp,lb
+      real(kr)::u1,u2,v1,v2,sn,s1m
+      lb=6+ncyc*(jj-1)
+      angpar=0
+      if (na.lt.1) return
+      if (lang.eq.1.or.lang.eq.2) then
+         angpar=b(lb+3)
+      else if (lang.ge.11.and.lang.le.15) then
+         lt=lang-10
+         nmp=na/2
+         sn=0
+         s1m=0
+         do ia=1,nmp-1
+            u1=b(lb+2+2*ia-1)
+            v1=b(lb+2+2*ia)
+            u2=b(lb+2+2*ia+1)
+            v2=b(lb+2+2*ia+2)
+            if (u2.le.u1) cycle
+            if (lt.eq.1) then
+               sn=sn+v1*(u2-u1)
+               s1m=s1m+v1*(u2*u2-u1*u1)/2
+            else
+               ! linear (log laws approximated as linear)
+               sn=sn+(v1+v2)*(u2-u1)/2
+               s1m=s1m+(u2-u1)*(v1*(2*u1+u2)+v2*(u1+2*u2))/6
+            endif
+         enddo
+         if (sn.gt.zero) angpar=s1m/sn
+      endif
+      end function angpar
+      real(kr) function gmu(ff,par,xe)
+      ! f*<mu> from the distribution value ff and the angular parameter
+      ! (DLA, IAEA)
+      real(kr)::ff,par,xe,a,t
+      gmu=0
+      if (na.lt.1) return
+      if (lang.eq.1) then
+         gmu=par
+      else if (lang.eq.2) then
+         a=bacha(1,izap,izat,en,xe)
+         if (a.gt.1.e-6_kr) then
+            gmu=ff*par*(1/tanh(a)-1/a)
+         else
+            gmu=ff*par*a/3
+         endif
+      else if (lang.ge.11.and.lang.le.15) then
+         gmu=ff*par
+      endif
+      t=0
+      if (ff.gt.zero) t=gmu/ff
+      if (t.gt.1) gmu=ff
+      if (t.lt.-1) gmu=-ff
+      end function gmu
+      real(kr) function yint(ip,ee)
+      integer::ip,jj,lr,law
+      real(kr)::ee
+      yint=yy(ip,1)
+      if (ny(ip).le.1.or.ee.le.yx(ip,1)) return
+      yint=yy(ip,ny(ip))
+      if (ee.ge.yx(ip,ny(ip))) return
+      do jj=2,ny(ip)
+         if (ee.le.yx(ip,jj)) then
+            law=2
+            do lr=nry(ip),1,-1
+               if (jj.le.nby(ip,lr)) law=iny(ip,lr)
+            enddo
+            if (yx(ip,jj).gt.yx(ip,jj-1)) then
+               call terp1(yx(ip,jj-1),yy(ip,jj-1),yx(ip,jj),yy(ip,jj),ee,yint,law)
+            else
+               yint=yy(ip,jj)
+            endif
+            return
+         endif
+      enddo
+      end function yint
+      subroutine mint(ip,ee,av,cv)
+      integer::ip,jj,lw
+      real(kr)::ee,av,cv,emx,vc
+      if (l6(ip)) then
+         ! LAW=6, laboratory moments of the phase space (DLA, IAEA, Oct 2026)
+         vc=sqrt(2*ee)/(awr+1)
+         emx=0
+         if (aps6(ip).gt.ap(ip).and.nps6(ip).gt.1)&
+           emx=(aps6(ip)-ap(ip))/aps6(ip)*(awr*ee/(awr+1)+q)
+         if (emx.lt.zero) emx=0
+         av=ap(ip)*vc
+         cv=2*ap(ip)*(emx/(nps6(ip)-1)+ap(ip)*ee/(awr+1)**2)
+         return
+      endif
+      av=pmu(ip,1)
+      cv=p2(ip,1)
+      if (nein(ip).le.1.or.ee.le.ein(ip,1)) return
+      av=pmu(ip,nein(ip))
+      cv=p2(ip,nein(ip))
+      if (ee.ge.ein(ip,nein(ip))) return
+      do jj=2,nein(ip)
+         if (ee.le.ein(ip,jj)) then
+            lw=lwe(ip,jj-1)
+            if ((lw.eq.4.or.lw.eq.5).and.pmu(ip,jj-1)*pmu(ip,jj).le.zero) lw=lw-2
+            if (lw.lt.1.or.lw.gt.5) lw=2
+            call terp1(ein(ip,jj-1),pmu(ip,jj-1),ein(ip,jj),pmu(ip,jj),ee,av,lw)
+            lw=lwe(ip,jj-1)
+            if (lw.lt.1.or.lw.gt.5) lw=2
+            call terp1(ein(ip,jj-1),p2(ip,jj-1),ein(ip,jj),p2(ip,jj),ee,cv,lw)
+            return
+         endif
+      enddo
+      end subroutine mint
+      subroutine e7mom(am7,g0,g1,gp)
+      ! integrals over e' of one LAW=7 TAB1 f(e') stored in
+      ! b: g0=int f, g1=int f e', gp=int f sqrt(2 am7 e'); histogram
+      ! panels exactly, other laws with 4-point Gauss on the linear form
+      ! (DLA, IAEA, Oct 2026)
+      real(kr)::am7,g0,g1,gp
+      integer::nr7,np7,ib7,jp,ir7,int7,iq7
+      real(kr)::xa,xb,ya,yb,xm,ym,dx
+      g0=0
+      g1=0
+      gp=0
+      nr7=nint(b(5))
+      np7=nint(b(6))
+      ib7=6+2*nr7
+      ir7=1
+      do jp=2,np7
+         xa=b(ib7+2*jp-3)
+         ya=b(ib7+2*jp-2)
+         xb=b(ib7+2*jp-1)
+         yb=b(ib7+2*jp)
+         do while (jp.gt.nint(b(5+2*ir7)).and.ir7.lt.nr7)
+            ir7=ir7+1
+         enddo
+         int7=nint(b(6+2*ir7))
+         dx=xb-xa
+         if (dx.le.zero) cycle
+         if (xa.lt.zero) xa=0
+         if (int7.eq.1) then
+            g0=g0+ya*dx
+            g1=g1+ya*(xb*xb-xa*xa)/2
+            gp=gp+ya*sqrt(2*am7)*2*(xb**1.5_kr-xa**1.5_kr)/3
+         else
+            do iq7=1,4
+               xm=(xa+xb)/2+dx/2*q4x(iq7)
+               ym=ya+(yb-ya)*(xm-xa)/dx
+               g0=g0+q4w(iq7)*dx/2*ym
+               g1=g1+q4w(iq7)*dx/2*ym*xm
+               gp=gp+q4w(iq7)*dx/2*ym*sqrt(2*am7*max(xm,zero))
+            enddo
+         endif
+      enddo
+      end subroutine e7mom
+   end subroutine oprtab
+
+   real(kr) function oprfac(e)
+   !-------------------------------------------------------------------
+   ! Interpolate the OPR damage correction factor of oprtab.
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   real(kr)::e
+   integer::j
+   oprfac=1
+   if (nrt.le.0) return
+   if (e.le.ert(1)) then
+      oprfac=rrt(1)
+   else if (e.ge.ert(nrt)) then
+      oprfac=rrt(nrt)
+   else
+      do j=2,nrt
+         if (e.le.ert(j)) then
+            oprfac=rrt(j-1)+(rrt(j)-rrt(j-1))*(e-ert(j-1))/(ert(j)-ert(j-1))
+            return
+         endif
+      enddo
+   endif
+   return
+   end function oprfac
+
+   subroutine mt5tab(nin,matd,mtd,za,awr,lct,nk,thr)
+   !-------------------------------------------------------------------
+   ! Recoil of the residual nuclei of mt5 given in File 6
+   ! without distribution (LAW=0), or not given at all (only light
+   ! particles and photons).  This corrects incomplete evaluations;
+   ! residuals given with their distributions are used as given.
+   ! (DLA, IAEA, Oct 2026)
+   !
+   ! Momentum balance for the light particles i (zap=1..2004, LAW=1
+   ! or LAW=7; masses m_i=AWP, yields y_i), laboratory moments:
+   !   p0 = sqrt(2 e)                       (neutron mass units, eV)
+   !   S2 = sum y_i <p_i**2>,  Sz = sum y_i <p_i mu_i>,  ym = sum y_i m_i
+   !   Smz = sum y_i m_i <p_i mu_i>,  Sm2 = sum y_i m_i**2
+   ! Drift along the beam  pd = p0 - Sz.  Second moment: the
+   ! momenta of the light particles in the cm, q_i = p_i - m_i V with
+   ! V = p0/(awr+1), are taken without cross terms (cm-exclusive
+   ! emission; the directed part of the lab momenta keeps its
+   ! correlation):
+   !   D = Sz - ym V,   Q2 = S2 - 2 V Smz + V**2 Sm2 = sum y_i <q_i**2>
+   !   <pr**2> = ((awr+1-ym) V)**2 - 2 (awr+1-ym) V D + Q2,
+   !   bounded below by pd**2.
+   ! Validation against residual recoil spectra evaluated in JENDL-5
+   ! (A=19-209, 25-200 MeV): IAEA report on the NJOY2016 HEATR
+   ! corrections (2026).
+   !   sg**2 = (<pr**2> - pd**2)/3 (isotropic dispersion)
+   ! The residual momentum is a displaced 3-d gaussian, pr = pd z + d,
+   ! d ~ N(0, sg**2 I); the density of |pr| is
+   !   f(p) = p/(pd sg sqrt(2 pi)) [exp(-(p-pd)**2/2sg**2)
+   !                              - exp(-(p+pd)**2/2sg**2)]
+   ! (maxwellian when pd -> 0), and er = p**2/(2 M).  For each
+   ! residual r without distribution (yield y_r, Z_r, M_r=AWP):
+   !   damage per mt5 event  d5 = sum y_r <df(p**2/2M_r; Z_r, M_r)>
+   !   heating per mt5 event h5 = sum y_r <pr**2>/(2 M_r)
+   ! (64-point Gauss rule in p on pd-8sg..pd+8sg).  At the energies
+   ! where the section gives no residual (sum of residual yields below
+   ! 0.01, or no residual subsection), one effective residual with
+   ! yield 1,  Z_eff = Z - sum y_i z_i,  M_eff = awr + 1 - sum y_i awp_i,
+   ! is used.  Moments of the light particles: LAW=1 (all LANG, as in
+   ! oprtab, frame from LCT) and LAW=7 (laboratory; 4-point Gauss rule
+   ! in each E' panel, linear in mu).  The table (e5t,d5t,h5t) is built
+   ! on the incident energies of the light particles; n5t=0 when no
+   ! correction is needed or possible.  The charge balance
+   ! sum y Z(all products) = Z is checked and a message is given for a
+   ! deviation larger than 5% (inconsistent yields) at energies above
+   ! the mt5 threshold thr.
+   ! The tape is repositioned after the HEAD record of the section.
+   ! (DLA, IAEA, Oct 2026)
+   !-------------------------------------------------------------------
+   use endf
+   use util   ! provides error,mess
+   use mainio ! provides nsyso
+   ! externals
+   integer::nin,matd,mtd,lct,nk
+   real(kr)::za,awr,thr
+   ! internals
+   integer,parameter::npm=12,nem=1000,nym=2000,nrm=20,nrsm=1500
+   integer,parameter::npool=600000,nbmax=400000
+   integer::np,ik,nb,nw,l,law,lang,lep,ne,ie,nd,na,nep,ncyc,i,j,k,iq
+   integer::izap,izat,nr,ny(npm),nein(npm),nmu,imu,lw,nr2,lfr
+   integer::nbt2(nrm),int2(nrm),nry(npm),nby(npm,nrm),iny(npm,nrm)
+   integer::lwe(npm,nem),nres,nres0,nu,iu,ipool,inc,lmu,ir,jr,nrr
+   integer::lawr(nrsm),ioff(nrsm),nyr(nrsm),nrrr(nrsm)
+   integer::nbr(nrsm,4),inr(nrsm,4)
+   real(kr)::zp(npm),ap(npm),yx(npm,nym),yy(npm,nym)
+   real(kr)::ein(npm,nem),pmu(npm,nem),p2(npm,nem)
+   real(kr)::zr5(nrsm),ar5(nrsm)
+   real(kr)::en,ep,f,x,s0,s1,sm,am,vcm,emean,x1,x2,fa,fb,ga,gb,g,fx
+   real(kr)::e,p0,y,sz,s2,ym,yz,pr2,pd,sg2,dsum,hsum,yres,qz,zt,dev
+   real(kr)::devmax,edev,zeff,aeff,yr,pm,cv,emu,emup,g0,g1,gs
+   real(kr)::smz,sm2,vc5,dz5,sq2
+   real(kr)::g0p,g1p,gsp,hd(6),ylight,yall
+   real(kr),allocatable::b(:),pool(:),eu(:),yt(:)
+   integer::nadd0,neff
+   real(kr),parameter::ymin5=0.01e0_kr
+   character(60)::strng,strng2
+   real(kr),parameter::zero=0
+   real(kr),parameter::tiny=1.e-8_kr
+   real(kr),dimension(4),parameter::q4x=(/&
+      -.861136312e0_kr,-.339981044e0_kr,.339981044e0_kr,.861136312e0_kr/)
+   real(kr),dimension(4),parameter::q4w=(/&
+      .347854845e0_kr,.652145155e0_kr,.652145155e0_kr,.347854845e0_kr/)
+
+   n5t=0
+   allocate(b(nbmax))
+   allocate(pool(npool))
+   izat=nint(za)
+   zt=int(za/1000)
+   np=0
+   nres=0
+   nres0=0
+   ipool=0
+   inc=0
+   do ik=1,nk
+      l=1
+      call tab1io(nin,0,0,b(l),nb,nw)
+      l=l+nw
+      do while (nb.ne.0)
+         if (l.gt.nbmax-10000) call error('mt5tab','storage',' ')
+         call moreio(nin,0,0,b(l),nb,nw)
+         l=l+nw
+      enddo
+      izap=nint(b(1))
+      law=nint(b(4))
+      nr=nint(b(5))
+      i=0
+      if (izap.gt.0.and.izap.le.2004) then
+         if (np.ge.npm) call error('mt5tab','too many light particles',' ')
+         np=np+1
+         i=np
+         zp(np)=int(izap/1000)
+         ap(np)=b(2)
+         ny(np)=min(nint(b(6)),nym)
+         nry(np)=min(nr,nrm)
+         do j=1,nry(np)
+            nby(np,j)=nint(b(5+2*j))
+            iny(np,j)=nint(b(6+2*j))
+         enddo
+         do j=1,ny(np)
+            yx(np,j)=b(6+2*nr+2*j-1)
+            yy(np,j)=b(6+2*nr+2*j)
+         enddo
+         nein(np)=0
+         if (law.ne.1.and.law.ne.7) then
+            inc=1
+            ! message for any light particle not LAW=1 or 7
+            ! (DLA, IAEA, Oct 2026)
+            write(strng,'(''mt5 light particle'',i6,'' given with LAW='',&
+              &i3)') izap,law
+            call mess('mt5tab',strng,&
+              'moments not computed (LAW=1 or 7 only)')
+         endif
+      else if (izap.gt.2004) then
+         if (nres.ge.nrsm) call error('mt5tab','too many residuals',' ')
+         nres=nres+1
+         lawr(nres)=law
+         if (law.eq.0) nres0=nres0+1
+         ! unexpected representation of a residual (DLA, IAEA, Oct 2026)
+         if (law.eq.6.or.law.lt.0) then
+            write(strng,'(''mt5 residual'',i7,'' given with LAW='',i3)')&
+              izap,law
+            call mess('mt5tab',strng,'unexpected law for a residual')
+         endif
+         zr5(nres)=int(izap/1000)
+         ar5(nres)=b(2)
+         nyr(nres)=nint(b(6))
+         nrrr(nres)=min(nr,4)
+         do j=1,nrrr(nres)
+            nbr(nres,j)=nint(b(5+2*j))
+            inr(nres,j)=nint(b(6+2*j))
+         enddo
+         if (ipool+2*nyr(nres).gt.npool) call error('mt5tab',&
+           'yield storage exceeded',' ')
+         ioff(nres)=ipool
+         do j=1,2*nyr(nres)
+            pool(ipool+j)=b(6+2*nr+j)
+         enddo
+         ipool=ipool+2*nyr(nres)
+      endif
+      if (law.eq.1.or.law.eq.2.or.law.eq.5) then
+         call tab2io(nin,0,0,b(1),nb,nw)
+         lang=nint(b(3))
+         lep=nint(b(4))
+         ne=nint(b(6))
+         nr2=min(nint(b(5)),nrm)
+         do j=1,nr2
+            nbt2(j)=nint(b(5+2*j))
+            int2(j)=nint(b(6+2*j))
+         enddo
+         do ie=1,ne
+            l=1
+            call listio(nin,0,0,b(l),nb,nw)
+            l=l+nw
+            do while (nb.ne.0)
+               if (l.gt.nbmax-10000) call error('mt5tab','storage',' ')
+               call moreio(nin,0,0,b(l),nb,nw)
+               l=l+nw
+            enddo
+            if (i.gt.0.and.law.eq.1.and.nein(max(i,1)).lt.nem) then
+               en=b(2)
+               nd=nint(b(3))
+               na=nint(b(4))
+               nep=nint(b(6))
+               ncyc=na+2
+               am=ap(i)
+               s0=0
+               s1=0
+               sm=0
+               do j=1,min(nd,nep)
+                  ep=b(6+ncyc*(j-1)+1)
+                  f=b(6+ncyc*(j-1)+2)
+                  s0=s0+f
+                  s1=s1+f*ep
+                  sm=sm+gmu(f,angpar(j),ep)*sqrt(2*am*ep)
+               enddo
+               do j=nd+2,nep
+                  x1=b(6+ncyc*(j-2)+1)
+                  x2=b(6+ncyc*(j-1)+1)
+                  if (x2.le.x1) cycle
+                  fa=b(6+ncyc*(j-2)+2)
+                  fb=b(6+ncyc*(j-1)+2)
+                  do iq=1,4
+                     x=(x1+x2)/2+(x2-x1)/2*q4x(iq)
+                     ga=angpar(j-1)
+                     if (lep.eq.1) then
+                        fx=fa
+                        g=ga
+                     else
+                        gb=angpar(j)
+                        fx=fa+(fb-fa)*(x-x1)/(x2-x1)
+                        g=ga+(gb-ga)*(x-x1)/(x2-x1)
+                     endif
+                     g=gmu(fx,g,x)
+                     s0=s0+q4w(iq)*(x2-x1)/2*fx
+                     s1=s1+q4w(iq)*(x2-x1)/2*fx*x
+                     sm=sm+q4w(iq)*(x2-x1)/2*g*sqrt(2*am*x)
+                  enddo
+               enddo
+               if (s0.gt.zero) then
+                  lw=int2(nr2)
+                  do j=nr2,1,-1
+                     if (ie+1.le.nbt2(j)) lw=int2(j)
+                  enddo
+                  if (lw.gt.20) lw=lw-20
+                  ! frame of the data: laboratory for LCT=1 and for
+                  ! particles heavier than alpha with LCT=3, else CM
+                  lfr=2
+                  if (lct.eq.1) lfr=1
+                  call store(i,en,lw,s1/s0,sm/s0,lfr)
+               endif
+            endif
+         enddo
+      else if (law.eq.6) then
+         call contio(nin,0,0,b(1),nb,nw)
+      else if (law.eq.7) then
+         call tab2io(nin,0,0,b(1),nb,nw)
+         ne=nint(b(6))
+         nr2=min(nint(b(5)),nrm)
+         do j=1,nr2
+            nbt2(j)=nint(b(5+2*j))
+            int2(j)=nint(b(6+2*j))
+         enddo
+         do ie=1,ne
+            call tab2io(nin,0,0,b(1),nb,nw)
+            en=b(2)
+            nmu=nint(b(6))
+            lmu=nint(b(8))
+            s0=0
+            s1=0
+            sm=0
+            emup=0
+            g0p=0
+            g1p=0
+            gsp=0
+            do imu=1,nmu
+               l=1
+               call tab1io(nin,0,0,b(l),nb,nw)
+               l=l+nw
+               do while (nb.ne.0)
+                  if (l.gt.nbmax-10000) call error('mt5tab','storage',' ')
+                  call moreio(nin,0,0,b(l),nb,nw)
+                  l=l+nw
+               enddo
+               if (i.eq.0) cycle
+               emu=b(2)
+               call epint(g0,g1,gs)
+               if (imu.gt.1.and.emu.gt.emup) then
+                  if (lmu.eq.1) then
+                     s0=s0+g0p*(emu-emup)
+                     s1=s1+g1p*(emu-emup)
+                     sm=sm+gsp*(emu*emu-emup*emup)/2
+                  else
+                     s0=s0+(g0p+g0)*(emu-emup)/2
+                     s1=s1+(g1p+g1)*(emu-emup)/2
+                     sm=sm+(emu-emup)*(gsp*(2*emup+emu)+gs*(emup+2*emu))/6
+                  endif
+               endif
+               emup=emu
+               g0p=g0
+               g1p=g1
+               gsp=gs
+            enddo
+            if (i.gt.0.and.s0.gt.zero.and.nein(max(i,1)).lt.nem) then
+               lw=int2(nr2)
+               do j=nr2,1,-1
+                  if (ie+1.le.nbt2(j)) lw=int2(j)
+               enddo
+               if (lw.gt.20) lw=lw-20
+               call store(i,en,lw,s1/s0,sqrt(2*ap(i))*sm/s0,1)
+            endif
+         enddo
+      else if (law.lt.0) then
+         inc=1
+      endif
+   enddo
+
+   ! union of the incident energies of the light particles
+   nu=0
+   allocate(eu(npm*nem))
+   do i=1,np
+      do k=1,nein(i)
+         nu=nu+1
+         eu(nu)=ein(i,k)
+      enddo
+   enddo
+   call sortu(eu,nu)
+   if (nu.gt.nrmax) nu=nrmax
+
+   ! charge balance of all products, at energies above the threshold
+   ! where residual yields are given (sum of residual yields >= 0.01)
+   devmax=0
+   edev=0
+   do iu=1,nu
+      e=eu(iu)
+      if (e.lt.thr) cycle
+      qz=0
+      ylight=0
+      do i=1,np
+         y=yint(i,e)
+         qz=qz+y*zp(i)
+         ylight=ylight+y
+      enddo
+      yall=0
+      do k=1,nres
+         yr=yres5(k,e)
+         qz=qz+yr*zr5(k)
+         yall=yall+yr
+      enddo
+      if (ylight.gt.zero.and.yall.ge.ymin5) then
+         dev=(qz-zt)/zt
+         if (abs(dev).gt.abs(devmax)) then
+            devmax=dev
+            edev=e
+         endif
+      endif
+   enddo
+   if (abs(devmax).gt.0.05_kr) then
+      write(strng,'(''mt5 charge balance off by'',1p,e10.2,''%'')')&
+        100*devmax
+      write(strng2,'(''at e='',1p,e10.3,'' ev: inconsistent yields'')')&
+        edev
+      call mess('mt5tab',strng,strng2)
+   endif
+
+   ! recoil of the residuals without distribution (LAW=0), or of one
+   ! effective residual at the energies where no residual is given
+   if (np.gt.0.and.inc.ne.0.and.(nres0.gt.0.or.nres.eq.0)) then
+      call mess('mt5tab','mt5 light particle without LAW=1 or 7',&
+        'no recoil for residuals without distribution')
+   else if (np.gt.0) then
+      allocate(yt(nu))
+      nadd0=0
+      neff=0
+      do iu=1,nu
+         e=eu(iu)
+         p0=sqrt(2*e)
+         sz=0
+         s2=0
+         ym=0
+         yz=0
+         smz=0
+         sm2=0
+         do i=1,np
+            y=yint(i,e)
+            if (y.le.zero.or.nein(i).eq.0) cycle
+            call mint(i,e,pm,cv)
+            sz=sz+y*pm
+            s2=s2+y*cv
+            ym=ym+y*ap(i)
+            yz=yz+y*zp(i)
+            smz=smz+y*ap(i)*pm
+            sm2=sm2+y*ap(i)*ap(i)
+         enddo
+         ! no cross terms between the cm momenta q_i=p_i-m_i V
+         ! (DLA, IAEA, Oct 2026)
+         vc5=p0/(awr+1)
+         dz5=sz-ym*vc5
+         sq2=s2-2*vc5*smz+vc5*vc5*sm2
+         pr2=((awr+1-ym)*vc5)**2-2*(awr+1-ym)*vc5*dz5+sq2
+         pd=p0-sz
+         if (pr2.lt.pd*pd) pr2=pd*pd
+         sg2=(pr2-pd*pd)/3
+         dsum=0
+         hsum=0
+         yres=0
+         yall=0
+         do k=1,nres
+            yall=yall+yres5(k,e)
+         enddo
+         if (pr2.gt.zero.and.ym.gt.zero.and.e.ge.thr) then
+            if (yall.ge.ymin5) then
+               do k=1,nres
+                  if (lawr(k).ne.0) cycle
+                  yr=yres5(k,e)
+                  if (yr.le.zero) cycle
+                  if (idame.gt.0) dsum=dsum+yr*dnc(ar5(k),zr5(k))
+                  hsum=hsum+yr*pr2/(2*ar5(k))
+                  yres=yres+yr
+               enddo
+               if (yres.gt.zero) nadd0=nadd0+1
+            else
+               zeff=zt-yz
+               aeff=awr+1-ym
+               if (zeff.ge.1.and.aeff.ge.1) then
+                  if (idame.gt.0) dsum=dnc(aeff,zeff)
+                  hsum=pr2/(2*aeff)
+                  yres=1
+                  neff=neff+1
+               endif
+            endif
+         endif
+         n5t=n5t+1
+         e5t(n5t)=e
+         d5t(n5t)=dsum
+         h5t(n5t)=hsum
+         yt(n5t)=yres
+      enddo
+      if (nadd0.eq.0.and.neff.eq.0) then
+         n5t=0
+      else
+         if (nadd0.gt.0) then
+            write(strng,'(''mt5 has'',i4,'' residuals without '',&
+              &''distribution'')') nres0
+            call mess('mt5tab',strng,&
+              'recoil from momentum balance')
+         endif
+         if (neff.gt.0) then
+            write(strng,'(''mt5 gives no residual nuclei at'',i5,&
+              &'' energies'')') neff
+            call mess('mt5tab',strng,&
+              'effective residual from charge/mass balance')
+         endif
+         if (iprint.eq.1) then
+            write(nsyso,'(/&
+              &'' mt5: recoil of residuals without distribution''/&
+              &''           e       yield     <er>(ev)   damage(ev)'')')
+            do iu=1,n5t
+               if (yt(iu).gt.zero) write(nsyso,'(1x,1p,4e12.4)')&
+                 e5t(iu),yt(iu),h5t(iu)/yt(iu),d5t(iu)
+            enddo
+         endif
+      endif
+      deallocate(yt)
+   endif
+   deallocate(eu)
+   deallocate(pool)
+   deallocate(b)
+   ! reposition the tape after the HEAD record of the section
+   call findf(matd,6,mtd,nin)
+   call contio(nin,0,0,hd,nb,nw)
+   return
+
+   contains
+
+      subroutine store(ip,ee,lww,em,pmm,lf)
+      ! moments of particle ip at incident energy ee, transformed to
+      ! the laboratory when given in the centre of mass (lf=2) (DLA, IAEA)
+      integer::ip,lww,lf,kk
+      real(kr)::ee,em,pmm,v
+      nein(ip)=nein(ip)+1
+      kk=nein(ip)
+      ein(ip,kk)=ee
+      lwe(ip,kk)=lww
+      pmu(ip,kk)=pmm
+      p2(ip,kk)=2*ap(ip)*em
+      if (lf.eq.2) then
+         v=sqrt(2*ee)/(awr+1)
+         p2(ip,kk)=p2(ip,kk)+2*ap(ip)*v*pmu(ip,kk)+ap(ip)*ap(ip)*v*v
+         pmu(ip,kk)=pmu(ip,kk)+ap(ip)*v
+      endif
+      end subroutine store
+
+      subroutine epint(h0,h1,hs)
+      ! integrals of f, E' f and sqrt(E') f over a TAB1 f(E') in b
+      ! (4-point Gauss rule per panel, interpolation laws of the
+      ! record; log laws approximated by linear interpolation) (DLA, IAEA)
+      real(kr)::h0,h1,hs,xa,xb,ya,yb,xx,ff
+      integer::nrx,npx,jj,kr2,lwx
+      h0=0
+      h1=0
+      hs=0
+      nrx=nint(b(5))
+      npx=nint(b(6))
+      do jj=2,npx
+         xa=b(6+2*nrx+2*jj-3)
+         ya=b(6+2*nrx+2*jj-2)
+         xb=b(6+2*nrx+2*jj-1)
+         yb=b(6+2*nrx+2*jj)
+         if (xb.le.xa) cycle
+         lwx=2
+         do kr2=nrx,1,-1
+            if (jj.le.nint(b(5+2*kr2))) lwx=nint(b(6+2*kr2))
+         enddo
+         do iq=1,4
+            xx=(xa+xb)/2+(xb-xa)/2*q4x(iq)
+            if (lwx.eq.1) then
+               ff=ya
+            else
+               ff=ya+(yb-ya)*(xx-xa)/(xb-xa)
+            endif
+            h0=h0+q4w(iq)*(xb-xa)/2*ff
+            h1=h1+q4w(iq)*(xb-xa)/2*ff*xx
+            hs=hs+q4w(iq)*(xb-xa)/2*ff*sqrt(xx)
+         enddo
+      enddo
+      end subroutine epint
+
+      real(kr) function angpar(jj)
+      ! angular parameter of point jj (as in oprtab)
+      integer::jj,ia,lt,nmp,lb
+      real(kr)::u1,u2,v1,v2,sn,s1m
+      lb=6+ncyc*(jj-1)
+      angpar=0
+      if (na.lt.1) return
+      if (lang.eq.1.or.lang.eq.2) then
+         angpar=b(lb+3)
+      else if (lang.ge.11.and.lang.le.15) then
+         lt=lang-10
+         nmp=na/2
+         sn=0
+         s1m=0
+         do ia=1,nmp-1
+            u1=b(lb+2+2*ia-1)
+            v1=b(lb+2+2*ia)
+            u2=b(lb+2+2*ia+1)
+            v2=b(lb+2+2*ia+2)
+            if (u2.le.u1) cycle
+            if (lt.eq.1) then
+               sn=sn+v1*(u2-u1)
+               s1m=s1m+v1*(u2*u2-u1*u1)/2
+            else
+               sn=sn+(v1+v2)*(u2-u1)/2
+               s1m=s1m+(u2-u1)*(v1*(2*u1+u2)+v2*(u1+2*u2))/6
+            endif
+         enddo
+         if (sn.gt.zero) angpar=s1m/sn
+      endif
+      end function angpar
+
+      real(kr) function gmu(ff,par,xe)
+      ! f*<mu> from the distribution value ff and the angular parameter
+      real(kr)::ff,par,xe,a,t
+      gmu=0
+      if (na.lt.1) return
+      if (lang.eq.1) then
+         gmu=par
+      else if (lang.eq.2) then
+         a=bacha(1,izap,izat,en,xe)
+         if (a.gt.1.e-6_kr) then
+            gmu=ff*par*(1/tanh(a)-1/a)
+         else
+            gmu=ff*par*a/3
+         endif
+      else if (lang.ge.11.and.lang.le.15) then
+         gmu=ff*par
+      endif
+      t=0
+      if (ff.gt.zero) t=gmu/ff
+      if (t.gt.1) gmu=ff
+      if (t.lt.-1) gmu=-ff
+      end function gmu
+
+      real(kr) function yint(ip,ee)
+      ! yield of light particle ip (laws of the record) (DLA, IAEA)
+      integer::ip,jj,lr,lwy
+      real(kr)::ee
+      yint=0
+      if (ny(ip).lt.1) return
+      if (ee.lt.yx(ip,1).or.ee.gt.yx(ip,ny(ip))) return
+      yint=yy(ip,ny(ip))
+      if (ee.ge.yx(ip,ny(ip))) return
+      ! strict test: at a discontinuity the value above is used
+      do jj=2,ny(ip)
+         if (ee.lt.yx(ip,jj)) then
+            lwy=2
+            do lr=nry(ip),1,-1
+               if (jj.le.nby(ip,lr)) lwy=iny(ip,lr)
+            enddo
+            if (yx(ip,jj).gt.yx(ip,jj-1)) then
+               call terp1(yx(ip,jj-1),yy(ip,jj-1),yx(ip,jj),yy(ip,jj),&
+                 ee,yint,lwy)
+            else
+               yint=yy(ip,jj)
+            endif
+            return
+         endif
+      enddo
+      end function yint
+
+      real(kr) function yres5(kr5,ee)
+      ! yield of residual kr5 (laws of the record) (DLA, IAEA)
+      integer::kr5,jj,lr,lwy,io
+      real(kr)::ee
+      yres5=0
+      io=ioff(kr5)
+      if (nyr(kr5).lt.1) return
+      if (ee.lt.pool(io+1).or.ee.gt.pool(io+2*nyr(kr5)-1)) return
+      ! strict test: at a discontinuity the value above is used
+      do jj=2,nyr(kr5)
+         if (ee.lt.pool(io+2*jj-1)) then
+            lwy=2
+            do lr=nrrr(kr5),1,-1
+               if (jj.le.nbr(kr5,lr)) lwy=inr(kr5,lr)
+            enddo
+            if (pool(io+2*jj-1).gt.pool(io+2*jj-3)) then
+               call terp1(pool(io+2*jj-3),pool(io+2*jj-2),&
+                 pool(io+2*jj-1),pool(io+2*jj),ee,yres5,lwy)
+            else
+               yres5=pool(io+2*jj)
+            endif
+            return
+         endif
+      enddo
+      yres5=pool(io+2*nyr(kr5))
+      end function yres5
+
+      subroutine mint(ip,ee,av,cv2)
+      ! moments <p mu> (av) and <p**2> (cv2) of particle ip at ee
+      integer::ip,jj,lww
+      real(kr)::ee,av,cv2
+      av=pmu(ip,1)
+      cv2=p2(ip,1)
+      if (nein(ip).le.1.or.ee.le.ein(ip,1)) return
+      av=pmu(ip,nein(ip))
+      cv2=p2(ip,nein(ip))
+      if (ee.ge.ein(ip,nein(ip))) return
+      do jj=2,nein(ip)
+         if (ee.le.ein(ip,jj)) then
+            lww=lwe(ip,jj-1)
+            if ((lww.eq.4.or.lww.eq.5).and.pmu(ip,jj-1)*pmu(ip,jj).le.zero)&
+              lww=lww-2
+            if (lww.lt.1.or.lww.gt.5) lww=2
+            call terp1(ein(ip,jj-1),pmu(ip,jj-1),ein(ip,jj),pmu(ip,jj),&
+              ee,av,lww)
+            lww=lwe(ip,jj-1)
+            if (lww.lt.1.or.lww.gt.5) lww=2
+            call terp1(ein(ip,jj-1),p2(ip,jj-1),ein(ip,jj),p2(ip,jj),&
+              ee,cv2,lww)
+            return
+         endif
+      enddo
+      end subroutine mint
+
+      real(kr) function dnc(am5,zr)
+      ! mean damage energy of a residual (mass am5, charge zr) with the
+      ! displaced gaussian momentum distribution (pd, sg2, pr2) (DLA, IAEA)
+      real(kr)::am5,zr,s,plo,phi,pp,w,ff,sn,dum
+      real(kr),parameter::rtp=2.506628274631e0_kr
+      dnc=0
+      dum=df(zero,zr,am5,zt,awr)
+      if (sg2.le.tiny*pr2) then
+         dnc=df(pd*pd/(2*am5),zr,am5,zt,awr)
+         return
+      endif
+      s=sqrt(sg2)
+      plo=pd-8*s
+      if (plo.lt.zero) plo=0
+      phi=pd+8*s
+      sn=0
+      do iq=1,64
+         pp=(plo+phi)/2+(phi-plo)/2*g64x(iq)
+         w=g64w(iq)*(phi-plo)/2
+         if (pd.gt.tiny*s) then
+            ff=pp/(pd*s*rtp)*(exp(-(pp-pd)**2/(2*sg2))&
+              -exp(-(pp+pd)**2/(2*sg2)))
+         else
+            ff=2*pp*pp/(s**3*rtp)*exp(-pp*pp/(2*sg2))
+         endif
+         sn=sn+w*ff
+         dnc=dnc+w*ff*df(pp*pp/(2*am5),zr,am5,zt,awr)
+      enddo
+      if (sn.gt.zero) dnc=dnc/sn
+      end function dnc
+
+   end subroutine mt5tab
+
+   subroutine sortu(a,n)
+   !-------------------------------------------------------------------
+   ! Sort a(1:n) in increasing order and remove duplicates.
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   integer::n
+   real(kr)::a(*)
+   integer::i,j,m
+   real(kr)::t
+   do i=2,n
+      t=a(i)
+      j=i-1
+      do while (j.ge.1)
+         if (a(j).le.t) exit
+         a(j+1)=a(j)
+         j=j-1
+      enddo
+      a(j+1)=t
+   enddo
+   m=0
+   do i=1,n
+      if (m.eq.0) then
+         m=1
+         a(1)=a(i)
+      else if (a(i).gt.a(m)*(1+1.e-9_kr)) then
+         m=m+1
+         a(m)=a(i)
+      endif
+   enddo
+   n=m
+   return
+   end subroutine sortu
+
+   real(kr) function mt5dm(e)
+   !-------------------------------------------------------------------
+   ! Damage per mt5 event of the residuals without distribution
+   ! (table of mt5tab, linear interpolation).
+   ! (DLA, IAEA, 6 Oct 2026)
+   !-------------------------------------------------------------------
+   real(kr)::e
+   mt5dm=t5int(e,d5t)
+   return
+   end function mt5dm
+
+   real(kr) function mt5hm(e)
+   !-------------------------------------------------------------------
+   ! Kinetic energy per mt5 event of the residuals without
+   ! distribution.
+   ! (DLA, IAEA, 6 Oct 2026)
+   !-------------------------------------------------------------------
+   real(kr)::e
+   mt5hm=t5int(e,h5t)
+   return
+   end function mt5hm
+
+   real(kr) function t5int(e,t)
+   real(kr)::e,t(*)
+   integer::j
+   t5int=0
+   if (n5t.le.0) return
+   ! relative tolerance at the ends of the table (the pendf
+   ! energy is rounded with sigfig and may exceed the last table energy
+   ! by 1e-15, which gave zero at the last energy, e.g. 150 MeV)
+   ! (DLA, IAEA, Oct 2026)
+   if (e.lt.e5t(1)*(1-1.e-9_kr).or.e.gt.e5t(n5t)*(1+1.e-9_kr)) return
+   if (e.ge.e5t(n5t)) then
+      t5int=t(n5t)
+      return
+   endif
+   if (e.le.e5t(1)) then
+      t5int=t(1)
+      return
+   endif
+   if (n5t.eq.1) then
+      t5int=t(1)
+      return
+   endif
+   do j=2,n5t
+      if (e.le.e5t(j)) then
+         t5int=t(j-1)+(t(j)-t(j-1))*(e-e5t(j-1))/(e5t(j)-e5t(j-1))
+         return
+      endif
+   enddo
+   return
+   end function t5int
+
+   subroutine fnadd(z,t,w)
+   !-------------------------------------------------------------------
+   ! Add one laboratory momentum node (pz along the
+   ! incident direction, pt>=0 transverse modulus, weight w) to the
+   ! fine-node buffer (fnz,fnt,fnw; nfn nodes).  Nodes with zero or
+   ! negative weight are not added.
+   ! (DLA, IAEA, Oct 2026)
+   !-------------------------------------------------------------------
+   ! externals
+   real(kr)::z,t,w
+   ! internals
+   integer::nn
+   real(kr),dimension(:),allocatable::tmp
+   real(kr),parameter::zero=0
+   if (w.le.zero) return
+   if (.not.allocated(fnz)) then
+      allocate(fnz(100000))
+      allocate(fnt(100000))
+      allocate(fnw(100000))
+   endif
+   if (nfn.ge.size(fnz)) then
+      nn=2*size(fnz)
+      allocate(tmp(nn))
+      tmp(1:nfn)=fnz(1:nfn)
+      call move_alloc(tmp,fnz)
+      allocate(tmp(nn))
+      tmp(1:nfn)=fnt(1:nfn)
+      call move_alloc(tmp,fnt)
+      allocate(tmp(nn))
+      tmp(1:nfn)=fnw(1:nfn)
+      call move_alloc(tmp,fnw)
+   endif
+   nfn=nfn+1
+   fnz(nfn)=z
+   fnt(nfn)=t
+   fnw(nfn)=w
+   return
+   end subroutine fnadd
+
+   subroutine cvcmp(n,z,t,w,m,cz,ct,cw)
+   !-------------------------------------------------------------------
+   ! Compression of n momentum nodes of an axially
+   ! symmetric distribution (pz, pt>=0, weight w>=0) on a cvnb x cvnb
+   ! grid of (pz,pt) bins spanning the nodes.  Each bin is replaced by
+   ! two nodes (cvemit)
+   !    pz = <pz> -+ sigma(pz),  pt = sqrt(<pt**2>),  weight W/2
+   ! so that the weight, <pz>, <pz**2> and <pt**2> of every bin are
+   ! preserved.  The mean recoil energy of a sum of independent
+   ! momenta depends only on these moments and is therefore kept
+   ! exactly; the shape changes only within the bins.  The m output
+   ! nodes (m <= cvmx) are normalized to unit weight; m=0 if the total
+   ! weight is zero.
+   ! (DLA, IAEA, Oct 2026)
+   !-------------------------------------------------------------------
+   ! externals
+   integer::n,m
+   real(kr)::z(*),t(*),w(*),cz(*),ct(*),cw(*)
+   ! internals
+   integer::i,iz,it,k
+   real(kr)::zmin,zmax,tmax,dz,dt,ws
+   real(kr)::bw(cvnb*cvnb),bz(cvnb*cvnb),bz2(cvnb*cvnb),bt2(cvnb*cvnb)
+   real(kr),parameter::zero=0
+   m=0
+   if (n.le.0) return
+   zmin=z(1)
+   zmax=z(1)
+   tmax=t(1)
+   do i=2,n
+      zmin=min(zmin,z(i))
+      zmax=max(zmax,z(i))
+      tmax=max(tmax,t(i))
+   enddo
+   dz=zmax-zmin
+   dt=tmax
+   bw=0
+   bz=0
+   bz2=0
+   bt2=0
+   do i=1,n
+      if (w(i).le.zero) cycle
+      iz=1
+      if (dz.gt.zero) iz=min(int(max(z(i)-zmin,zero)/dz*cvnb),cvnb-1)+1
+      it=1
+      if (dt.gt.zero) it=min(int(max(t(i),zero)/dt*cvnb),cvnb-1)+1
+      k=(iz-1)*cvnb+it
+      bw(k)=bw(k)+w(i)
+      bz(k)=bz(k)+w(i)*z(i)
+      bz2(k)=bz2(k)+w(i)*z(i)*z(i)
+      bt2(k)=bt2(k)+w(i)*t(i)*t(i)
+   enddo
+   ws=0
+   do k=1,cvnb*cvnb
+      ws=ws+bw(k)
+   enddo
+   if (ws.le.zero) return
+   call cvemit(bw,bz,bz2,bt2,ws,m,cz,ct,cw)
+   return
+   end subroutine cvcmp
+
+   subroutine cvemit(bw,bz,bz2,bt2,ws,m,cz,ct,cw)
+   !-------------------------------------------------------------------
+   ! Nodes of the bins of cvcmp and cvdam: for each bin
+   ! with weight W>0, <pz>-sigma and <pz>+sigma with W/2 each (one
+   ! node with W if sigma=0) and pt=sqrt(<pt**2>); weights divided by
+   ! the total ws.
+   ! (DLA, IAEA, Oct 2026)
+   !-------------------------------------------------------------------
+   ! externals
+   integer::m
+   real(kr)::bw(*),bz(*),bz2(*),bt2(*),ws,cz(*),ct(*),cw(*)
+   ! internals
+   integer::k
+   real(kr)::av,sg,tt
+   real(kr),parameter::zero=0
+   m=0
+   do k=1,cvnb*cvnb
+      if (bw(k).le.zero) cycle
+      av=bz(k)/bw(k)
+      sg=sqrt(max(bz2(k)/bw(k)-av*av,zero))
+      tt=sqrt(max(bt2(k)/bw(k),zero))
+      if (sg.gt.zero) then
+         m=m+1
+         cz(m)=av-sg
+         ct(m)=tt
+         cw(m)=bw(k)/(2*ws)
+         m=m+1
+         cz(m)=av+sg
+         ct(m)=tt
+         cw(m)=bw(k)/(2*ws)
+      else
+         m=m+1
+         cz(m)=av
+         ct(m)=tt
+         cw(m)=bw(k)/ws
+      endif
+   enddo
+   return
+   end subroutine cvemit
+
+   subroutine cvdam(nset,ns,io,cz,ct,cw,p0,zr,ar,zl,al,d,erm)
+   !-------------------------------------------------------------------
+   ! Mean damage energy of the residual nucleus after the
+   ! independent emission of nset particles, each with an axially
+   ! symmetric laboratory momentum distribution given by compressed
+   ! nodes (set k: ns(k) nodes from position io(k)+1 of cz, ct, cw,
+   ! unit total weight; the same set may be given several times for
+   ! identical particles):
+   !    er = |p0 z - sum_k p_k|**2/(2 ar),  d = <df(er;zr,ar,zl,al)>,
+   !    erm = <er>,
+   ! p0=sqrt(2 e), momenta in units sqrt(neutron mass * eV).
+   ! The momenta are added one at a time.  For the sum S of the first
+   ! k-1 momenta and p_k with relative azimuth phi,
+   !    pz = Sz + pkz,  pt = sqrt(St**2 + pkt**2 + 2 St pkt cos(phi)),
+   ! phi at the cvnphi midpoints of (0,pi) (equal weights; the
+   ! integrand is periodic and even in phi, so the rule is exact for
+   ! cos(n phi) up to n = 2 cvnphi-1).  For k < nset the sum is
+   ! compressed again with the bins of cvcmp (moments kept); the last
+   ! momentum is integrated directly.  nset=1 gives the exact
+   ! one-particle value of the nodes.
+   ! (DLA, IAEA, Oct 2026)
+   !-------------------------------------------------------------------
+   ! externals
+   integer::nset,ns(*),io(*)
+   real(kr)::cz(*),ct(*),cw(*),p0,zr,ar,zl,al,d,erm
+   ! internals
+   integer::i,j,l,k,n,m,iz,it,kb
+   real(kr)::sz(cvmx),st(cvmx),sw(cvmx),cs(cvnphi)
+   real(kr)::bw(cvnb*cvnb),bz(cvnb*cvnb),bz2(cvnb*cvnb),bt2(cvnb*cvnb)
+   real(kr)::zmin,zmax,tmax,dz,dt,x,y,a,b,ww,er,dum,ws
+   real(kr),parameter::zero=0
+   real(kr),parameter::pi=3.14159265358979323846e0_kr
+   d=0
+   erm=0
+   if (nset.le.0.or.ar.le.zero) return
+   dum=df(zero,zr,ar,zl,al)
+   if (nset.eq.1) then
+      do i=io(1)+1,io(1)+ns(1)
+         er=((p0-cz(i))**2+ct(i)**2)/(2*ar)
+         d=d+cw(i)*df(er,zr,ar,zl,al)
+         erm=erm+cw(i)*er
+      enddo
+      return
+   endif
+   do l=1,cvnphi
+      cs(l)=cos((l-0.5e0_kr)*pi/cvnphi)
+   enddo
+   n=ns(1)
+   do i=1,n
+      sz(i)=cz(io(1)+i)
+      st(i)=ct(io(1)+i)
+      sw(i)=cw(io(1)+i)
+   enddo
+   do k=2,nset-1
+      zmin=sz(1)
+      zmax=sz(1)
+      tmax=st(1)
+      do i=2,n
+         zmin=min(zmin,sz(i))
+         zmax=max(zmax,sz(i))
+         tmax=max(tmax,st(i))
+      enddo
+      a=cz(io(k)+1)
+      b=cz(io(k)+1)
+      y=ct(io(k)+1)
+      do j=io(k)+2,io(k)+ns(k)
+         a=min(a,cz(j))
+         b=max(b,cz(j))
+         y=max(y,ct(j))
+      enddo
+      zmin=zmin+a
+      zmax=zmax+b
+      tmax=tmax+y
+      dz=zmax-zmin
+      dt=tmax
+      bw=0
+      bz=0
+      bz2=0
+      bt2=0
+      do i=1,n
+         do j=io(k)+1,io(k)+ns(k)
+            ww=sw(i)*cw(j)/cvnphi
+            x=sz(i)+cz(j)
+            iz=1
+            if (dz.gt.zero) iz=min(int(max(x-zmin,zero)/dz*cvnb),cvnb-1)+1
+            a=st(i)**2+ct(j)**2
+            b=2*st(i)*ct(j)
+            do l=1,cvnphi
+               y=sqrt(max(a+b*cs(l),zero))
+               it=1
+               if (dt.gt.zero) it=min(int(y/dt*cvnb),cvnb-1)+1
+               kb=(iz-1)*cvnb+it
+               bw(kb)=bw(kb)+ww
+               bz(kb)=bz(kb)+ww*x
+               bz2(kb)=bz2(kb)+ww*x*x
+               bt2(kb)=bt2(kb)+ww*y*y
+            enddo
+         enddo
+      enddo
+      ws=0
+      do kb=1,cvnb*cvnb
+         ws=ws+bw(kb)
+      enddo
+      if (ws.le.zero) return
+      call cvemit(bw,bz,bz2,bt2,ws,m,sz,st,sw)
+      n=m
+   enddo
+   k=nset
+   do i=1,n
+      do j=io(k)+1,io(k)+ns(k)
+         x=p0-sz(i)-cz(j)
+         a=x*x+st(i)**2+ct(j)**2
+         b=2*st(i)*ct(j)
+         ww=sw(i)*cw(j)/cvnphi
+         do l=1,cvnphi
+            er=(a+b*cs(l))/(2*ar)
+            if (er.lt.zero) er=0
+            d=d+ww*df(er,zr,ar,zl,al)
+            erm=erm+ww*er
+         enddo
+      enddo
+   enddo
+   return
+   end subroutine cvdam
+
+   subroutine dirnod(e,ep,awr,wt)
+   !-------------------------------------------------------------------
+   ! Laboratory momentum nodes of one neutron emitted with
+   ! laboratory energy ep (File 5 energies are laboratory energies) at
+   ! incident energy e, with the File 4 angular distribution stored by
+   ! anitab, added to the fine-node buffer with total weight wt.
+   !   no File 4 (n4e=0): isotropic in the laboratory (as tdfn).
+   !   LCT=1: pz=v mu, pt=v sqrt(1-mu**2) at the nodes mu4 (weights
+   !      w4), v=sqrt(2 ep).
+   !   LCT=2: cm cosines mu_c at fixed laboratory speed v (as anipz),
+   !      V=sqrt(2e)/(awr+1): for v >= V, u=-V mu_c+sqrt(v**2-V**2
+   !      (1-mu_c**2)), pz=V+u mu_c, pt=u sqrt(1-mu_c**2), weights w4;
+   !      for v < V, the two branches u=-V mu_c -+ sqrt(...) on
+   !      mu_c < -sqrt(1-v**2/V**2) (64-point rule), renormalized.
+   ! Between the incident energies of File 4 the node sets of the two
+   ! tables are mixed with the weight of the File 4 law in e (law 1:
+   ! lower table; laws 2 and 4: linear in e; laws 3 and 5: linear in
+   ! ln e), i.e. the distribution is interpolated (anipz interpolated
+   ! <pz> with the law).  Below the first energy the distribution is
+   ! isotropic in the frame of the data, as in anipz.  Negative values
+   ! of a Legendre distribution are set to zero (the weights of each
+   ! table are renormalized to unit area).
+   ! (DLA, IAEA, Oct 2026)
+   !-------------------------------------------------------------------
+   ! externals
+   real(kr)::e,ep,awr,wt
+   ! internals
+   integer::k,nk,ik,lw,kk(2),iq
+   real(kr)::wk(2),v,vl,t
+   real(kr),parameter::zero=0
+   real(kr),parameter::small=1.e-10_kr
+   if (wt.le.zero) return
+   vl=sqrt(2*max(ep,zero))
+   if (vl.le.zero) then
+      call fnadd(zero,zero,wt)
+      return
+   endif
+   v=sqrt(2*e)/(awr+1)
+   if (n4e.le.0) then
+      call isolab
+      return
+   endif
+   nk=1
+   wk(1)=1
+   if (iso4.eq.1) then
+      kk(1)=1
+   else if (e.lt.e4(1)*(1-small)) then
+      if (lct4.ne.2) then
+         call isolab
+         return
+      endif
+      kk(1)=0
+   else if (e.ge.e4(n4e)) then
+      kk(1)=n4e
+   else
+      kk(1)=n4e
+      do k=1,n4e-1
+         if (e.ge.e4(k).and.e.lt.e4(k+1)) then
+            lw=law4(k)
+            t=(e-e4(k))/(e4(k+1)-e4(k))
+            if ((lw.eq.3.or.lw.eq.5).and.e4(k).gt.zero)&
+              t=log(e/e4(k))/log(e4(k+1)/e4(k))
+            if (lw.eq.1) t=0
+            kk(1)=k
+            wk(1)=1-t
+            if (t.gt.zero) then
+               nk=2
+               kk(2)=k+1
+               wk(2)=t
+            endif
+            exit
+         endif
+      enddo
+   endif
+   do ik=1,nk
+      if (wk(ik).gt.zero) call add1(kk(ik),wt*wk(ik))
+   enddo
+   return
+   contains
+      subroutine isolab
+      ! isotropic in the laboratory (64-point rule) (DLA, IAEA)
+      real(kr)::mu
+      do iq=1,64
+         mu=g64x(iq)
+         call fnadd(vl*mu,vl*sqrt(max(1-mu*mu,zero)),wt*g64w(iq)/2)
+      enddo
+      end subroutine isolab
+      subroutine add1(kq,wa)
+      ! nodes of the table kq (0: isotropic cm) with total weight wa (DLA, IAEA)
+      integer::kq,is
+      real(kr)::wa,mu,u,r,ms,a,b,w,g,sp
+      if (lct4.eq.1) then
+         sp=0
+         do iq=k4o(kq),k4o(kq)+k4n(kq)-1
+            if (w4(iq).gt.zero) sp=sp+w4(iq)
+         enddo
+         if (sp.le.zero) return
+         do iq=k4o(kq),k4o(kq)+k4n(kq)-1
+            mu=mu4(iq)
+            call fnadd(vl*mu,vl*sqrt(max(1-mu*mu,zero)),wa*w4(iq)/sp)
+         enddo
+      else if (vl.ge.v) then
+         if (kq.eq.0) then
+            do iq=1,64
+               mu=g64x(iq)
+               u=-v*mu+sqrt(max(vl*vl-v*v*(1-mu*mu),zero))
+               call fnadd(v+u*mu,u*sqrt(max(1-mu*mu,zero)),wa*g64w(iq)/2)
+            enddo
+         else
+            sp=0
+            do iq=k4o(kq),k4o(kq)+k4n(kq)-1
+               if (w4(iq).gt.zero) sp=sp+w4(iq)
+            enddo
+            if (sp.le.zero) return
+            do iq=k4o(kq),k4o(kq)+k4n(kq)-1
+               mu=mu4(iq)
+               u=-v*mu+sqrt(max(vl*vl-v*v*(1-mu*mu),zero))
+               call fnadd(v+u*mu,u*sqrt(max(1-mu*mu,zero)),wa*w4(iq)/sp)
+            enddo
+         endif
+      else
+         ! v < V: backward cone, two branches, renormalized
+         ms=-sqrt(1-(vl/v)**2)
+         a=(ms-1)/2
+         b=(ms+1)/2
+         sp=0
+         do iq=1,64
+            mu=b*g64x(iq)+a
+            g=max(gcm4(kq,mu),zero)
+            sp=sp+2*b*g64w(iq)*g
+         enddo
+         if (sp.le.zero) return
+         do iq=1,64
+            mu=b*g64x(iq)+a
+            w=b*g64w(iq)*max(gcm4(kq,mu),zero)/sp
+            r=sqrt(max(vl*vl-v*v*(1-mu*mu),zero))
+            do is=1,2
+               u=-v*mu+r
+               if (is.eq.2) u=-v*mu-r
+               call fnadd(v+u*mu,abs(u)*sqrt(max(1-mu*mu,zero)),wa*w)
+            enddo
+         enddo
+      endif
+      end subroutine add1
+   end subroutine dirnod
+
+   real(kr) function gcm4(kk,mu)
+   !-------------------------------------------------------------------
+   ! Normalized File 4 distribution stored by anitab at energy index kk
+   ! (0: isotropic), at the cosine mu (moved out of anipz,
+   ! where it was the internal function gcm, to be used by dirnod).
+   ! (DLA, IAEA, Oct 2026)
+   !-------------------------------------------------------------------
+   use mathm ! provides legndr
+   use endf  ! provides terp1
+   ! externals
+   integer::kk
+   real(kr)::mu
+   ! internals
+   integer::il,j,lw,jo
+   real(kr)::p(66),x1,x2,y1,y2,y
+   real(kr),parameter::zero=0
+   gcm4=0.5_kr
+   if (kk.eq.0) return
+   if (kind4(kk).eq.0) return
+   if (kind4(kk).eq.1) then
+      call legndr(mu,p,max(r4n(kk),1))
+      gcm4=0.5_kr
+      do il=1,r4n(kk)
+         gcm4=gcm4+(2*il+1)*rp4(r4o(kk)+il-1)*p(il+1)/2
+      enddo
+   else
+      gcm4=0
+      jo=r4o(kk)
+      do j=2,r4n(kk)
+         x1=rp4(jo+2*(j-2))
+         y1=rp4(jo+2*(j-2)+1)
+         x2=rp4(jo+2*(j-1))
+         y2=rp4(jo+2*(j-1)+1)
+         if (mu.ge.x1.and.mu.le.x2.and.x2.gt.x1) then
+            lw=lp4((jo+2*(j-1)+1)/2)
+            if ((lw.eq.4.or.lw.eq.5).and.(y1.le.zero.or.y2.le.zero)) lw=2
+            if ((lw.eq.3.or.lw.eq.5).and.x1.le.zero) lw=2
+            call terp1(x1,y1,x2,y2,mu,y,lw)
+            gcm4=y
+            exit
+         endif
+      enddo
+   endif
+   if (s4(kk).gt.zero) gcm4=gcm4/s4(kk)
+   return
+   end function gcm4
+
+   subroutine anitab(nin,matd,mtd)
+   !-------------------------------------------------------------------
+   ! Read the File 4 angular distribution of reaction mtd (neutron-
+   ! only reaction given with Files 4 and 5) and store, for each
+   ! incident energy, a quadrature of the normalized distribution
+   ! in mu (nodes mu4, weights w4 = quadrature weight * f(mu)) and
+   ! its mean cosine f14, in the frame of the data (lct4).
+   !   LTT=1 (Legendre): 64-point Gauss rule on (-1,1); the
+   !         distribution f(mu)=1/2+sum (2l+1)/2 a_l P_l(mu) is
+   !         used as given (no truncation of negative values), so that
+   !         f14 = a_1 exactly.
+   !   LTT=2 (tabulated): 4-point Gauss rule in each panel of the
+   !         table, f(mu) from the panel interpolation law (exact
+   !         moments for histogram and linear panels).
+   !   LTT=3: both representations, Legendre below and tables above
+   !         the transition energy.
+   !   LTT=0 or LI=1: isotropic; nothing is stored for LCT=1 (no
+   !         correction); for LCT=2 one isotropic set is stored.
+   ! The incident-energy interpolation law of the TAB2 records is kept
+   ! (law4).  Below the first incident energy the distribution is
+   ! isotropic in the frame of the data (as in hgtfle).
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   use endf ! provides findf,contio,listio,tab1io,tab2io,moreio,terp1
+   use util ! provides error
+   use mathm ! provides legndr
+   ! externals
+   integer::nin,matd,mtd
+   ! internals
+   integer::i,found,nb,nw,lvt,ltt,li,nseg,iseg,kind,ne,ie,l,nl,nr1,np1
+   integer::ib,iq,j,lw,il,nr2,kk,ii,krp
+   integer,parameter::nbmax=400000,nemax=5000,nkmax=500000,nrmx=50
+   integer::nbt2(nrmx),int2(nrmx)
+   real(kr),dimension(:),allocatable::b
+   real(kr)::p(66),en,x1,x2,y1,y2,xm,ym,s,pdf
+   real(kr),dimension(4),parameter::q4x=(/&
+      -.861136312e0_kr,-.339981044e0_kr,.339981044e0_kr,.861136312e0_kr/)
+   real(kr),dimension(4),parameter::q4w=(/&
+      .347854845e0_kr,.652145155e0_kr,.652145155e0_kr,.347854845e0_kr/)
+   real(kr),parameter::zero=0
+
+   n4e=0
+   iso4=0
+   lct4=1
+   found=0
+   do i=1,n4mt
+      if (mt4l(i).eq.mtd) found=1
+   enddo
+   if (found.eq.0) return
+   if (.not.allocated(e4)) then
+      allocate(e4(nemax),f14(nemax),law4(nemax),k4o(nemax),k4n(nemax))
+      allocate(mu4(nkmax),w4(nkmax))
+      allocate(s4(nemax),kind4(nemax),r4o(nemax),r4n(nemax))
+      allocate(rp4(nkmax),lp4(nkmax))
+   endif
+   allocate(b(nbmax))
+   call findf(matd,4,mtd,nin)
+   call contio(nin,0,0,b,nb,nw)
+   lvt=nint(b(3))
+   ltt=nint(b(4))
+   if (lvt.eq.0) then
+      call contio(nin,0,0,b,nb,nw)
+   else
+      call listio(nin,0,0,b,nb,nw)
+      l=1
+      do while (nb.ne.0)
+         l=l+nw
+         call moreio(nin,0,0,b(l),nb,nw)
+      enddo
+   endif
+   li=nint(b(3))
+   lct4=nint(b(4))
+   if (lct4.ne.1) lct4=2
+   kk=0
+   krp=0
+   ! isotropic distribution
+   if (ltt.eq.0.or.li.eq.1) then
+      if (lct4.eq.2) then
+         iso4=1
+         n4e=1
+         e4(1)=0
+         law4(1)=2
+         k4o(1)=1
+         k4n(1)=64
+         kind4(1)=0
+         s4(1)=1
+         do iq=1,64
+            mu4(iq)=g64x(iq)
+            w4(iq)=g64w(iq)/2
+         enddo
+         f14(1)=0
+      endif
+      deallocate(b)
+      return
+   endif
+   nseg=1
+   if (ltt.eq.3) nseg=2
+   do iseg=1,nseg
+      kind=ltt
+      if (ltt.eq.3) kind=iseg
+      call tab2io(nin,0,0,b,nb,nw)
+      nr2=nint(b(5))
+      ne=nint(b(6))
+      if (nr2.gt.nrmx) call error('anitab','too many interpolation ranges',' ')
+      do j=1,nr2
+         nbt2(j)=nint(b(5+2*j))
+         int2(j)=nint(b(6+2*j))
+      enddo
+      do ie=1,ne
+         l=1
+         if (kind.eq.1) then
+            call listio(nin,0,0,b(l),nb,nw)
+         else
+            call tab1io(nin,0,0,b(l),nb,nw)
+         endif
+         do while (nb.ne.0)
+            l=l+nw
+            if (l.gt.nbmax-1000) call error('anitab','storage exceeded',' ')
+            call moreio(nin,0,0,b(l),nb,nw)
+         enddo
+         en=b(2)
+         n4e=n4e+1
+         if (n4e.gt.nemax) call error('anitab','too many energies',' ')
+         e4(n4e)=en
+         ! interpolation law from this energy to the next one
+         lw=int2(nr2)
+         do j=nr2,1,-1
+            if (ie+1.le.nbt2(j)) lw=int2(j)
+         enddo
+         law4(n4e)=lw
+         k4o(n4e)=kk+1
+         if (kind.eq.1) then
+            ! Legendre coefficients a_1..a_nl in b(7..6+nl)
+            nl=min(nint(b(5)),64)
+            kind4(n4e)=1
+            r4o(n4e)=krp+1
+            r4n(n4e)=nl
+            do il=1,nl
+               krp=krp+1
+               if (krp.gt.nkmax) call error('anitab','too many coefficients',' ')
+               rp4(krp)=b(6+il)
+            enddo
+            do iq=1,64
+               call legndr(g64x(iq),p,max(nl,1))
+               pdf=0.5_kr
+               do il=1,nl
+                  pdf=pdf+(2*il+1)*b(6+il)*p(il+1)/2
+               enddo
+               kk=kk+1
+               if (kk.gt.nkmax) call error('anitab','too many nodes',' ')
+               mu4(kk)=g64x(iq)
+               w4(kk)=g64w(iq)*pdf
+            enddo
+         else
+            ! tabulated f(mu): panels with their interpolation law
+            nr1=nint(b(5))
+            np1=nint(b(6))
+            ib=7+2*nr1
+            kind4(n4e)=2
+            r4o(n4e)=krp+1
+            r4n(n4e)=np1
+            ii=1
+            do j=1,np1
+               do while (j.gt.nint(b(5+2*ii)).and.ii.lt.nr1)
+                  ii=ii+1
+               enddo
+               krp=krp+2
+               if (krp.gt.nkmax) call error('anitab','too many points',' ')
+               rp4(krp-1)=b(ib+2*(j-1))
+               rp4(krp)=b(ib+2*(j-1)+1)
+               ! law of the panel (j-1,j) stored at point j
+               lp4(krp/2)=nint(b(6+2*ii))
+            enddo
+            ii=1
+            do j=1,np1-1
+               do while (j+1.gt.nint(b(5+2*ii)).and.ii.lt.nr1)
+                  ii=ii+1
+               enddo
+               lw=nint(b(6+2*ii))
+               x1=b(ib+2*(j-1))
+               y1=b(ib+2*(j-1)+1)
+               x2=b(ib+2*j)
+               y2=b(ib+2*j+1)
+               if (x2.le.x1) cycle
+               if ((lw.eq.4.or.lw.eq.5).and.(y1.le.zero.or.y2.le.zero)) lw=2
+               if ((lw.eq.3.or.lw.eq.5).and.x1.le.zero) lw=2
+               do iq=1,4
+                  xm=(x1+x2)/2+(x2-x1)/2*q4x(iq)
+                  call terp1(x1,y1,x2,y2,xm,ym,lw)
+                  kk=kk+1
+                  if (kk.gt.nkmax) call error('anitab','too many nodes',' ')
+                  mu4(kk)=xm
+                  w4(kk)=q4w(iq)*(x2-x1)/2*ym
+               enddo
+            enddo
+         endif
+         k4n(n4e)=kk-k4o(n4e)+1
+         ! normalize and mean cosine
+         s=0
+         do iq=k4o(n4e),kk
+            s=s+w4(iq)
+         enddo
+         s4(n4e)=s
+         f14(n4e)=0
+         if (s.gt.zero) then
+            do iq=k4o(n4e),kk
+               w4(iq)=w4(iq)/s
+               f14(n4e)=f14(n4e)+w4(iq)*mu4(iq)
+            enddo
+         endif
+      enddo
+   enddo
+   deallocate(b)
+   return
+   end subroutine anitab
+
+   real(kr) function anipz(e,ep,awr)
+   !-------------------------------------------------------------------
+   ! Mean laboratory momentum along the incident direction of one
+   ! neutron emitted with laboratory energy ep (File 5 energies are
+   ! always laboratory energies) and the File 4 angular distribution
+   ! stored by anitab, for incident energy e (neutron mass units).
+   !   LCT=1: pz = sqrt(2 ep) <mu>.
+   !   LCT=2: the File 4 distribution g(mu_c) is in the centre of mass.
+   !   At fixed laboratory speed v=sqrt(2 ep) the laboratory cosine
+   !   mu_L and the CM cosine are related by the velocity addition
+   !   v n_L = V z + u n_c (V=sqrt(2e)/(awr+1)):
+   !      u = sqrt(v**2+V**2-2 v V mu_L), mu_c = (v mu_L - V)/u,
+   !   and the laboratory distribution is g_L(mu_L) = g(mu_c) J,
+   !   J = d mu_c/d mu_L = v**2 (v - V mu_L)/u**3 (Jacobian at fixed
+   !   laboratory energy).  <pz> = v int mu_L g_L d mu_L / int g_L.
+   !   v >= V: mu_c covers (-1,1) once and the integral is done in the
+   !      variable mu_c (same result, no singularity at v=V):
+   !      <pz> = int g(mu_c) (V + u mu_c) d mu_c,
+   !      u = -V mu_c + sqrt(v**2 - V**2 (1-mu_c**2)).
+   !   v < V: only mu_c < -sqrt(1-v**2/V**2) is reachable, twice (two
+   !      laboratory directions); g_L is renormalized to unit area:
+   !      <pz> = sum(+,-) int g (V + u(+,-) mu_c) d mu_c /
+   !             (2 int g d mu_c), on (-1, -sqrt(1-v**2/V**2)).
+   ! The result is interpolated between incident energies with the
+   ! File 4 law (moments are linear in the distribution).
+   ! (DLA, IAEA)
+   !-------------------------------------------------------------------
+   use endf ! provides terp1
+   use mathm ! provides legndr
+   ! externals
+   real(kr)::e,ep,awr
+   ! internals
+   integer::k,lw
+   real(kr)::v,vl,p1,p2
+   real(kr),parameter::small=1.e-10_kr
+   real(kr),parameter::zero=0
+   anipz=0
+   if (n4e.le.0) return
+   vl=sqrt(2*max(ep,zero))
+   v=sqrt(2*e)/(awr+1)
+   if (iso4.eq.1) then
+      anipz=pzk(1)
+      return
+   endif
+   if (e.lt.e4(1)*(1-small)) then
+      if (lct4.eq.2) anipz=pzk(0)
+      return
+   endif
+   if (e.ge.e4(n4e)) then
+      anipz=pzk(n4e)
+      return
+   endif
+   do k=1,n4e-1
+      if (e.ge.e4(k).and.e.lt.e4(k+1)) then
+         p1=pzk(k)
+         p2=pzk(k+1)
+         lw=law4(k)
+         if ((lw.eq.4.or.lw.eq.5).and.p1*p2.le.zero) lw=lw-2
+         call terp1(e4(k),p1,e4(k+1),p2,e,anipz,lw)
+         return
+      endif
+   enddo
+   anipz=pzk(n4e)
+   return
+   contains
+      real(kr) function pzk(kk)
+      ! kk=0: isotropic CM distribution (below the first energy)
+      integer::kk,iq,is
+      real(kr)::u,mu,r,ms,a,b,w,g,sn,sg
+      if (lct4.eq.1) then
+         pzk=vl*f14(kk)
+         return
+      endif
+      pzk=0
+      if (vl.ge.v) then
+         if (kk.eq.0) then
+            do iq=1,64
+               mu=g64x(iq)
+               u=-v*mu+sqrt(max(vl*vl-v*v*(1-mu*mu),zero))
+               pzk=pzk+g64w(iq)/2*(v+u*mu)
+            enddo
+         else
+            do iq=k4o(kk),k4o(kk)+k4n(kk)-1
+               mu=mu4(iq)
+               u=-v*mu+sqrt(max(vl*vl-v*v*(1-mu*mu),zero))
+               pzk=pzk+w4(iq)*(v+u*mu)
+            enddo
+         endif
+      else
+         ! v < V: backward cone, two branches, renormalized
+         if (vl.le.zero) return
+         ms=-sqrt(1-(vl/v)**2)
+         a=(ms-1)/2
+         b=(ms+1)/2
+         sn=0
+         sg=0
+         do iq=1,64
+            mu=b*g64x(iq)+a
+            w=b*g64w(iq)
+            g=gcm4(kk,mu)
+            r=sqrt(max(vl*vl-v*v*(1-mu*mu),zero))
+            do is=1,2
+               u=-v*mu+r
+               if (is.eq.2) u=-v*mu-r
+               sn=sn+w*g*(v+u*mu)
+               sg=sg+w*g
+            enddo
+         enddo
+         if (sg.gt.zero) pzk=sn/sg
+      endif
+      end function pzk
+   end function anipz
+
    subroutine sixbar(e,ebar,yld,dame,nin,c,ncmax,nscr,b,nbmax,&
      n2,j6,irec,jrec,iflag)
    !-------------------------------------------------------------------
@@ -2971,6 +7741,7 @@ contains
    integer::ip,ir,idisc,iraw,nne,ne,law,lang,lep,intl
    real(kr)::disc102,zp,zt,ap,at,ztt,pe,eihi,f,d,s,enext
    real(kr)::elo,ehi,flo,fhi,dlo,dhi
+   real(kr)::yph,en102
    character(60)::strng
    real(kr),parameter::small=1.e-10_kr
    real(kr),parameter::emax=1.e10_kr
@@ -2978,10 +7749,36 @@ contains
    save iraw,nne,ne,law,lang,lep,intl
    save elo,ehi,flo,fhi,dlo,dhi
    save disc102,zp,ap,zt,at
+   ! done6 is false while tables of the current subsection
+   ! remain unread (energy grid of the pendf tape ends below the last
+   ! incident energy of the subsection) (DLA, IAEA, 6 Oct 2026)
+   logical,save::done6=.true.
 
    !--initialize for this subsection when e=0.
    if (e.gt.zero) go to 300
-   if (irec.eq.0) go to 110
+   if (irec.eq.0) then
+      if (.not.done6.and.j6.gt.1) then
+         ! the previous subsection was not read to its
+         ! end; position the tape at the start of subsection j6 (the
+         ! LANL code read the next subsection from the wrong place:
+         ! zap=0, law=0 and a fortran read error, e.g. JENDL-5 N-14)
+         ! (DLA, IAEA, Oct 2026)
+         call findf(math,6,mth,nin)
+         l=1
+         call contio(nin,0,0,c(l),nb,nw)
+         do ik=1,j6-1
+            call tab1io(nin,0,0,c(l),nb,nw)
+            do while (nb.ne.0)
+               call moreio(nin,0,0,c(l),nb,nw)
+            enddo
+            law=l2h
+            call skip6(nin,0,0,c(l),law)
+         enddo
+      endif
+      done6=.true.
+      go to 110
+   endif
+   done6=.true.
    if (jrec.gt.0) irec=jrec
 
    !--for recoils, back up to the driving particle,
@@ -3040,6 +7837,17 @@ contains
    endif
    ebar=0
    yld=0
+
+   !--File 6 capture recoil rejected by the kinematic check
+   !--in hinit; the photon-momentum recoil (mt6no) is used instead
+   ! (DLA, IAEA, 5 Oct 2026)
+   if (mth.eq.102.and.irec.eq.0.and.zap.gt.zero.and.i6g.gt.0) then
+      if (mt6bad(i6g).eq.j6) then
+         call skip6(nin,0,0,c(l),law)
+         ebar=-2
+         return
+      endif
+   endif
    if (law.gt.0) go to 150
 
    !--warning for law=0.
@@ -3138,11 +7946,23 @@ contains
 
    !--compute low values of ebar and dame
   290 continue
-   if (mth.ne.102.or.(zap.eq.0.and.irec.eq.0)) then
+   done6=(nne.ge.ne)
+   if (mth.ne.102.or.irec.eq.0) then
       call getsix(elo,flo,dlo,c(iraw),law,lang,lep,irec)
    else
       ztt=int(zat/1000)
       call tabsq6(flo,dlo,c(iraw),law,ztt,awrt,elo,c(1))
+   endif
+   ! subsection with only one incident energy (NE=1); the
+   ! LANL code read the next record as a second table.  The single
+   ! table is used at all incident energies. (DLA, IAEA, Oct 2026)
+   if (ne.eq.1) then
+      write(strng,'(''mt'',i3,'' particle '',i6,'' has NE=1'')')&
+        mth,nint(zap)
+      call mess('sixbar',strng,'the only table is used at all energies')
+      ehi=emax
+      fhi=flo
+      dhi=dlo
    endif
    if ((mth.ge.18.and.mth.le.21).or.mth.eq.38) then
       matd=math
@@ -3165,6 +7985,7 @@ contains
   300 continue
    !--discrete relativistic capture gamma (mf6/mt102)
    !--treatment for H-1 in ENDF/B-VII.0, ENDF/B-VII.1 and ENDF/B-VIII.0
+   ! (DLA, IAEA)
    if (disc102.gt.zero) go to 430
 
    !--interpolate for particle yield
@@ -3224,9 +8045,10 @@ contains
       ehi=c(iraw+1)
       nne=nne+1
    endif
+   done6=(nne.ge.ne)
 
    !--compute high values of ebar and dame
-   if (mth.ne.102.or.(zap.eq.0.and.irec.eq.0)) then
+   if (mth.ne.102.or.irec.eq.0) then
       call getsix(ehi,fhi,dhi,c(iraw),law,lang,lep,irec)
    else
       ztt=int(zat/1000)
@@ -3246,8 +8068,15 @@ contains
 
    !--yes. interpolate for results
   420 continue
-   if (nne.eq.1) go to 450
-   call terp1(elo,flo,ehi,fhi,e,s,intl)
+   if (nne.eq.1.and.ne.gt.1) go to 450
+   ! below the first incident energy of the subsection the
+   ! values of the first table are used (the LANL code extrapolated
+   ! linearly, with possible negative values) (DLA, IAEA, Oct 2026)
+   if (e.lt.elo) then
+      s=flo
+   else
+      call terp1(elo,flo,ehi,fhi,e,s,intl)
+   endif
    ebar=s
    yld=pe
    if ((mth.ge.18.and.mth.le.21).or.mth.eq.38) then
@@ -3256,7 +8085,31 @@ contains
       mt1=452
       call hgtyld(e,enext,idis,yld,matd,mf1,mt1,nscr,b,nbmax)
    endif
-   call terp1(elo,dlo,ehi,dhi,e,d,intl)
+   if (e.lt.elo) then
+      d=dlo
+   else
+      call terp1(elo,dlo,ehi,dhi,e,d,intl)
+   endif
+   if (mth.eq.102.and.irec.gt.0) then
+      ! capture recoil from the photon momentum (File 6):
+      ! add the neutron kick at the actual incident energy (manual
+      ! eq. 210-211); s=yield*<eg**2>/(2Mc**2),
+      ! d=yield*<D(eg**2/(2Mc**2))>; one photon: D(neutron + photon kick)
+      ! (DLA, IAEA, 5 Oct 2026)
+      ip=2
+      ir=1
+      call terpa(yph,e,enext,idisc,c(1),ip,ir)
+      en102=e/(awr+1)
+      if (yph.le.ysing) then
+         d=df(en102+s,zt,awr+1,zt,awr)
+      else
+         d=df(en102,zt,awr+1,zt,awr)+d
+      endif
+      ! the recoil energy (heating) also includes the
+      ! neutron kick, <er> = e/(a+1) + yield*<eg**2>/(2Mc**2)
+      ! (DLA, IAEA, Oct 2026)
+      ebar=en102+s
+   endif
    dame=pe*d
    return
 
@@ -3280,6 +8133,7 @@ contains
    ! numbers for the recoil due to a single emission of the particle.
    !-------------------------------------------------------------------
    use mathm ! provides legndr
+   use endf ! provides terp1 (DLA, IAEA, 19 Oct 2026)
    ! externals
    integer::law,lang,lep,irec
    real(kr)::e,ebar,dame,c(*)
@@ -3287,9 +8141,12 @@ contains
    integer::nl,l,i,nd,na,nep,ncyc,iq,ia,nld,il,nmu,imu
    integer::nr,np,next,ibase,iint
    real(kr)::zp,zt,ap,at,summ,epnext,el,fl,dy,da,xm
+   integer::ilab6
    real(kr)::epn,ym,test,en,f,f1,h,d,xl,yl,xx,yy,xxe
    real(kr)::x2,zpp,ztt,b,er,t1,t2,thresh,beta
    real(kr)::afact,arec,u,e2,ul,fn,dl,hl,f2
+   integer::lt6,it6,nsb,isb
+   real(kr)::xa,ya,xb,yb,sa,sb,fa,fb
    real(kr)::x(10),y(10,2)
    real(kr)::term(2)
    real(kr)::p(65)
@@ -3361,8 +8218,40 @@ contains
    if (law.eq.2.or.law.eq.3) go to 450
    if (law.eq.6) lang=0
 
+   !--one-particle recoil (irec>0) from cm data (law 1 in
+   !--the cm system, law 6): exact integration over the cm energy and
+   !--cosine of the emitted particle, with the lab recoil energy of each
+   !--(e',mu) pair.  The original code (below) integrated over the lab
+   !--energy with the mean lab cosine, i.e. D(E_R(<mu>)) instead of
+   !--<D(E_R(mu))>, which overestimates the damage (D is concave):
+   !--+1 to +10% for the mt91 recoil of Ti-48, V-51, Cu-63 at 5-20 MeV.
+   !--ebar (heating) is unchanged within the numerical accuracy.
+   ! (DLA, IAEA, Oct 2026)
+   if (irec.gt.0.and.(law.eq.1.or.law.eq.6)) then
+      ilab6=0
+      call rec6cm
+      return
+   endif
+
+   !--emitted product itself (irec=0) from cm data (law 1 in
+   !--the cm system, law 6): the same exact integration over the cm
+   !--energy and cosine, with the lab energy of the product for each
+   !--(e',w) pair, el = awp/2*(vc**2+u**2+2*vc*u*w), u=sqrt(2e'/awp).
+   !--The original adaptive integration over the lab energy (below,
+   !--no longer used) could skip the peak of narrow distributions:
+   !--errors of more than 10% at 11% of the table energies of the
+   !--residuals of Cr and Fe (e.g. ENDF/B-VIII.1 Fe-56 mt16 residual:
+   !--normalization 1.02, 1.07 and 0.29 at 19, 20 and 21 MeV).
+   ! (DLA, IAEA, Oct 2026)
+   if (irec.eq.0.and.(law.eq.1.or.law.eq.6)) then
+      ilab6=1
+      call rec6cm
+      return
+   endif
+
    !--law 1 in the cm system.
-   !--adaptive integration over lab energy.
+   !--adaptive integration over lab energy (original code; not reached
+   !--see rec6cm). (DLA, IAEA, Oct 2026)
    nl=1
    if (irec.gt.0) nl=2
    summ=0
@@ -3537,8 +8426,14 @@ contains
       ebar=afact*e*(1+2*beta*f1+beta*beta)
       if (idame.eq.0) return
       do iq=1,nq
+         ! f is the angular distribution of the emitted
+         ! particle, evaluated at the particle cm cosine u; the recoil
+         ! energy e2 uses the recoil cosine -u, i.e. f_R(-u)=f_p(u).
+         ! The original code changed the sign of u before computing f,
+         ! so the recoil was given the particle distribution itself
+         ! (forward-peaked scattering gave the damage of backward
+         ! scattering); ebar (heating) was correct. (DLA, IAEA, Oct 2026)
          u=qp(iq)
-         if (irec.gt.0) u=-u
          f=one/2
          if (law.ne.3) then
             call legndr(u,p,nld)
@@ -3546,8 +8441,61 @@ contains
                f=f+(2*il+1)*c(6+il)*p(il+1)/2
             enddo
          endif
+         if (irec.gt.0) u=-u
          e2=afact*e*(1+2*beta*u+beta*beta)
          dame=dame+qw(iq)*f*df(e2,zp,ap,zt,at)
+      enddo
+   else if (lang.ne.12) then
+      ! tabulated distribution with lang=11 (histogram) or 13-15:
+      ! integration with the law of the table (DLA, IAEA, 19 Oct 2026);
+      ! the trapezoidal rule below treated every table as lin-lin.
+      ! Each interval [x1,x2] of the emitted-particle cosine s is
+      ! divided in nsb pieces (1 for a histogram, the value f(x1) on
+      ! the whole interval; 16 for lang=13-15, f from terp1); the
+      ! recoil (irec>0) uses the cosine u=-s.
+      nmu=nint(c(6))
+      if (irec.gt.0) then
+         beta=arec*beta
+         afact=afact/arec
+      endif
+      lt6=lang-10
+      do imu=1,nmu-1
+         xa=c(5+2*imu)
+         ya=c(6+2*imu)
+         xb=c(7+2*imu)
+         yb=c(8+2*imu)
+         if (xb.le.xa) cycle
+         it6=lt6
+         if ((it6.eq.3.or.it6.eq.5).and.(xa.le.zero.or.xb.le.zero)) it6=2
+         if ((it6.eq.4.or.it6.eq.5).and.(ya.le.zero.or.yb.le.zero)) it6=2
+         if (it6.lt.1.or.it6.gt.5) it6=2
+         nsb=16
+         if (it6.le.2) nsb=1
+         do isb=1,nsb
+            sa=xa+(xb-xa)*(isb-1)/nsb
+            sb=xa+(xb-xa)*isb/nsb
+            if (it6.eq.1) then
+               fa=ya
+               fb=ya
+            else
+               fa=ya
+               if (isb.gt.1) call terp1(xa,ya,xb,yb,sa,fa,it6)
+               fb=yb
+               if (isb.lt.nsb) call terp1(xa,ya,xb,yb,sb,fb,it6)
+            endif
+            u=sa
+            if (irec.gt.0) u=-sa
+            e2=afact*e*(1+2*beta*u+beta*beta)
+            el=fa*e2
+            fl=fa*df(e2,zp,ap,zt,at)
+            u=sb
+            if (irec.gt.0) u=-sb
+            e2=afact*e*(1+2*beta*u+beta*beta)
+            en=fb*e2
+            fn=fb*df(e2,zp,ap,zt,at)
+            ebar=ebar+(sb-sa)*(en+el)/2
+            dame=dame+(sb-sa)*(fn+fl)/2
+         enddo
       enddo
    else
       ! tabulated distribution
@@ -3606,7 +8554,7 @@ contains
          if (irec.gt.0) then ! recoil energy
             xxe=(e-2*sqrt(e*awp*xx)*u+awp*xx)/(awrt+1-awp)
          else
-            xxe=xx       
+            xxe=xx
          endif
          en=yy*xxe
          if (i.gt.1) then
@@ -3636,6 +8584,126 @@ contains
       dl=d
    enddo
    return
+
+   contains
+
+      subroutine rec6cm
+      !----------------------------------------------------------------
+      ! Cm data: law 1 (lct=2, or lct=3 for a light
+      ! particle) and law 6.  For each cm energy e' and cm cosine w
+      ! of the emitted particle (mass awp):
+      ! ilab6=0, recoil of the residual for the one-particle
+      ! approximation (irec>0), mass amr=awrt+1-awp, lab energy
+      !   er = amr/2*(vc**2+ur**2-2*vc*ur*w), ur=awp*sqrt(2e'/awp)/amr;
+      ! ilab6=1, the emitted product itself (irec=0), lab energy
+      !   er = awp/2*(vc**2+u**2+2*vc*u*w), u=sqrt(2e'/awp);
+      ! vc=sqrt(2e)/(awrt+1) is the cm velocity.
+      ! ebar=int int f(e',w) er dw de', dame=int int f(e',w) D(er) dw de'
+      ! (f as returned by h6ddx, h6dis or h6psp, per unit e' and w).
+      ! The e' intervals of the table are integrated with 8-point
+      ! Gauss-Legendre, the cosine with the 64-point set of getsix.
+      ! (DLA, IAEA, Oct 2026)
+      !----------------------------------------------------------------
+      integer::ndl,npl,ncl,ii,ig,isub,lx
+      integer,parameter::nsub6=40
+      real(kr)::amr,vc,x1,x2,epc,wep,dum1,dum2,w0,emx
+      real(kr),dimension(8),parameter::g8x=(/&
+        -0.9602898564975363e0_kr,-0.7966664774136267e0_kr,&
+        -0.5255324099163290e0_kr,-0.1834346424956498e0_kr,&
+         0.1834346424956498e0_kr, 0.5255324099163290e0_kr,&
+         0.7966664774136267e0_kr, 0.9602898564975363e0_kr/)
+      real(kr),dimension(8),parameter::g8w=(/&
+         0.1012285362903763e0_kr, 0.2223810344533745e0_kr,&
+         0.3137066458778873e0_kr, 0.3626837833783620e0_kr,&
+         0.3626837833783620e0_kr, 0.3137066458778873e0_kr,&
+         0.2223810344533745e0_kr, 0.1012285362903763e0_kr/)
+
+      ebar=0
+      dame=0
+      amr=awrt+1-awp
+      vc=sqrt(2*e)/(awrt+1)
+      w0=0
+      if (law.eq.6) then
+         ! n-body phase space, isotropic in the cm system
+         dum1=h6psp(zero,dum2,emx,w0,e,c)
+         if (emx.le.zero) return
+         do isub=1,nsub6
+            x1=(isub-1)*emx/nsub6
+            x2=isub*emx/nsub6
+            do ig=1,8
+               epc=x1+(x2-x1)*(1+g8x(ig))/2
+               wep=(x2-x1)*g8w(ig)/2
+               call mu6(epc,wep,3,0)
+            enddo
+         enddo
+         return
+      endif
+      ! law 1: discrete lines (cm energies), then the continuum
+      ndl=nint(c(3))
+      npl=nint(c(6))
+      if (npl.le.0) return
+      ncl=nint(c(5))/npl
+      if (ndl.gt.0) then
+         dum1=h6dis(0,dum2,emx,w0,c,lang)
+         do ii=1,ndl
+            epc=abs(c(7+ncl*(ii-1)))
+            call mu6(epc,one,2,ii)
+         enddo
+      endif
+      if (npl.gt.ndl+1) then
+         dum1=h6ddx(zero,dum2,emx,w0,c,lang,lep)
+         do ii=ndl+1,npl-1
+            lx=7+ncl*(ii-1)
+            x1=c(lx)
+            x2=c(lx+ncl)
+            if (x2.le.x1) cycle
+            do ig=1,8
+               epc=x1+(x2-x1)*(1+g8x(ig))/2
+               wep=(x2-x1)*g8w(ig)/2
+               call mu6(epc,wep,1,0)
+            enddo
+         enddo
+      endif
+      return
+      end subroutine rec6cm
+
+      subroutine mu6(epc,wep,kind,id)
+      !----------------------------------------------------------------
+      ! Add wep times the integral over the cm cosine of
+      ! f(epc,w)*er and f(epc,w)*D(er) to ebar and dame (see rec6cm).
+      ! kind=1 continuum (h6ddx), 2 discrete line id (h6dis),
+      ! 3 phase space (h6psp).
+      ! (DLA, IAEA, Oct 2026)
+      !----------------------------------------------------------------
+      integer::kind,id
+      real(kr)::epc,wep
+      integer::jq
+      real(kr)::amr,vc,ur,er,t,ww,dum1,dum2
+      amr=awrt+1-awp
+      vc=sqrt(2*e)/(awrt+1)
+      ur=awp*sqrt(2*epc/awp)/amr
+      if (ilab6.eq.1) ur=sqrt(2*epc/awp)
+      do jq=1,nq
+         ww=qp(jq)
+         if (kind.eq.1) then
+            t=h6ddx(epc,dum1,dum2,ww,c,lang,lep)
+         else if (kind.eq.2) then
+            t=h6dis(id,dum1,dum2,ww,c,lang)
+         else
+            t=h6psp(epc,dum1,dum2,ww,e,c)
+         endif
+         if (t.le.zero) cycle
+         if (ilab6.eq.1) then
+            er=awp*(vc*vc+ur*ur+2*vc*ur*ww)/2
+         else
+            er=amr*(vc*vc+ur*ur-2*vc*ur*ww)/2
+         endif
+         ebar=ebar+wep*qw(jq)*t*er
+         dame=dame+wep*qw(jq)*t*df(er,zp,ap,zt,at)
+      enddo
+      return
+      end subroutine mu6
+
    end subroutine getsix
 
    subroutine h6cm(ep,epnext,term,nl,lang,lep,cnow)
@@ -4019,7 +9087,10 @@ contains
          call terp1(x1,y1,x2,y2,ep,r,lep)
       endif
       iza2=nint(zap)
-      aa=bacha(izap,iza2,izat,enow,ep)
+      ! the incident particle is a neutron (izap is the product or the
+      ! residual here; NJOY2016.80 used it as the projectile)
+      ! (DLA, IAEA, 5 Oct 2026)
+      aa=bacha(1,iza2,izat,enow,ep)
       t=aa*(cosh(aa*w)+r*sinh(aa*w))/(2*sinh(aa))
       t=t*s
       if (t.lt.zero) t=0
@@ -4136,7 +9207,9 @@ contains
       s=cnow(inow+1)
       r=cnow(inow+2)
       iza2=nint(zap)
-      aa=bacha(izap,iza2,izat,enow,epnext)
+      ! the incident particle is a neutron (see h6ddx)
+      ! (DLA, IAEA, 5 Oct 2026)
+      aa=bacha(1,iza2,izat,enow,epnext)
       t=aa*(cosh(aa*w)+r*sinh(aa*w))/(2*sinh(aa))
       t=t*s
       if (t.lt.zero) t=0
@@ -4428,19 +9501,22 @@ contains
    ! internals
    integer::nb,iso,lvt,ltt,ltt3,lttn,nwc,i,nlmax,il,l
    integer::iraw,ir,nne,ne,inn,innt,lct,nlo,nhi
-   real(kr)::test,awr,elo,ehi
+   real(kr)::test,awr,elo,ehi,fnrm
+   integer::lnrm,lnul
    character(60)::strng
    real(kr)::flo(65),fhi(65)
    real(kr),parameter::small=1.e-10_kr
    real(kr),parameter::zero=0
    save iso,iraw,ir,nne,ne,inn
    save elo,ehi,nlo,nhi,flo,fhi,ltt,ltt3,lttn
-   save lct,awr
+   save lct,awr,lnrm,lnul
 
    !--initialize
    idis=0
    if (e.gt.zero) go to 110
    iso=0
+   lnrm=0
+   lnul=0
    call findf(matd,mfd,mtd,nin)
    call contio(nin,0,0,c,nb,nwc)
    awr=c(2)
@@ -4488,7 +9564,13 @@ contains
       endif
       elo=c(iraw+1)
       nlo=nle
-      call hgetco(flo,nlo,lcd,c(iraw),lct,ltt,awr,idis)
+      call hgetco(flo,nlo,lcd,c(iraw),lct,ltt,awr,idis,fnrm)
+      ! zero table: isotropic moments (fl(1)=1, others 0) (DLA, IAEA, 21 Oct 2026)
+      if (ltt.eq.2.and.fnrm.le.zero) then
+         call hnull(lnul,mfd,mtd,elo)
+      else
+         call hnorm(fnrm,lnrm,mfd,mtd,c(iraw+1))
+      endif
       if (ltt.eq.1) call listio(nin,0,0,c(iraw),nb,nwc)
       if (ltt.eq.2) call tab1io(nin,0,0,c(iraw),nb,nwc)
       if (nb.ne.0) then
@@ -4500,7 +9582,17 @@ contains
       endif
       ehi=c(iraw+1)
       nhi=nle
-      call hgetco(fhi,nhi,lcd,c(iraw),lct,ltt,awr,idis)
+      call hgetco(fhi,nhi,lcd,c(iraw),lct,ltt,awr,idis,fnrm)
+      ! zero table: the low table is kept (DLA, IAEA, 21 Oct 2026)
+      if (ltt.eq.2.and.fnrm.le.zero) then
+         call hnull(lnul,mfd,mtd,ehi)
+         do i=1,nlo
+            fhi(i)=flo(i)
+         enddo
+         nhi=nlo
+      else
+         call hnorm(fnrm,lnrm,mfd,mtd,c(iraw+1))
+      endif
       ! check for total isotropy.
       if (ne.eq.2.and.nlo.eq.1.and.nhi.eq.1) iso=1
    endif
@@ -4542,6 +9634,7 @@ contains
    else if (nne.eq.ne) then
       call error('hgtfle','desired energy above highest given.',' ')
    endif
+  121 continue
    if (ltt.eq.1) call listio(nin,0,0,c(iraw),nb,nwc)
    if (ltt.eq.2) call tab1io(nin,0,0,c(iraw),nb,nwc)
    if (nb.ne.0) then
@@ -4553,10 +9646,24 @@ contains
    endif
    ehi=c(iraw+1)
    nhi=nle
-   call hgetco(fhi,nhi,lcd,c(iraw),lct,ltt,awr,idis)
+   call hgetco(fhi,nhi,lcd,c(iraw),lct,ltt,awr,idis,fnrm)
    nne=nne+1
    if (nne.gt.nint(c(5+2*ir))) ir=ir+1
    inn=nint(c(6+2*ir))
+   ! table with zero integral (no distribution in the data): skipped,
+   ! the neighbouring tables are interpolated; above the last valid
+   ! table that one is kept (as ACER, which omits the table from the
+   ! ACE grid) (DLA, IAEA, 21 Oct 2026)
+   if (ltt.eq.2.and.fnrm.le.zero) then
+      call hnull(lnul,mfd,mtd,ehi)
+      if (nne.lt.ne) go to 121
+      do i=1,nlo
+         fhi(i)=flo(i)
+      enddo
+      nhi=nlo
+   else
+      call hnorm(fnrm,lnrm,mfd,mtd,c(iraw+1))
+   endif
    if (ehi.le.e*(1+small).and.nne.lt.ne) go to 120
 
    !--yes.  interpolate for coefficients at desired energy.
@@ -4605,7 +9712,7 @@ contains
    return
    end subroutine hgtfle
 
-   subroutine hgetco(fl,nl,lcd,c,lct,ltt,awr,idis)
+   subroutine hgetco(fl,nl,lcd,c,lct,ltt,awr,idis,fnrm)
    !-------------------------------------------------------------------
    ! Retrieve or compute Legendre coefficients using raw data in
    ! ENDF format.  Conversion between reference systems and
@@ -4618,16 +9725,21 @@ contains
    !      lct  system of raw data
    !      ltt  format of raw data (1 for coefficients, 2 for tabulated)
    !      awr  atomic weight ratio
+   !      fnrm on return, integral of a tabulated distribution
+   ! Tabulated data: exact panel integration with the law of the table
+   ! and normalization (see below) (DLA, IAEA, 20 Oct 2026)
    !-------------------------------------------------------------------
    use util  ! provides error
    use mathm ! provides legndr
    use endf  ! provides terpa
    ! externals
    integer::nl,lcd,lct,ltt,idis
-   real(kr)::fl(*),c(*),awr
+   real(kr)::fl(*),c(*),awr,fnrm
    ! internals
    integer::l,np,il,ipc,irc,iq,ip,nlz,j
    real(kr)::x,y,xnext,xn
+   integer::nr,ib,i,jr,it
+   real(kr)::x1,x2,y1,y2,w
    real(kr)::p(65)
    real(kr),dimension(64),parameter::qp=(/&
      -9.99305042E-01_kr,-9.96340117E-01_kr,-9.91013371E-01_kr,&
@@ -4684,6 +9796,7 @@ contains
 
    !--determine representation
    l=nl-1
+   fnrm=1
    if (nl.gt.nlmax)&
      call error('hgetco','limited to 64 legendre coefficients.',' ')
    if (ltt.eq.2) go to 110
@@ -4709,6 +9822,61 @@ contains
    do il=2,nl
       fl(il)=0
    enddo
+
+   ! tabulated distribution (ltt=2): Legendre moments integrated
+   ! panel by panel with the interpolation law of the table (64 Gauss
+   ! points in each panel: exact for lin-lin and histogram tables) and
+   ! divided by the integral of the table.  The original code sampled
+   ! the table at the 64 Gauss points of [-1,1] without normalization:
+   ! for forward-peaked tables the moments were wrong (FENDL-3.2d
+   ! Gd-156 elastic at 200 MeV: fl(2)=1.00078 instead of 0.99527,
+   ! elastic heating 6.8 and damage 3.4 times too low).  Logarithmic
+   ! laws with x<=0 or y<=0 are taken as linear.  The integral of the
+   ! table is returned in fnrm (message in hnorm).
+   ! (DLA, IAEA, 20 Oct 2026)
+   if (ltt.eq.2) then
+      if (lcd.eq.2.and.lct.eq.1)&
+        call error('hgetco','lab to cm conversion not coded.',' ')
+      nr=nint(c(5))
+      np=nint(c(6))
+      ib=6+2*nr
+      fnrm=0
+      jr=1
+      do i=1,np-1
+         x1=c(ib+2*i-1)
+         y1=c(ib+2*i)
+         x2=c(ib+2*i+1)
+         y2=c(ib+2*i+2)
+         do while (i+1.gt.nint(c(5+2*jr)).and.jr.lt.nr)
+            jr=jr+1
+         enddo
+         it=nint(c(6+2*jr))
+         if (x2.le.x1) cycle
+         if ((it.eq.3.or.it.eq.5).and.x1.le.zero) it=2
+         if ((it.eq.4.or.it.eq.5).and.(y1.le.zero.or.y2.le.zero)) it=2
+         if (it.lt.1.or.it.gt.5) it=2
+         do iq=1,nqp
+            x=(x1+x2)/2+(x2-x1)/2*qp(iq)
+            w=(x2-x1)/2*qw(iq)
+            call terp1(x1,y1,x2,y2,x,y,it)
+            xn=x
+            if (lcd.eq.1.and.lct.ge.2)&
+              xn=(1+awr*x)/sqrt(1+awr*awr+2*awr*x)
+            call legndr(xn,p,l)
+            fnrm=fnrm+w*y
+            do il=2,nl
+               fl(il)=fl(il)+w*y*p(il)
+            enddo
+         enddo
+      enddo
+      if (fnrm.gt.zero) then
+         do il=2,nl
+            fl(il)=fl(il)/fnrm
+         enddo
+      endif
+      go to 120
+   endif
+
    ipc=2
    irc=1
    do iq=1,nqp
@@ -4744,6 +9912,7 @@ contains
 
    !--reduce number of significant figures
    !--and count number of coefficients required
+  120 continue
    nlz=1
    do il=2,nl
       j=nint(fl(il)*rtoler)
@@ -4753,6 +9922,55 @@ contains
    nl=nlz
    return
    end subroutine hgetco
+
+   subroutine hnull(lnul,mfd,mtd,e)
+   !-------------------------------------------------------------------
+   ! Warning, once per mt, for a tabulated angular distribution with
+   ! zero integral (no distribution in the data): the table is skipped
+   ! (hgtfle interpolates between the neighbouring tables and keeps the
+   ! last valid one above them; isotropic if no table is valid).
+   ! (DLA, IAEA, 21 Oct 2026)
+   !-------------------------------------------------------------------
+   use util ! provides mess
+   ! externals
+   integer::lnul,mfd,mtd
+   real(kr)::e
+   ! internals
+   character(60)::strng,strng2
+
+   if (lnul.ne.0) return
+   write(strng,'(''*** WARNING mf'',i2,'' mt'',i4,&
+     &'': WRONG ANGULAR DISTRIBUTION'')') mfd,mtd
+   write(strng2,'(''zero table at'',1p,e10.3,&
+     &'' ev SKIPPED (further not listed)'')') e
+   call mess('hgtfle',strng,strng2)
+   lnul=1
+   return
+   end subroutine hnull
+
+   subroutine hnorm(fnrm,lnrm,mfd,mtd,e)
+   !-------------------------------------------------------------------
+   ! Message, once per mt, when the integral of a tabulated angular
+   ! distribution differs from 1 by more than 1e-3 (the moments are
+   ! normalized in hgetco).
+   ! (DLA, IAEA, 20 Oct 2026)
+   !-------------------------------------------------------------------
+   use util ! provides mess
+   ! externals
+   integer::lnrm,mfd,mtd
+   real(kr)::fnrm,e
+   ! internals
+   character(60)::strng
+   real(kr),parameter::tol=1.e-3_kr
+
+   if (lnrm.ne.0) return
+   if (abs(fnrm-1).le.tol) return
+   write(strng,'(''mf'',i2,'' mt'',i4,'' table at'',1p,e10.3,&
+     &'' ev: integral'',0p,f9.5)') mfd,mtd,e,fnrm
+   call mess('hgtfle',strng,'normalized (further tables not listed)')
+   lnrm=1
+   return
+   end subroutine hnorm
 
    subroutine hconvr(nin,nout,nscr)
    !-------------------------------------------------------------------
@@ -4822,7 +10040,12 @@ contains
       i10=1
       maths=math
    endif
-   if (math.eq.0) go to 20
+   ! an FEND record (mf=0) is skipped here; it was taken as
+   ! mf<3 and tofend skipped the whole next file, and the TEND (math=-1)
+   ! was not caught, so a material ending after its MF3/MF12 files was
+   ! read past the end of the tape (DLA, IAEA, 16 Oct 2026)
+   if (math.le.0) go to 20
+   if (mfh.eq.0) go to 10
    if (mfh.lt.3 .or. (mfh.gt.3.and.mfh.lt.12)) then
        call tofend(nin,0,0,scr)
        go to 10
@@ -5253,6 +10476,7 @@ contains
    ! mf6/mt102 for H-1 in the ENDF/B-VII.1 & ENDF/B-VIII.0 using
    ! law2/law4 for the primary photon/recoil in the ground state
    ! n + 1-H-1 --> 1-H-2 + gamma
+   ! (DLA, IAEA)
    !-------------------------------------------------------------------
    use endf ! terpa
    ! externals
@@ -5299,8 +10523,10 @@ contains
    real(kr)::egkr,ebar,egam,edam,damn,enext,enx,egk
    real(kr)::h,hk,cfix,eava,ebarp,xp,yp,hp,egamp,edamp
    real(kr)::damep,hx,hxp,subtot,elo,ehi,x,y
-   real(kr)::c(30)
-   integer::imt(30)
+   real(kr)::en102
+   real(kr),dimension(:),allocatable::sk,sd,sy
+   real(kr)::c(50)
+   integer::imt(50)
    real(kr),dimension(:),allocatable::scr
    real(kr),dimension(:),allocatable::b
    real(kr),dimension(:),allocatable::d
@@ -5313,10 +10539,42 @@ contains
    integer::mf6flg
    integer::mt402,mt301
    character(len=70)::strng1,strng2
+   ! (DLA, IAEA, 13 Oct 2026): capture without own photon
+   ! data, photons in mt3 (DLA, IAEA, 13 Oct 2026)
+   real(kr),dimension(:),allocatable::p3,k3
+   logical::has3,has102,l26,l27
+   ! damage (d3) and number (y3) of the mt3 photons; capture photon
+   ! kicks for the damage and the kkerma=2 lower limit
+   ! (DLA, IAEA, 18 Oct 2026)
+   real(kr),dimension(:),allocatable::d3,y3
+   real(kr)::dpp,ks3,ds3,ys3,fr3,dc3,e0,kin,dlt,dmin0
+   integer::nfl,ndm,nmt2,imt2(50)
+   logical::l26d
+   integer::ip402,ip401,ip304,n3c
+   real(kr)::kpp,edq,eth3,eth4,q3c,x3c,ea3,rr3,eg3,pc3,rm3,en3,en4,et
 
    !--allocate buffers for loada/finda
    allocate(bufo(nbuf))
    allocate(bufn(nbuf))
+   ! capture photon kicks summed over all subsections (DLA, IAEA, Oct 2026)
+   allocate(sk(ne),sd(ne),sy(ne))
+   sk=0
+   sd=0
+   sy=0
+   ! (DLA, IAEA, 13 Oct 2026): photon energy (p3) and photon
+   ! recoil kick (k3) produced
+   ! by the lumped mt3 photon data, summed over all subsections
+   ! (DLA, IAEA, 13 Oct 2026)
+   allocate(p3(ne),k3(ne))
+   p3=0
+   k3=0
+   allocate(d3(ne),y3(ne))
+   d3=0
+   y3=0
+   nfl=0
+   ndm=0
+   has3=.false.
+   has102=.false.
 
    !--find first section of mf12 or mf13
    allocate(scr(npage+50))
@@ -5388,6 +10646,8 @@ contains
    mtd=mth
    mtx=mth
    if (mth.eq.3) mtd=1
+   if (mth.eq.3) has3=.true.
+   if (mth.eq.102) has102=.true.
    if (iprint.eq.1.and.mfh.eq.12.and.idame.gt.0.and.mtd.eq.102)&
      write(nsyso,'(/&
        &'' photon energy (from yields) mf'',i2,'', mt'',i3/&
@@ -5439,6 +10699,11 @@ contains
      call gambar(e,ebar,egam,edam,nendf,matd,mtx,d,nwd)
    lp=l1h
    ik=ik+1
+   if (ik.eq.1) then
+      sk=0
+      sd=0
+      sy=0
+   endif
    if (iprint.eq.1.and.egkr.eq.zero) write(nsyso,&
      '(i6,''  continuum gammas'')') ik
    if (iprint.eq.1.and.egkr.gt.zero) write(nsyso,&
@@ -5499,18 +10764,59 @@ contains
    if (mfd.eq.13) go to 170
    if (mth.ne.102) go to 164
    ! photon recoil correction
-   if (egkr.ne.zero) call disgam(egkr,egam,edam,z,awr)
+   ! primary photons (lp=2) use the actual energy egk
+   ! (DLA, IAEA, 5 Oct 2026)
+   if (egkr.ne.zero) call disgam(egk,egam,edam,z,awr)
    h=egam*x*y
    hk=h
    c(npkk-1)=c(npkk-1)+x*y*ebar
    c(npkk)=c(npkk)+y*ebar
-   dame=edam*x*y
+   ! the photon kicks (sk), their damage (sd) and the
+   ! photon multiplicity (sy) are summed over all subsections; the
+   ! capture damage is set at the last subsection (DLA, IAEA, Oct 2026)
+   sk(i)=sk(i)+y*egam
+   sd(i)=sd(i)+y*edam
+   sy(i)=sy(i)+y
+   dame=0
    if (ik.eq.nk) then
       if (idame.gt.0) then
+         ! manual eq. 210-211: the capdam default (one photon with all
+         ! the available energy) is replaced by the neutron kick and
+         ! the photon kicks of the data, treated independently;
+         ! one photon: D(neutron kick + photon kick).
+         ! (the LANL code subtracted the whole capdam value, D of the
+         ! sum of both kicks, and lost the neutron kick) (DLA, IAEA)
          call capdam(e,damn,q,za,awr,mth)
-         dame=dame-damn*x
+         en102=e*aw1fac
+         if (sy(i).le.ysing) then
+            dame=x*df(en102+sk(i),z,awr+1,z,awr)-damn*x
+         else
+            dame=x*(df(en102,z,awr+1,z,awr)+sd(i))-damn*x
+         endif
       endif
       hk=hk-x*rtm*(q+e*awr*aw1fac)**2/2
+      ! kkerma=2: lower limit of capture = max(LANL limit e/(a+1),
+      ! e/(a+1) + photon kicks of the cascade (sk), the recoil model
+      ! of mt443/444); the balance is applied in kcons2
+      ! (DLA, IAEA, 18 Oct 2026)
+      if (kkerma.eq.2.and.kchk.eq.1) then
+         dmin0=x*e*aw1fac
+         kin=max(dmin0,x*(e*aw1fac+sk(i)))
+         dlt=kin-dmin0
+         if (dlt.gt.zero) then
+            c(2+npkt)=c(2+npkt)+dlt
+            if (c(2+2*npkt).lt.c(2+npkt)) c(2+2*npkt)=c(2+npkt)
+            do ii=1,nmt
+               indxx=imt(ii)
+               if (mtp(indxx).lt.442) then
+                  c(indxx+npkt)=c(indxx+npkt)+dlt
+                  if (c(indxx+2*npkt).lt.c(indxx+npkt))&
+                    c(indxx+2*npkt)=c(indxx+npkt)
+               endif
+            enddo
+            nfl=nfl+1
+         endif
+      endif
       cfix=(e+q-e*aw1fac)*x
       h=h-cfix
       c(npkk-2)=cfix-x*c(npkk)
@@ -5542,6 +10848,21 @@ contains
    if (mtd.eq.2) h=y*x*ebar
    c(npkk-1)=c(npkk-1)-h
    c(npkk)=c(npkk)+h
+   ! (DLA, IAEA, 13 Oct 2026): photon energy and recoil kick
+   ! of the mt3 photons
+   ! (mt1 pass minus mt2 pass = nonelastic); kick per photon from
+   ! gambar (continuum) or disgam (discrete line) (DLA, IAEA, 13 Oct 2026)
+   if (mtx.eq.3.and.ebar.gt.zero) then
+      kpp=egam
+      if (egkr.ne.zero) call disgam(egk,kpp,edq,z,awr)
+      p3(i)=p3(i)-h
+      k3(i)=k3(i)-h*kpp/ebar
+      ! damage of the kick and number of photons (DLA, IAEA, 18 Oct 2026)
+      dpp=edam
+      if (egkr.ne.zero) dpp=edq
+      d3(i)=d3(i)-h*dpp/ebar
+      y3(i)=y3(i)-h/ebar
+   endif
   166 continue
    hx=h
    c(2)=c(2)+h
@@ -5582,6 +10903,19 @@ contains
    h=-y*ebar
    c(npkk-1)=c(npkk-1)-h
    c(npkk)=c(npkk)+h
+   ! (DLA, IAEA, 13 Oct 2026): mf13/mt3 photons, as for mf12
+   ! (DLA, IAEA, 13 Oct 2026)
+   if (mtx.eq.3.and.ebar.gt.zero) then
+      kpp=egam
+      if (egkr.ne.zero) call disgam(egk,kpp,edq,z,awr)
+      p3(i)=p3(i)-h
+      k3(i)=k3(i)-h*kpp/ebar
+      ! damage of the kick and number of photons (DLA, IAEA, 18 Oct 2026)
+      dpp=edam
+      if (egkr.ne.zero) dpp=edq
+      d3(i)=d3(i)-h*dpp/ebar
+      y3(i)=y3(i)-h/ebar
+   endif
    hx=h
    c(2)=c(2)+h
    if (nmt.gt.0) then
@@ -5639,7 +10973,235 @@ contains
    mtd=0
    go to 105
   250 continue
-   if (kchk.ne.1) go to 300
+
+   !--(DLA, IAEA, 13 Oct 2026): capture (mt102)
+   !--without its
+   !--own photon data (no mf12/mf13/mt102, no photons in mf6/mt102)
+   !--when the photons are given lumped in mt3 (mf12 or mf13).
+   ! gheat subtracts the mt3 photon energy only from mt301 (and 303,
+   ! 442), so the capture kerma 402 (and 401) kept e+q, as if the
+   ! capture photons were deposited locally, and the partial kermas
+   ! did not add up to mt301 (purr probability tables then give large
+   ! negative heating in the bins with little capture).  The mt3 photon
+   ! energy p3 is now attributed to the partial kermas:
+   !  - below the first inelastic threshold (mt4 or mt51-91) mt3 is
+   !    capture (plus small charged-particle channels): all of p3 goes
+   !    to capture, 402 = sigma102*(e+q) - p3 (energy balance; an excess
+   !    of photon energy of the evaluation stays with capture);
+   !  - above it capture receives sigma102*eg, the photon energy of one
+   !    capture: eg = ea/(1+r), ea = e+q-e/(a+1), r = recoil kick per eV
+   !    of photon energy of the mt3 spectrum (k3/p3; one photon,
+   !    ea*rtm/2, if not available), so that 402 is the capture recoil
+   !    e/(a+1) + eg*r; the rest of p3 goes to the inelastic kerma 304
+   !    up to the first endothermic threshold of the other nonelastic
+   !    reactions (mt5, 11, 16-49, 103-200); above it the rest is not
+   !    attributed (it may belong to (n,2n), (n,p), ...) and stays in
+   !    mt301 and 303 only, as before.
+   ! mt301, 303, 442 are not changed.  Not applied with kkerma=1 (402
+   ! replaced by the kinematic limits).
+   ! 18 Oct 2026: the mt3 photons attributed to capture (all of them
+   ! below eth3, the fraction pc3/p3 above it) also give the capture
+   ! recoil, as the mt102 photons do (manual eq. 210-211): damage
+   ! D(e/(a+1)) + sum of the damage of the photon kicks (one photon:
+   ! D(e/(a+1) + kick)) replaces the capdam default (one photon with
+   ! all the energy), in all kkerma modes; with kkerma=2 the lower
+   ! limit of capture (402, 401, 301) is max(e/(a+1), e/(a+1) + photon
+   ! kicks).  Before, below eth3 the balance could leave 402 near 0 and
+   ! below the damage (JENDL-5 Mo-95: 8e-5 vs 2.7e5 eV-b at 1e-5 eV)
+   ! (DLA, IAEA, 18 Oct 2026)
+   ! kkerma=2 with mt3 photons and photons of mt102 given:
+   ! the mt3 photons are nonelastic photons other than capture and
+   ! fission (given in mt102, mt18); below eth4 they can only come from
+   ! mt4/51-91 and are removed from the inelastic kerma 304; above eth4
+   ! they stay in mt301 and 303 only, and the kkerma=2 consistency of
+   ! hout distributes them among the partial kermas.  The fission mt's
+   ! (18-21, 38; own photons) are not used for eth4
+   ! (DLA, IAEA, 14 Oct 2026)
+   if (has3.and..not.has102.and.i6p.gt.0) then
+      do i=1,i6p
+         if (mt6yp(i).eq.102) has102=.true.
+      enddo
+   endif
+   ip402=0
+   ip401=0
+   ip304=0
+   do i=3,npk
+      if (mtp(i).eq.402) ip402=i
+      if (mtp(i).eq.401) ip401=i
+      if (mtp(i).eq.304) ip304=i
+   enddo
+   l26=has3.and..not.has102.and.kkerma.ne.1.and.&
+     ip402+ip401+ip304.gt.0
+   l27=has3.and.has102.and.kkerma.eq.2.and.ip304.gt.0
+   ! capture damage from the mt3 photons (all kkerma modes)
+   ! (DLA, IAEA, 18 Oct 2026)
+   nmt2=0
+   if (npk.gt.2) call indx(npk,mtp,mt19,102,imt2,nmt2)
+   l26d=.false.
+   if (has3.and..not.has102.and.idame.gt.0) then
+      do ii=1,nmt2
+         if (mtp(imt2(ii)).ge.444) l26d=.true.
+      enddo
+   endif
+   if (l26.or.l27.or.l26d) then
+      ! first inelastic threshold (eth3) and first endothermic
+      ! threshold of the other nonelastic reactions (eth4) from the pendf
+      ! (DLA, IAEA)
+      eth3=big
+      eth4=big
+      call findf(matd,3,1,nin)
+      do
+         call contio(nin,0,0,b,nb,nw)
+         if (mfh.ne.3) exit
+         if (mth.eq.0) cycle
+         if (mth.gt.200) exit
+         if (mth.eq.4.or.mth.eq.5.or.mth.eq.11.or.&
+           (mth.ge.16.and.mth.le.91).or.mth.ge.103) then
+            et=big
+            e=0
+            call gety1(e,enxt,idis,x,nin,b)
+            if (x.gt.zero) et=e
+            do while (et.ge.big.and.enxt.lt.big)
+               if (enxt.le.e) exit
+               e=enxt
+               call gety1(e,enxt,idis,x,nin,b)
+               if (x.gt.zero) et=e
+            enddo
+            if (mth.eq.4.or.(mth.ge.51.and.mth.le.91)) then
+               if (et.lt.eth3) eth3=et
+            else if ((mth.ge.18.and.mth.le.21).or.mth.eq.38) then
+               continue
+            else if (et.gt.1) then
+               if (et.lt.eth4) eth4=et
+            endif
+         endif
+         call tosend(nin,0,0,b)
+      enddo
+      ! capture cross section and q value (DLA, IAEA)
+      if (l26.or.l26d) then
+         call findf(matd,3,102,nin)
+         call contio(nin,0,0,b,nb,nw)
+         e=0
+         call gety1(e,enxt,idis,x3c,nin,b)
+         q3c=b(2)
+         ! capdam initialisation for mt102 (DLA, IAEA, 18 Oct 2026)
+         e0=0
+         if (l26d) call capdam(e0,damn,q3c,za,awr,102)
+      endif
+      n3c=0
+      do i=1,ne
+         call finda(i,c,npkk,iold,bufo,nbuf)
+         e=c(1)
+         x3c=0
+         if (l26.or.l26d) call gety1(e,enxt,idis,x3c,nin,b)
+         ! mt3 photons to 304 below eth4 (DLA, IAEA, 14 Oct 2026)
+         if (l27.and.e.lt.eth4.and.p3(i).ne.zero) then
+            c(ip304)=c(ip304)-p3(i)
+            n3c=n3c+1
+         endif
+         if ((l26.or.l26d).and.x3c.gt.zero.and.p3(i).ne.zero) then
+            if (e.lt.eth3) then
+               pc3=p3(i)
+            else
+               ea3=e+q3c-e*aw1fac
+               rr3=ea3*rtm/2
+               if (p3(i).gt.zero.and.k3(i).gt.zero) rr3=k3(i)/p3(i)
+               eg3=ea3/(1+rr3)
+               pc3=min(x3c*eg3,p3(i))
+            endif
+            if (l26) then
+               rm3=p3(i)-pc3
+               if (ip402.gt.0) c(ip402)=c(ip402)-pc3
+               if (ip401.gt.0) c(ip401)=c(ip401)-pc3
+               if (ip304.gt.0.and.e.lt.eth4) c(ip304)=c(ip304)-rm3
+               n3c=n3c+1
+            endif
+            ! kicks, damage and number of the capture photons (fraction
+            ! pc3/p3 of the mt3 photons, same spectrum)
+            ! (DLA, IAEA, 18 Oct 2026)
+            fr3=0
+            if (p3(i).gt.zero) fr3=max(zero,min(pc3/p3(i),1.0_kr))
+            ks3=max(zero,fr3*k3(i))
+            ds3=max(zero,fr3*d3(i))
+            ys3=max(zero,fr3*y3(i))
+            en102=e*aw1fac
+            if (l26d) then
+               call capdam(e,damn,q3c,za,awr,102)
+               if (ys3.le.ysing*x3c) then
+                  dc3=x3c*df(en102+ks3/x3c,z,awr+1,z,awr)
+               else
+                  dc3=x3c*df(en102,z,awr+1,z,awr)+ds3
+               endif
+               dc3=dc3-x3c*damn
+               do ii=1,nmt2
+                  indxx=imt2(ii)
+                  if (mtp(indxx).ge.444) c(indxx)=c(indxx)+dc3
+               enddo
+               ndm=ndm+1
+            endif
+            ! kkerma=2: lower limit of capture
+            ! max(LANL e/(a+1), e/(a+1) + kicks) (DLA, IAEA, 18 Oct 2026)
+            if (l26.and.kkerma.eq.2.and.kchk.eq.1.and.ip402.gt.0) then
+               dmin0=x3c*en102
+               kin=max(dmin0,x3c*en102+ks3)
+               dlt=max(c(ip402+npkt),kin)-c(ip402+npkt)
+               if (dlt.gt.zero) then
+                  c(ip402+npkt)=c(ip402+npkt)+dlt
+                  if (c(ip402+2*npkt).lt.c(ip402+npkt))&
+                    c(ip402+2*npkt)=c(ip402+npkt)
+                  if (ip401.gt.0) then
+                     c(ip401+npkt)=c(ip401+npkt)+dlt
+                     if (c(ip401+2*npkt).lt.c(ip401+npkt))&
+                       c(ip401+2*npkt)=c(ip401+npkt)
+                  endif
+                  c(2+npkt)=c(2+npkt)+dlt
+                  if (c(2+2*npkt).lt.c(2+npkt)) c(2+2*npkt)=c(2+npkt)
+                  nfl=nfl+1
+               endif
+            endif
+         endif
+         it=i
+         if (i.eq.ne) it=-it
+         call loada(it,c,npkk,inew,bufn,nbuf)
+      enddo
+      isave=iold
+      iold=inew
+      inew=isave
+      ! message: thresholds eth3 (all mt3 photons to capture below it)
+      ! and eth4 (rest of the mt3 photons to 304 below it) (DLA, IAEA)
+      en3=eth3
+      if (en3.ge.big) en3=0
+      en4=eth4
+      if (en4.ge.big) en4=0
+      if (l26) then
+         write(strng1,&
+           '(''mt102 has no photons: mt3 photons to capture'')')
+         write(strng2,'(''thresholds'',1p,e10.3,'' /'',e10.3,'' ev'')')&
+           en3,en4
+      else
+         write(strng1,&
+           '(''kkerma=2: mt3 photons to mt304 below'',1p,e10.3,'' ev'')')&
+           en4
+         write(strng2,&
+           '(''(other nonelastic photons; mt102 photons given)'')')
+      endif
+      if (l26.or.l27) call mess('gheat',strng1,strng2)
+      if (l26d) then
+         write(strng1,'(''capture damage from the mt3 photon kicks'')')
+         write(strng2,'(''at'',i8,'' energies'')') ndm
+         call mess('gheat',strng1,strng2)
+      endif
+   endif
+   ! kkerma=2 lower limit of capture with the photon kicks
+   ! (DLA, IAEA, 18 Oct 2026)
+   if (nfl.gt.0) then
+      write(strng1,&
+        '(''kkerma=2: capture limit e/(a+1)+photon kicks'')')
+      write(strng2,'(''raised at'',i8,'' energies'')') nfl
+      call mess('gheat',strng1,strng2)
+   endif
+
+   if (lprk.ne.1) go to 300
    if (mt303.eq.0) go to 300
 
    !--print kinematic test for total photon production
@@ -5670,6 +11232,9 @@ contains
    deallocate(scr)
    deallocate(bufn)
    deallocate(bufo)
+   deallocate(sk,sd,sy)
+   deallocate(p3,k3)
+   deallocate(d3,y3)
    return
    end subroutine gheat
 
@@ -5677,6 +11242,9 @@ contains
    !-------------------------------------------------------------------
    ! Calculate ebar for continuous spectra and the photon
    ! recoil correction for capture.
+   ! The recoil kick (esqb) and its damage (esqd) are also computed for
+   ! the photons lumped in mt3 (mtd=3), used for capture when mt102 has
+   ! no photons (DLA, IAEA, 18 Oct 2026)
    !-------------------------------------------------------------------
    use util ! provides error
    use endf ! provides endf routines and variables
@@ -5761,8 +11329,8 @@ contains
    jstart=iend+1
    elo=ehi
    flo=fhi
-   if (mtd.eq.102) glo=ghi
-   if (mtd.eq.102) hlo=hhi
+   if (mtd.eq.102.or.mtd.eq.3) glo=ghi
+   if (mtd.eq.102.or.mtd.eq.3) hlo=hhi
    ilo=ihi
 
    !--read new high energy data record.
@@ -5787,10 +11355,10 @@ contains
    !--integrate at high and low energies.
    if (ilo.le.0) then
       call tabbar(flo,a(istart),lf)
-      if (mtd.eq.102) call tabsqr(glo,hlo,a(istart),lf,z,awr)
+      if (mtd.eq.102.or.mtd.eq.3) call tabsqr(glo,hlo,a(istart),lf,z,awr)
    endif
    call tabbar(fhi,a(jstart),lf)
-   if (mtd.eq.102) call tabsqr(ghi,hhi,a(jstart),lf,z,awr)
+   if (mtd.eq.102.or.mtd.eq.3) call tabsqr(ghi,hhi,a(jstart),lf,z,awr)
    ihi=1
 
    !--yes.  interpolate for mean energy.
@@ -5807,7 +11375,8 @@ contains
        ehi=sigfig(ehi,7,+1)
    endif
    call terp1(elo,flo,ehi,fhi,e,sen,inn)
-   if (mtd.eq.102) then
+   ! modified (DLA, IAEA)
+   if (mtd.eq.102.or.mtd.eq.3) then
       call terp1(elo,glo,ehi,ghi,e,esqb,inn)
       call terp1(elo,hlo,ehi,hhi,e,esqd,inn)
    else
@@ -5917,6 +11486,119 @@ contains
    return
    end subroutine disgam
 
+   subroutine kcons2(c)
+   !-------------------------------------------------------------------
+   ! kkerma=2: kermas of one energy positive and consistent
+   ! (DLA, IAEA, 14 Oct 2026).
+   ! c(i), i=2..npk: energy-balance kermas of mtp(i); c(npk+i-1) and
+   ! c(npk+npk-1+i-1): lower and upper kinematic limits.
+   ! Partial kermas in the consistency set (disjoint, mt 302-441):
+   ! all except the sums 303, 327, 401, the levels 351-391 when 304 is
+   ! requested and the fission chances 319-321, 338 when 318 is.
+   ! The lower limit of fission is y*EFR (nheat).  With m the lower
+   ! limits,
+   !   p    = max(balance, m)            for each partial of the set
+   !   rmin = m301 - sum(m)               lower limit of the reactions
+   !                                      not requested (>=0)
+   !   mt301 = max(balance, m301, sum(m))
+   ! and if sum(p) + rmin > mt301 (partials of a too large energy
+   ! balance, e.g. photons given only in mt3 or the total below its
+   ! limit) the excesses p-m are reduced by the same factor:
+   !   p = m + lam*(p-m),  lam = (mt301-rmin-sum(m))/sum(p-m)
+   ! so that all the kermas are >= their lower limits and
+   ! mt301 - sum of the partials >= rmin >= 0 (lam=0: all at the lower
+   ! limit, as kkerma=1 at the upper one).  Where the balance is good
+   ! (lam=1, mt301 = balance) nothing is changed except the individual
+   ! floors.  Partials outside the set: individual floor only.
+   ! Deficits below tolk*mt301 (rounding of the 7-digit values, e.g.
+   ! mt301 dominated by fission) are ignored.
+   !-------------------------------------------------------------------
+   ! externals
+   real(kr)::c(*)
+   ! internals
+   integer::i,i301,inc(50)
+   real(kr)::b301,m301,sp,sm,rmin,t,av,ex,lam,cm
+   real(kr),parameter::zero=0
+   real(kr),parameter::tolk=1.e-6_kr
+
+   i301=0
+   do i=2,npk
+      if (mtp(i).eq.301) i301=i
+   enddo
+   ! inc: -1 not changed, 0 individual floor, 1 consistency set
+   ! (kset, shared with the kkerma=1 floor; DLA, IAEA, 20 Oct 2026)
+   call kset(inc)
+   sp=0
+   sm=0
+   do i=2,npk
+      cm=c(npk+i-1)
+      if (inc(i).eq.0) then
+         c(i)=max(c(i),cm)
+      else if (inc(i).eq.1) then
+         c(i)=max(c(i),cm)
+         sp=sp+c(i)
+         sm=sm+cm
+      endif
+   enddo
+   if (i301.eq.0) return
+   b301=c(i301)
+   m301=c(npk+i301-1)
+   rmin=max(m301-sm,zero)
+   t=max(b301,sm+rmin)
+   av=max(t-rmin-sm,zero)
+   ex=sp-sm
+   lam=1
+   if (ex-av.gt.tolk*t) lam=av/ex
+   c(i301)=t
+   if (lam.lt.1) then
+      do i=2,npk
+         if (inc(i).eq.1) then
+            cm=c(npk+i-1)
+            c(i)=cm+lam*(c(i)-cm)
+         endif
+      enddo
+   endif
+   return
+   end subroutine kcons2
+
+   subroutine kset(inc)
+   !-------------------------------------------------------------------
+   ! Partial kermas of the consistency set of kkerma=1 and 2
+   ! (DLA, IAEA, 20 Oct 2026; moved here from kcons2, unchanged).
+   ! inc(i), i=2..npk: -1 not a partial (mt301, mt442 and above),
+   ! 0 partial outside the set (sums 303, 327, 401; levels 351-391
+   ! when 304 is requested; fission chances 319-321, 338 when 318
+   ! is requested), 1 disjoint partial of the set.
+   !-------------------------------------------------------------------
+   ! externals
+   integer::inc(*)
+   ! internals
+   integer::i,mt
+   logical::l304,l318
+
+   l304=.false.
+   l318=.false.
+   do i=2,npk
+      if (mtp(i).eq.304) l304=.true.
+      if (mtp(i).eq.318) l318=.true.
+   enddo
+   do i=2,npk
+      mt=mtp(i)
+      inc(i)=-1
+      if (mt.le.301.or.mt.ge.442) cycle
+      if (((mt.ge.319.and.mt.le.321).or.mt.eq.338).and.l318) then
+         inc(i)=0
+      else if (mt.eq.303.or.mt.eq.327.or.mt.eq.401) then
+         inc(i)=0
+      else if (mt.ge.351.and.mt.le.391.and.l304) then
+         inc(i)=0
+      else
+         inc(i)=1
+      endif
+   enddo
+   return
+   end subroutine kset
+
    subroutine hout(iold)
    !-------------------------------------------------------------------
    ! Write the output tape with corrected dictionary and
@@ -5933,10 +11615,14 @@ contains
    integer::idict,idict1,nx,inow,nwd,n,ilo,ihi,j,ibase
    integer::iowr,mfnin,mtnin,mfnscr,mtnscr,inow6
    real(kr)::x,y,xlast,ylo,yhi,thin,rat,elo,test,e
-   real(kr)::c(30)
-   integer::ncds(30)
-   integer::mt302,mt304,mt318,mt402,mtkk
-   character(4)::klo(9),khi(9)
+   real(kr)::c(50)
+   integer::ncds(50)
+   integer::mt302,mt304,mt318,mt402,mtkk,nflr,nneg,iu
+   integer::i444,inck(50),ik
+   real(kr)::f443,fsum,fk,efl1,efl2
+   real(kr)::r318,e318
+   real(kr)::flr,dflr
+   character(4)::klo(50),khi(50)
    real(kr),dimension(:),allocatable::scr
    real(kr),dimension(:),allocatable::b
    real(kr),dimension(:),allocatable::buf
@@ -5951,6 +11637,7 @@ contains
    real(kr),parameter::ecut=.01e6_kr
    real(kr),parameter::zero=0
    real(kr),parameter::ten=10
+   real(kr),parameter::tolk1=1.e-5_kr
    integer,parameter::nwscr=10000
 
    ! allocate scratch storage for endf records and buffer
@@ -5984,23 +11671,34 @@ contains
    mt304=0
    mt318=0
    mt402=0
+   i444=0
    if (kkerma.eq.1) then
       do i=2,npk
          if (mtp(i).eq.443) mtkk=i
+         if (mtp(i).eq.444) i444=i
          if (mtp(i).eq.302) mt302=(npk-1)*2+i
          if (mtp(i).eq.304) mt304=(npk-1)*2+i
          if (mtp(i).eq.318) mt318=(npk-1)*2+i
          if (mtp(i).eq.402) mt402=(npk-1)*2+i
       enddo
+      ! partials of the consistency set for the mt301 floor
+      call kset(inck)
    endif
    ilist=1
    nsc=0
    math=matd
    mfh=3
    inpk=1
+   r318=0
+   e318=0
   105 continue
    inpk=inpk+1
    mth=mtp(inpk)
+   nflr=0
+   nneg=0
+   dflr=0
+   efl1=0
+   efl2=0
    scr(1)=za
    scr(2)=awr
    scr(3)=0
@@ -6030,10 +11728,47 @@ contains
       endif
    enddo
    e=sigfig(c(1),9,0)
+   ! kkerma=0, warning where the energy-balance kerma is
+   ! below the lower kinematic limit c(npk+inpk-1) (values unchanged)
+   ! (DLA, IAEA, Oct 2026)
+   if (kkerma.eq.0.and.kchk.eq.1.and.mth.ge.301.and.mth.lt.442) then
+      flr=c(npk+inpk-1)
+      if (c(inpk).lt.flr-abs(flr)*1.e-5_kr) then
+         nflr=nflr+1
+         dflr=max(dflr,flr-c(inpk))
+         if (c(inpk).lt.zero) nneg=nneg+1
+      endif
+   endif
+   ! kkerma=2, energy balance made positive and
+   ! consistent at each energy (kcons2): all the kermas of this energy
+   ! are set together, as kkerma=1 does with the kinematic values
+   ! (DLA, IAEA, 14 Oct 2026)
+   if (kkerma.eq.2) then
+      flr=c(inpk)
+      call kcons2(c)
+      ! counted if above the rounding of the 7-digit values
+      if (mth.ge.301.and.mth.lt.442.and.abs(c(inpk)-flr).gt.&
+        1.e-6_kr*max(abs(c(inpk)),abs(flr))) then
+         nflr=nflr+1
+         if (c(inpk).lt.flr) nneg=nneg+1
+         dflr=max(dflr,abs(c(inpk)-flr))
+      endif
+   endif
+   ! kkerma=1, largest excess of the kinematic mt318 over
+   ! the energy balance (prompt fission photons in the limit h0)
+   ! (DLA, IAEA, 18 Oct 2026)
+   if (kkerma.eq.1.and.mth.eq.318.and.mt318.ne.0) then
+      if (c(inpk).gt.zero.and.c(mt318).gt.c(inpk)) then
+         if (c(mt318)/c(inpk)-1.gt.r318) then
+            r318=c(mt318)/c(inpk)-1
+            e318=e
+         endif
+      endif
+   endif
    if (iprint.eq.1.and.abs(e-elist(ilist)).le.small*e) then
       ihi=0
       ilo=0
-      if (kchk.eq.1) then
+      if (lprk.eq.1) then
          ihi=0
          ilo=0
          do j=2,npkd
@@ -6052,12 +11787,12 @@ contains
          enddo
       endif
       if (ilo.eq.1) write(nsyso,'('' '')')
-      if (kchk.eq.1) write(nsyso,'(15x,8(6x,a4,4x))')&
+      if (lprk.eq.1) write(nsyso,'(15x,8(6x,a4,4x))')&
         (klo(j),j=2,npkd)
-      if (kchk.eq.1) write(nsyso,'(12x,''min'',1p,8e14.4)')&
+      if (lprk.eq.1) write(nsyso,'(12x,''min'',1p,8e14.4)')&
         (c(npk+j),j=1,npktd)
       write(nsyso,'(1x,1p,9e14.4)') (c(j),j=1,npk)
-      if (kchk.eq.1) write(nsyso,'(12x,''max'',1p,8e14.4)')&
+      if (lprk.eq.1) write(nsyso,'(12x,''max'',1p,8e14.4)')&
         (c(npk+npkt+j),j=1,npktd)
       if (ihi.eq.1) write(nsyso,'(15x,8(6x,a4,4x))')&
         (khi(j),j=2,npkd)
@@ -6075,6 +11810,51 @@ contains
    scr(ibase+i)=c(inpk)
    if (kkerma.eq.1) then
      if (mth.eq.301) scr(ibase+i)=c(mtkk)
+     ! kkerma=1 floor of mt301 (DLA, IAEA, 20 Oct 2026).
+     ! mt301 = max(mt443, mt444, sum of the partials written) at each
+     ! energy, i.e. the largest of the kinematic upper limit, the
+     ! damage energy (a lower bound of the recoil energy, part of
+     ! mt301) and the sum of the disjoint partial kermas of the set
+     ! (kset; the values written on the tape: kinematic limits of
+     ! 302, 304, 318, 402, the other partials as computed, negative
+     ! ones counted as 0).  mt443 is the sum of the reaction limits
+     ! and is below them only when a reaction of the evaluation gives
+     ! more energy to neutrons and photons than e+q (e.g. ENDF/B-VIII.1
+     ! Cd-114/116, Lu-175/176 mt17 at 15-20 MeV).  The floor keeps
+     ! mt301 >= mt444 (ace heating and damage) and
+     ! mt301 - mt302 - mt318 - mt402 >= 0 (purr heating tables) in
+     ! the whole energy range; mt443 and the partials are written
+     ! unchanged (diagnostics).  Differences below tolk1*mt443 are
+     ! ignored: tolk1=1e-5, because the sum of several 7-digit
+     ! partials can exceed mt301 by 1-2e-6 in the resolved
+     ! resonances (U-235 at 11.6 eV) without any inconsistency;
+     ! the smallest real case found is 1.5e-3 (20 Oct 2026).
+     ! kkerma=2 (kcons2) starts from the energy balance instead:
+     ! mt301 = max(balance, lower limit, sum of the partial limits),
+     ! the lower limits including the damage energy.
+     if (mth.eq.301) then
+        f443=c(mtkk)
+        fsum=0
+        do ik=2,npk
+           if (inck(ik).ne.1) cycle
+           fk=c(ik)
+           if (ik.eq.mt302-2*(npk-1)) fk=c(mt302)
+           if (ik.eq.mt304-2*(npk-1)) fk=c(mt304)
+           if (ik.eq.mt318-2*(npk-1)) fk=c(mt318)
+           if (ik.eq.mt402-2*(npk-1)) fk=c(mt402)
+           fsum=fsum+max(fk,zero)
+        enddo
+        fk=fsum
+        if (i444.gt.0) fk=max(fk,c(i444))
+        if (fk.gt.f443+tolk1*abs(f443)) then
+           scr(ibase+i)=fk
+           nflr=nflr+1
+           if (f443.lt.zero) nneg=nneg+1
+           dflr=max(dflr,fk-f443)
+           if (efl1.eq.zero) efl1=c(1)
+           efl2=c(1)
+        endif
+     endif
      if (mth.eq.302) scr(ibase+i)=c(mt302)
      if (mth.eq.304) scr(ibase+i)=c(mt304)
      if (mth.eq.318) scr(ibase+i)=c(mt318)
@@ -6106,12 +11886,50 @@ contains
   130 continue
    call asend(0,nscr)
    ncds(inpk)=3+(n+2)/3
+   ! messages of at most 72 characters per line
+   ! (DLA, IAEA, Oct 2026)
+   do k=1,2
+      iu=nsyso
+      if (k.eq.2) iu=nsyse
+      if (kkerma.eq.0.and.nflr.gt.0) then
+         write(iu,'(/'' ---warning: mt'',i3,&
+           &'' (energy balance) below the lower kinematic limit''/&
+           &''   at'',i7,'' energies, negative at'',i7,&
+           &'', max. deficit'',1p,e10.3,'' ev-b''/&
+           &''   inconsistent photon/neutron data of the evaluation''/&
+           &''   (values not changed; kkerma=2 sets them to the limit)'')')&
+           mtp(inpk),nflr,nneg,dflr
+      endif
+      if (kkerma.eq.2.and.nflr.gt.0) then
+         write(iu,'(/'' kkerma=2: mt'',i3,'' changed at'',i7,&
+           &'' energies ('',i7,'' lowered)''/&
+           &''   max. change'',1p,e10.3,'' ev-b'')')&
+           mtp(inpk),nflr,nneg,dflr
+      endif
+      ! kkerma=1 floor of mt301 (DLA, IAEA, 20 Oct 2026)
+      if (kkerma.eq.1.and.mtp(inpk).eq.301.and.nflr.gt.0) then
+         write(iu,'(/'' kkerma=1: mt301 raised to max(mt443, mt444,'',&
+           &'' sum of partials)''/''   at'',i7,'' energies ('',i7,&
+           &'' with mt443<0), '',1p,e10.3,'' to'',e10.3,'' ev''/&
+           &''   max. raise'',e10.3,'' ev-b; mt443 not changed''/&
+           &''   (reactions with more energy in neutrons and''/&
+           &''   photons than e+q in the evaluation)'')')&
+           nflr,nneg,efl1,efl2,dflr
+      endif
+   enddo
    if (inpk.lt.npk) go to 105
    if (kkerma.eq.1) then
      write(nsyso,'(/'' total kerma (mt=301) '',&
        &''replaced by the kinematic kerma (mt=443).'')')
      write(nsyse,'(/'' total kerma (mt=301) '',&
        &''replaced by the kinematic kerma (mt=443).'')')
+     ! floor (DLA, IAEA, 20 Oct 2026)
+     do k=1,2
+        iu=nsyso
+        if (k.eq.2) iu=nsyse
+        write(iu,'(''   (not below mt444 and the sum of the partials;'',&
+          &'' see above)'')')
+     enddo
      if (mt302.ne.0) then
        write(nsyso,'(/'' partial kerma mt=302 '',&
          &''replaced by the kinematic limit.'')')
@@ -6123,6 +11941,17 @@ contains
          &''replaced by the kinematic limit.'')')
        write(nsyse,'(/'' partial kerma mt=318 '',&
          &''replaced by the kinematic limit.'')')
+       ! excess over the balance (DLA, IAEA, 18 Oct 2026)
+       if (r318.gt.1.e-4_kr) then
+          do k=1,2
+             iu=nsyso
+             if (k.eq.2) iu=nsyse
+             write(iu,'(''   mt318 up to'',f6.2,'' % above the '',&
+               &''energy balance (at'',1p,e10.3,'' ev):''/&
+               &''   the limit includes the prompt fission photons'')')&
+               100*r318,e318
+          enddo
+       endif
      endif
      if (mt402.ne.0) then
        write(nsyso,'(/'' partial kerma mt=402 '',&
