@@ -60,6 +60,13 @@ contains
    ! ENDF cross sections for dosimetry reactions are simply
    ! stored in ACE format without changing the energy grid.
    ! The endf interpolation law is also provided.
+   ! Reaction numbers in the ACE table (to be used in the MCNP FM
+   ! card): File 3 reactions keep their MT; File 10 production of
+   ! a final state LFS gets MT+1000*(10+LFS) (e.g. 10102, 11102);
+   ! File 10 products of MT5 (several residuals ZAP, which would all
+   ! get 10005) are numbered 1000000*(50+LFS)+ZAP, e.g. 50030065
+   ! for Zn-65 and 51027058 for Co-58m
+   ! (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com, IRDFF-II)
    !
    !    --- photoatomic data ---
    !
@@ -170,6 +177,13 @@ contains
    !    no7      mf6/law=7 conversion option
    !               no7=1 convert law=7 to law61 (default)
    !               no7=0 convert law=7 to law67
+   !    icpel    incident charged particles, elastic tables ltp>=12:
+   !             interpolation between the tabulated cosines
+   !               icpel=0 monotone cubic (pchip) of sigma_e/sigma_c
+   !                       (default)
+   !               icpel=1 ENDF-102 interpolation law of p_ni (pchip
+   !                       only where the law gives sigma_e<0)
+   !             (DLA, IAEA, 23 Oct 2026)
    ! card 7
    !  type of thinning is determined by sign of thin(1)
    !  (pos. or zero/neg.=energy skip/integral fraction)
@@ -328,13 +342,17 @@ contains
       newfor=1
       ismooth=1
       no7=1
-      read(nsysi,*) newfor,iopp,ismooth,no7
+      icpel=0
+      read(nsysi,*) newfor,iopp,ismooth,no7,icpel
       write(nsyso,'(&
         &'' new formats .......................... '',i10/&
         &'' photon option ........................ '',i10/&
         &'' smoothing option ..................... '',i10/&
         &'' law7 conversion option ............... '',i10)')&
         newfor,iopp,ismooth,no7
+      ! icpel echoed only when not default (DLA, IAEA, 23 Oct 2026)
+      if (icpel.ne.0) write(nsyso,'(&
+        &'' cp elastic option (icpel) ............ '',i10)') icpel
       if (newfor.ne.0.and.newfor.ne.1) then
          call error('acer','illegal newfor.',' ')
       endif
@@ -350,6 +368,9 @@ contains
       if (izaoption.ne.0.and.izaoption.ne.1) then
          call error('acer','illegal izaopt.',' ')
       endif
+      if (icpel.ne.0.and.icpel.ne.1) then
+         call error('acer','illegal icpel.',' ')
+      endif
       if (iopp.eq.0) write(nsyso,&
         '(/'' photons will not be processed'')')
       if (ismooth.eq.0) write(nsyso,&
@@ -361,6 +382,10 @@ contains
       endif
       if (izaoption.eq.1) write(nsyso,&
         '(/'' zaids will be formatted using the metastable za rules'')')
+      if (icpel.eq.1) write(nsyso,'(/&
+        &'' charged-particle elastic (ltp>=12): ENDF-102 interpolation''/&
+        &'' law of p_ni between the tabulated cosines (default icpel=0:''/&
+        &'' monotone cubic of sigma_e/sigma_c)'')')
       mte=0
       z(1)=0
       z(2)=0
