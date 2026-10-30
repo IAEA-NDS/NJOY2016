@@ -521,6 +521,7 @@ contains
    endif
    if (maxn.gt.maxnphon) then
       call timer(time)
+            ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
       write(nsyse,'(/'' performing phonon expansion sum'',&
             &37x,f8.1,''s'')')time
    endif
@@ -1139,6 +1140,7 @@ contains
    terps=0
    if (be.gt.delta*nsd) return
    i=int(be/delta)
+   ! modified (DLA, IAEA)
    if (i.lt.0) return
    if (i.lt.nsd-1) then
       bt=i*delta
