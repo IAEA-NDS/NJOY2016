@@ -1,6 +1,33 @@
 # Release Notes&mdash;NJOY2016
 Given here are some release notes for NJOY2016. Each release is made through a formal [Pull Request](https://github.com/njoy/NJOY2016/pulls) made on GitHub. There are links in this document that point to each of those Pull Requests, where you can see in great details the changes that were made. Often the Pull Requests are made in response to an [issue](https://github.com/njoy/NJOY2016/issues). In such cases, links to those issues are also given.
 
+## NJOY2016.80+ (IAEA-NDS, 5 November 2026)
+Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), used for the final FENDL-3.2d
+production and for the NDLIB processing of ENDF/B-VIII.1, JEFF-4.0 and JENDL-5. Only HEATR, GROUPR, ACER (acefc) and
+GASPR change. New options keep the NJOY2016 behaviour by default.
+
+This update fixes the following issues:
+  - HEATR, GROUPR, ACER: MF12 LO=2 photon cascades. Levels reached through an intermediate level were populated with TP*GP
+    instead of TP (ENDF-102, MF12), so the photons below converted transitions were lost (present since NJOY97). Messages
+    for GP outside [0,1] and for transitions to levels that are not in the list.
+  - HEATR: mean secondary energies of MF6 LAW=7 and LAW=1 LEP=2 by exact integration in each interval.
+  - HEATR: File 6 yield records longer than the hinit buffer overflowed it; up to 50 subsections per particle in MF6/MT5.
+  - ACER: work area of the generalized neutron yield of several MF6 subsections not cleared (wrong law read for a later
+    reaction).
+  - ACER: MF6 given for MT201-207 is not used when the other reactions already give the particle (double counting); when it
+    is the only source it is used as before, with a warning (ENDF-6 violation).
+  - GASPR: storage of the MF6/MT5 product yields and number of products increased, with messages.
+  - Array sizes of HEATR, ACER and GASPR checked on 4697 evaluations (ENDF/B-VIII.1, JEFF-4.0, JENDL-5, FENDL-3.2d), with
+    truncation messages and explicit initialization.
+
+In addition, this update added the following features and changes:
+  - HEATR input kkerma=3: the energy-balance heating of kkerma=2, capped at the kinematic upper limit of the inelastic,
+    capture and (n,xn) reaction groups, with or without photon data; internal conversion declared in the evaluation
+    (MF12 LO=2, LG=2, GP<1) is kept. Photon energy missing in an evaluation is not deposited locally. A listing diagnostic
+    gives, per reaction group and energy band, the energy removed above the kinematic limit.
+  - HEATR kkerma=2: the lower limit includes the recoil energy of the residual.
+  - ACER: diagnostic of the heating partition (heating minus the charged-particle heating, against the damage).
+
 ## NJOY2016.80+ (IAEA-NDS, 28 October 2026)
 IAEA Nuclear Data Section version based on NJOY2016.80 (D. Lopez Aldama, dlopezaldama@gmail.com).  The corrections
 proposed to LANL are in the NJOY2016 pull requests #370, #371, #374, #376, #379, #380, #382, #384 and a PURR pull

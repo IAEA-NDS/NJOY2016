@@ -5,5 +5,5 @@ module version
    private
    ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    character(8),public::vers='2016.80+'
-   character(8),public::vday='28Oct26'
+   character(8),public::vday='05Nov26'
 end module version
