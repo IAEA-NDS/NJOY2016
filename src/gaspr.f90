@@ -101,13 +101,19 @@ contains
    ! yields of MT51-91 with LR=1 (mt6 list, pointers k2xx, m2xx),
    ! particle-unstable residuals (He-5, Li-5, B-8, B-9, H-4, Li-4,
    ! Be-6, B-7) (DLA, IAEA, Oct 2026)
-   integer,parameter::nsixmx=100000
+   ! nsixmx 100000 -> 250000: MF6/MT5 with many product subsections
+   ! (preprocessed MT201-207 evaluations, JENDL-5 In-115: storage
+   ! exceeded in gas5y; 116210 words needed in NDLIB) (DLA, IAEA,
+   ! 4-5 Nov 2026)
+   integer,parameter::nsixmx=250000
    real(kr),dimension(:),allocatable::six
    integer::has16,nm6,mt6(2000),lsix5,lr1,m203,m204,m205,m206,m207
    integer::k203,k204,k205,k206,k207
    integer::mf6m18
    ! mf6/mt5 products and balance (IAEA, Oct 2026)
-   integer,parameter::np5mx=500
+   ! np5mx 500 -> 1000 (356 MT5 products needed in NDLIB n) (DLA, IAEA,
+   ! 5 Nov 2026)
+   integer,parameter::np5mx=1000
    integer::mt5opt,np5,pz5(np5mx),pl5(np5mx),ios
    ! decay option and acer-equivalent mode (IAEA, Oct 2026)
    integer::idec,nm4,mt4(2000),fam(5),lmf6
@@ -119,6 +125,7 @@ contains
    real(kr),parameter::hund=100
 
    allocate(six(nsixmx))
+   six=0 ! (DLA, IAEA, 5 Nov 2026)
    nscr1=10
    ! set iprint nonzero for gas production printout on listing
    iprint=0
@@ -314,9 +321,11 @@ contains
          ! electrons (balance check and residual decay) (DLA, IAEA)
          if (izap.gt.0.and.izap.ne.11) then
             if (lsix+nw.gt.nsixmx)&
-              call error('gaspr','storage for mf6/mt5 yields exceeded',' ')
+              call error('gaspr','storage for mf6/mt5 yields exceeded',&
+                'increase nsixmx')
             if (np5.ge.np5mx)&
-              call error('gaspr','too many mf6/mt5 products',' ')
+              call error('gaspr','too many mf6/mt5 products',&
+                'increase np5mx')
             np5=np5+1
             pz5(np5)=izap
             pl5(np5)=lsix
@@ -1495,7 +1504,8 @@ contains
       if (izap.eq.1001.or.izap.eq.1002.or.izap.eq.1003.or.&
         izap.eq.2003.or.izap.eq.2004) then
          if (lsix+nw.gt.nmax)&
-           call error('gas6y','storage for mf6 yields exceeded',' ')
+           call error('gas6y','storage for mf6 yields exceeded',&
+             'increase nsixmx')
          do i=1,nw
             six(lsix+i-1)=a(i)
          enddo
@@ -1752,7 +1762,8 @@ contains
    do j=1,5
       lg(j)=0
       if (lsix+6+2+2*ng.gt.nmax)&
-        call error('gas5y','storage for mf6/mt5 yields exceeded',' ')
+        call error('gas5y','storage for mf6/mt5 yields exceeded',&
+          'increase nsixmx')
       do i=1,np5
          ipp(i)=2
          irp(i)=1

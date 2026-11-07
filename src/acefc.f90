@@ -286,6 +286,10 @@ contains
    integer::izap,law,ll,nn,jj,ii,j,isort1,isort2,isave1
    integer::isave2,isave3,isave4,idis
    integer::nwtst,newnw
+   character(60)::strng ! message of the MT201-207 test (DLA, IAEA, 2 Nov 2026)
+   ! MT201-207 rule: light particles given in MF6/MF4 of other reactions (DLA, IAEA, 4 Nov 2026)
+   integer::have20x(6),k20x
+   integer,dimension(6),parameter::zap20x=(/1,1001,1002,1003,2003,2004/)
    real(kr)::delta,temp,y201,y203,y204,y205,y206,y207
    real(kr)::e,enext,y,xsthr,e201,e203,e204,e205,e206,e207
    real(kr)::b(350)
@@ -705,6 +709,14 @@ contains
 
       !--check particle productions in mf6.
       nprod3=nprod
+      ! light particles produced by the reactions (MF4 two-body above, MF6
+      ! of MTs other than 201-207 below) (DLA, IAEA, 4 Nov 2026)
+      have20x=0
+      do i=1,nprod
+         do k20x=1,6
+            if (iprod(i).eq.zap20x(k20x)) have20x(k20x)=1
+         enddo
+      enddo
       if (nsix.gt.0) then
          call findf(matd,6,0,nendf)
          isix=0
@@ -715,6 +727,12 @@ contains
             nk=n1h
             do ik=1,nk
                call tab1io(nendf,0,0,scr,nb,nw)
+               if (mth.lt.201.or.mth.gt.207) then
+                  do k20x=1,6
+                     if (nint(c1h).eq.zap20x(k20x).and.&
+                       nint(c1h).ne.izai) have20x(k20x)=1
+                  enddo
+               endif
                if (mth.eq.5) then
                   !--test for light particle production; 0=yes
                   if (abs(c1h-1).lt.0.0001) mt5n=0
@@ -770,6 +788,33 @@ contains
             if (jj.gt.1) jj=jj-1
             if (nprod+6.gt.maxpr) call error('first',&
               'too many production items',' ')
+            ! MT201-207 are derived production cross sections (ENDF-6,
+            ! ENDF-102 App. B: "redundant; use in derived files only").
+            ! A light particle also given in MF6/MF4 of the reactions:
+            ! its MF6 MT201-207 subsection is not used (LANL counted the
+            ! production and heating twice: ENDF/B-VIII.1 Mo-94/96/98,
+            ! Yb-170..174, Hf-181/182; FENDL-3.2 Zr-90 above 20 MeV).
+            ! Otherwise it is used as in LANL NJOY2016 (JENDL-5 MT103-107
+            ! given in MF3 only), with a warning: the result is not
+            ! guaranteed (DLA, IAEA, 2 and 4 Nov 2026)
+            if (mth.ge.201.and.mth.le.207) then
+               do k20x=1,6
+                  if (izap.eq.zap20x(k20x).and.izap.ne.izai) then
+                     if (have20x(k20x).ne.0) then
+                        write(strng,'(''MF6 MT'',i3,'' ZAP'',i5,&
+                          &'' NOT USED (DOUBLE COUNTING)'')') mth,izap
+                        call mess('first',strng,&
+                          'PARTICLE GIVEN IN THE REACTIONS; ENDF-6 MT20X')
+                        izap=-1
+                     else
+                        write(strng,'(''MF6 MT'',i3,'' ZAP'',i5,&
+                          &'' USED: ENDF-6 VIOLATION'')') mth,izap
+                        call mess('first',strng,&
+                          'MT201-207 DERIVED ONLY; RESULT NOT GUARANTEED')
+                     endif
+                  endif
+               enddo
+            endif
             if (izap.eq.1.and.izai.ne.1) then
                e201=scr(7+2*jj)
                if (xsthr.gt.e201) e201=xsthr
@@ -4367,6 +4412,12 @@ contains
    character(60)::strng
    equivalence(t(1),gamid(1))
    real(kr),dimension(:),allocatable::ee,eg,es,yy,aa,rr
+   ! lo=2 cascade: transition probabilities TP kept for the propagation
+   ! of the level populations (DLA, IAEA, 3 Nov 2026)
+   real(kr),dimension(:),allocatable::tpr
+   integer::nmiss3,iq3,kq3,ngpb3
+   real(kr)::emiss3,gpb3
+   character(66)::strng3
    real(kr),dimension(:),allocatable::tot
    ! modified (DLA, IAEA)
    integer,parameter::nwtot=100000 !Needed for D1SUNED library generation
@@ -4394,6 +4445,8 @@ contains
    allocate(es(lmax))
    allocate(yy(lmax))
    allocate(aa(imaxsq))
+   allocate(tpr(imaxsq))
+   tpr=0
    allocate(rr(imaxsq))
    nwscr=npage+50
    allocate(scr(nwscr))
@@ -4698,6 +4751,8 @@ contains
    ee(j)=scr(1)
    n=nint(scr(6))
    jm1=j-1
+   ngpb3=0
+   gpb3=0
    do kk=1,jm1
       k=jm1-kk+1
       idone=0
@@ -4713,22 +4768,63 @@ contains
       enddo
       if (idone.eq.0) then
          aa((k-1)*imax+j)=0
+         tpr((k-1)*imax+j)=0
          rr((k-1)*imax+j)=0
       else
          p=scr(7+(lg+1)*i-lg)
          g=1
          if (lg.eq.2) g=scr(6+(lg+1)*i)
+         ! GP outside [0,1]: evaluation error, used as given, warning
+         ! (DLA, IAEA, 3 Nov 2026)
+         if (g.lt.zero.or.g.gt.1) then
+            ngpb3=ngpb3+1
+            gpb3=g
+         endif
          aa((k-1)*imax+j)=p*g
+         tpr((k-1)*imax+j)=p
          rr((k-1)*imax+j)=p
       endif
       if (k.ne.jm1) then
          kp1=k+1
          do ii=kp1,jm1
+            ! the population of level k reached through level ii is
+            ! propagated with the transition probability TP(ii->k),
+            ! photon or conversion (ENDF-102 12.2.2); LANL used
+            ! TP*GP, which loses the cascade below converted
+            ! transitions when LG=2 (DLA, IAEA, 3 Nov 2026)
             rr((k-1)*imax+j)=rr((k-1)*imax+j)&
-              +rr((ii-1)*imax+j)*aa((k-1)*imax+ii)
+              +rr((ii-1)*imax+j)*tpr((k-1)*imax+ii)
          enddo
       endif
    enddo
+   ! transitions to levels not found among the levels of this
+   ! reaction: ignored, with a warning (DLA, IAEA, 3 Nov 2026)
+   nmiss3=0
+   emiss3=0
+   do iq3=1,n
+      ei=scr(6+(lg+1)*iq3-lg)
+      idone=0
+      do kq3=1,jm1
+         if (ei.eq.zero.and.ee(kq3).eq.zero) idone=1
+         if (ei.ne.zero) then
+            if (abs(ei-ee(kq3))/ei.lt.0.0001) idone=1
+         endif
+      enddo
+      if (idone.eq.0) then
+         nmiss3=nmiss3+1
+         emiss3=ei
+      endif
+   enddo
+   if (ngpb3.gt.0) then
+      write(strng3,'(''mf12 mt'',i3,'':'',i3,'' gp outside [0,1], e.g.'',&
+        &1p,e10.3)') mth,ngpb3,gpb3
+      call mess('convr',strng3,'evaluation error: used as given (lo=2)')
+   endif
+   if (nmiss3.gt.0) then
+      write(strng3,'(''mf12 mt'',i3,'':'',i3,'' transitions to unknown'',&
+        &'' level es='',1p,e10.3)') mth,nmiss3,emiss3
+      call mess('convr',strng3,'transition ignored (lo=2)')
+   endif
    l=0
    ysum=0
    do i=2,j
@@ -4979,6 +5075,7 @@ contains
    deallocate(scr)
    deallocate(rr)
    deallocate(aa)
+   deallocate(tpr)
    deallocate(yy)
    deallocate(es)
    deallocate(eg)
@@ -6893,6 +6990,8 @@ contains
 
    !--load particle production information
    call acelcp(next,matd,nin,za,awr)
+   ! diagnostic: heating left for the recoils (DLA, IAEA, 2 Nov 2026)
+   if (ntype.gt.0) call acehpd
    if (allocated(urd)) deallocate(urd)
    if (allocated(nudn)) deallocate(nudn)
    if (allocated(nup)) deallocate(nup)
@@ -8175,7 +8274,11 @@ contains
          xx=xnext
          yy=0
          xnext=etop
-         ishift=500
+         ! generalized yield (several neutron subsections): temporary
+         ! storage above next enlarged; LANL 500 (about 250 points of
+         ! the summed yield); 5280 words needed in NDLIB (JENDL-5
+         ! MT201-207 preprocessed) (DLA, IAEA, 4-5 Nov 2026)
+         ishift=15000
          do j=1,ik
             ii=loc(j)
             ip=2
@@ -8189,10 +8292,14 @@ contains
             endif
          enddo
          if (k.gt.0) then
+            if (2*k+2.ge.ishift) call error('acelf6',&
+              'storage exceeded for generalized yield',&
+              'more than 7499 points: increase ishift')
+            if (next+2*k+1+ishift.gt.nxss) call error('acelf6',&
+              'storage exceeded for generalized yield',&
+              'xss full (nxss)')
             xss(next+2*k+ishift)=xx
             xss(next+2*k+1+ishift)=sigfig(yy,7,0)
-            if (2*k+2.ge.ishift) call error('acelf6',&
-              'storage exceeded for generalized yield',' ')
          endif
       enddo
       xss(next)=0
@@ -8201,6 +8308,11 @@ contains
          eyl=xss(next+2*j+ishift)
          xss(next+1+j)=sigfig(eyl/emev,7,0)
          xss(next+1+k+j)=sigfig(xss(next+2*j+1+ishift),7,0)
+      enddo
+      ! clear the temporary storage: later blocks (photon laws, LNW)
+      ! rely on unwritten xss words being zero (DLA, IAEA, 5 Nov 2026)
+      do j=2,2*k+1
+         xss(next+j+ishift)=0
       enddo
       next=next+2*k+2
    endif
@@ -10522,6 +10634,93 @@ contains
    fmn=(g1+g2)/2
    return
    end function fmn
+
+   subroutine acehpd
+   !-------------------------------------------------------------------
+   ! Diagnostic of the consistency of the heating with the particle
+   ! production blocks: when the charged particles of the production
+   ! blocks (p, d, t, He-3, alpha) are transported, their heating is
+   ! not local, and the local heating left for the recoils is
+   !    L(E) = H(E) - sum_j H_j(E)       (MeV per collision)
+   ! H from the ESZ block (heatr mt301), H_j the heating of block j.
+   ! L must not be negative and not below the damage energy per
+   ! collision D(E) = mt444/sigma_t (D <= recoil energy).  Messages
+   ! give the number of energies where this fails and the worst case
+   ! (L-D)/H.  Nothing is changed. (DLA, IAEA, 2 Nov 2026)
+   !-------------------------------------------------------------------
+   use mainio ! provides nsyso
+   use util ! provides mess
+   use acecm ! provides xss
+   ! internals
+   integer::it,ip,hpd,ie0,ne0,j,i,loc,nneg,nbel,iw
+   real(kr)::h,st,d,el,rel,worst
+   real(kr),dimension(:),allocatable::hp,dd
+   character(60)::strng
+   real(kr),parameter::zero=0
+   allocate(hp(nes))
+   allocate(dd(nes))
+   hp=0
+   dd=0
+   do it=1,ntype
+      ip=nint(xss(ptype+it-1))
+      if (ip.eq.1.or.ip.eq.2) cycle
+      hpd=nint(xss(ploct+10*(it-1)))
+      ie0=nint(xss(hpd))
+      ne0=nint(xss(hpd+1))
+      do j=1,ne0
+         hp(ie0+j-1)=hp(ie0+j-1)+xss(hpd+1+ne0+j)
+      enddo
+   enddo
+   do i=1,ntr
+      if (nint(xss(mtr+i-1)).ne.444) cycle
+      loc=sig+nint(xss(lsig+i-1))-1
+      ie0=nint(xss(loc))
+      ne0=nint(xss(loc+1))
+      do j=1,ne0
+         dd(ie0+j-1)=xss(loc+1+j)
+      enddo
+   enddo
+   nneg=0
+   nbel=0
+   worst=0
+   iw=0
+   do i=1,nes
+      h=xss(esz+4*nes+i-1)
+      st=xss(esz+nes+i-1)
+      d=0
+      if (st.gt.zero) d=dd(i)/st
+      el=h-hp(i)
+      if (el.lt.-1.e-9_kr*abs(h)) nneg=nneg+1
+      if (d.gt.zero.and.el.lt.d*(1-1.e-6_kr)) nbel=nbel+1
+      if (h.gt.zero) then
+         rel=(el-d)/h
+         if (rel.lt.worst) then
+            worst=rel
+            iw=i
+         endif
+      endif
+   enddo
+   if (nneg.gt.0.or.nbel.gt.0) then
+      write(strng,'(i6,'' e with H-sum Hj<0,'',i6,'' below damage'')')&
+        nneg,nbel
+      call mess('acehpd',strng,' ')
+      ! iw=0 when the heating is zero everywhere (PENDF without heatr):
+      ! no worst point (xss(esz-1) was read) (DLA, IAEA, 4 Nov 2026)
+      if (iw.gt.0) then
+         write(strng,'(''worst (L-D)/H='',1p,e10.3,'' at'',e10.3,&
+           &'' MeV'')') worst,xss(esz+iw-1)
+         call mess('acehpd',strng,&
+           'heating below the charged-particle production heating')
+      endif
+   else
+      write(nsyso,'(/'' acehpd: heating minus the heating of the'',&
+        &'' charged-particle production blocks is not below the damage'',&
+        &'' energy at the '',i6,'' energies'')') nes
+   endif
+   deallocate(hp)
+   deallocate(dd)
+   return
+   end subroutine acehpd
 
    subroutine acelcp(next,matd,nin,za,awr)
    !-------------------------------------------------------------------
@@ -19497,8 +19696,7 @@ contains
                         ep=xss(j+loci)
                         p=xss(j+nn+loci)
                         if (p.lt.zmin) p=zmin
-                        ! modified (DLA, IAEA):
-                        !
+                        ! modified (DLA, IAEA)
                         if (ep.ge.xmin.and.ep.le.xmax) then
                            if (intt.eq.1) write(nout,&
                               '(1p,2e14.6,''/'')') ep,ylast
