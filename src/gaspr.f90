@@ -71,7 +71,8 @@ contains
    ! Unstable light residuals:
    !    prompt break-up: Be-8 -> 2a;  B-9 -> p+2a;  He-5 -> n+a;
    !       Li-5 -> p+a;  H-4 -> t+n;  Li-4 -> p+He-3;  Be-6 -> 2p+a;
-   !       B-7 -> 3p+a
+   !       B-7 -> 3p+a;  H-5 -> t+2n;  H-6 -> t+3n;  H-7 -> t+4n
+   !       (H-5 to H-7 added, DLA, IAEA, 10 Nov 2026c)
    !    beta-delayed:    Li-8 (beta-, 0.84 s) -> 2a;
    !       B-8 (beta+, 0.77 s) -> 2a;
    !       Li-9 (beta-, 0.18 s) -> 50.8% n+2a  (1.016 a/decay)
@@ -1881,7 +1882,8 @@ contains
    ! prompt break-up:
    !    Be-8 -> 2a         B-9 -> p+2a        He-5 -> n+a
    !    Li-5 -> p+a        H-4 -> t+n         Li-4 -> p+He-3
-   !    Be-6 -> 2p+a       B-7 -> 3p+a
+   !    Be-6 -> 2p+a       B-7 -> 3p+a        H-5 -> t+2n
+   !    H-6 -> t+3n        H-7 -> t+4n (DLA, IAEA, 10 Nov 2026c)
    ! beta-delayed:
    !    Li-8 (beta-) -> Be-8* -> 2a      B-8 (beta+) -> Be-8* -> 2a
    !    Li-9 (beta-) -> 50.8% n+2a, 49.2% Be-9
@@ -1911,6 +1913,10 @@ contains
       dy(1)=1
       dy(5)=1
    case (1004)
+      dy(3)=1
+   ! H-5, H-6, H-7 (given e.g. in JENDL-5 Be-7, Be-10 mt5): one triton
+   ! (DLA, IAEA, 10 Nov 2026c)
+   case (1005,1006,1007)
       dy(3)=1
    case (3004)
       dy(1)=1
