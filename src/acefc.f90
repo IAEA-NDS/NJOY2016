@@ -12635,7 +12635,12 @@ contains
             enddo
 
             !--compute the heating from this recoil nuclide
-            if (izap.gt.2004) then
+            ! a product given with law=0 is a residual whatever its zap
+            ! (e.g. H-4 to H-7): it gets the law=0 message below
+            ! (DLA, IAEA, 10 Nov 2026c)
+            if (izap.gt.2004.or.(law.eq.0.and.izap.gt.1000.and.&
+              izap.ne.1001.and.izap.ne.1002.and.izap.ne.1003.and.&
+              izap.ne.2003.and.izap.ne.2004)) then
 
                !--law 1
                if (law.eq.1) then
