@@ -1,0 +1,140 @@
+# Makefile for NJOY16 on windows
+# using the free GFortran compiler with acceleration -O2
+# gfortran is included in gcc package
+
+F90 = gfortran
+#F90FLAGS = -O0 -static-libgfortran -fbacktrace -fno-omit-frame-pointer
+F90FLAGS = -O2 -static-libgfortran
+#F90FLAGS = -O2 -static-libgfortran
+#F90FLAGS = -O0 -Wall -Wextra -static-libgfortran
+
+njoy: locale.o vers.o mainio.o phys.o util.o endf.o mathm.o \
+	reconr.o broadr.o unresr.o heatr.o thermr.o \
+	groupr.o gaminr.o errorr.o covr.o \
+	moder.o dtfr.o ccccr.o matxsr.o resxsr.o \
+	acer.o acefc.o aceth.o acepa.o acepn.o acedo.o acecm.o \
+	powr.o wimsr.o plotr.o viewr.o graph.o mixr.o purr.o leapr.o \
+	gaspr.o samm.o
+	${F90} ${F90FLAGS} locale.o vers.o mainio.o phys.o \
+	util.o endf.o mathm.o \
+	reconr.o broadr.o unresr.o heatr.o thermr.o \
+	groupr.o gaminr.o errorr.o covr.o \
+	moder.o dtfr.o ccccr.o matxsr.o resxsr.o \
+	acer.o acefc.o aceth.o acepa.o acepn.o acedo.o acecm.o \
+	powr.o wimsr.o plotr.o viewr.o graph.o mixr.o purr.o leapr.o \
+	gaspr.o samm.o \
+	main.f90 -o njoy_gfortran.exe
+	
+locale.o: locale.f90
+	${F90} ${F90FLAGS} -c locale.f90
+
+vers.o: vers.f90
+	${F90} ${F90FLAGS} -c vers.f90
+
+mainio.o: mainio.f90
+	${F90} ${F90FLAGS} -c mainio.f90
+	
+phys.o: phys.f90 locale.o
+	${F90} ${F90FLAGS} -c phys.f90
+
+util.o: util.f90 locale.o mainio.o
+	${F90} ${F90FLAGS} -c util.f90
+
+endf.o: endf.f90 locale.o util.o
+	${F90} ${F90FLAGS} -c endf.f90
+
+mathm.o: mathm.f90 locale.o util.o
+	${F90} ${F90FLAGS} -c mathm.f90
+
+reconr.o: reconr.f90 locale.o mainio.o util.o endf.o samm.o phys.o
+	${F90} ${F90FLAGS} -c reconr.f90
+
+broadr.o: broadr.f90 locale.o mainio.o util.o endf.o mathm.o phys.o
+	${F90} ${F90FLAGS} -c broadr.f90
+
+unresr.o: unresr.f90 locale.o mainio.o util.o endf.o phys.o
+	${F90} ${F90FLAGS} -c unresr.f90
+
+thermr.o: thermr.f90 locale.o mainio.o util.o endf.o mathm.o phys.o
+	${F90} ${F90FLAGS} -c thermr.f90
+
+heatr.o: heatr.f90 locale.o mainio.o util.o endf.o mathm.o phys.o
+	${F90} ${F90FLAGS} -c heatr.f90
+
+groupr.o: groupr.f90 locale.o mainio.o util.o endf.o mathm.o phys.o
+	${F90} ${F90FLAGS} -c groupr.f90
+
+gaminr.o: gaminr.f90 locale.o mainio.o util.o endf.o mathm.o phys.o
+	${F90} ${F90FLAGS} -c gaminr.f90
+
+errorr.o: errorr.f90 locale.o mainio.o util.o endf.o phys.o samm.o groupr.o
+	${F90} ${F90FLAGS} -c errorr.f90
+
+covr.o: covr.f90 locale.o mainio.o util.o endf.o
+	${F90} ${F90FLAGS} -c covr.f90
+
+moder.o: moder.f90 locale.o mainio.o util.o endf.o
+	${F90} ${F90FLAGS} -c moder.f90
+
+dtfr.o: dtfr.f90 locale.o mainio.o util.o endf.o
+	${F90} ${F90FLAGS} -c dtfr.f90
+
+ccccr.o: ccccr.f90 locale.o mainio.o util.o endf.o
+	${F90} ${F90FLAGS} -c ccccr.f90
+
+matxsr.o: matxsr.f90 locale.o mainio.o util.o endf.o
+	${F90} ${F90FLAGS} -c matxsr.f90
+
+resxsr.o: resxsr.f90 locale.o mainio.o util.o endf.o
+	${F90} ${F90FLAGS} -c resxsr.f90
+
+acer.o: acer.f90 locale.o mainio.o util.o endf.o acefc.o aceth.o acepa.o acepn.o acedo.o acecm.o
+	${F90} ${F90FLAGS} -c acer.f90
+
+acefc.o: acefc.f90 locale.o mainio.o util.o mathm.o phys.o endf.o acecm.o
+	${F90} ${F90FLAGS} -c acefc.f90
+
+aceth.o: aceth.f90 locale.o mainio.o util.o endf.o acecm.o phys.o
+	${F90} ${F90FLAGS} -c aceth.f90
+
+acepa.o: acepa.f90 locale.o mainio.o util.o endf.o acecm.o
+	${F90} ${F90FLAGS} -c acepa.f90
+
+acepn.o: acepn.f90 locale.o mainio.o util.o endf.o acecm.o mathm.o phys.o
+	${F90} ${F90FLAGS} -c acepn.f90
+
+acedo.o: acedo.f90 locale.o mainio.o util.o endf.o acecm.o phys.o
+	${F90} ${F90FLAGS} -c acedo.f90
+
+acecm.o: acecm.f90 locale.o mainio.o util.o endf.o mathm.o phys.o
+	${F90} ${F90FLAGS} -c acecm.f90
+
+powr.o: powr.f90 locale.o mainio.o util.o endf.o phys.o
+	${F90} ${F90FLAGS} -c powr.f90
+
+wimsr.o: wimsr.f90 locale.o mainio.o util.o endf.o phys.o
+	${F90} ${F90FLAGS} -c wimsr.f90
+
+plotr.o: plotr.f90 locale.o mainio.o util.o endf.o
+	${F90} ${F90FLAGS} -c plotr.f90
+
+viewr.o: viewr.f90 locale.o mainio.o util.o endf.o graph.o
+	${F90} ${F90FLAGS} -c viewr.f90
+
+graph.o: graph.f90 locale.o mainio.o util.o endf.o phys.o
+	${F90} ${F90FLAGS} -c graph.f90
+
+mixr.o: mixr.f90 locale.o mainio.o util.o endf.o
+	${F90} ${F90FLAGS} -c mixr.f90
+
+purr.o: purr.f90 locale.o mainio.o util.o endf.o phys.o
+	${F90} ${F90FLAGS} -c purr.f90
+
+leapr.o: leapr.f90 locale.o mainio.o util.o endf.o phys.o
+	${F90} ${F90FLAGS} -c leapr.f90
+
+gaspr.o: gaspr.f90 locale.o mainio.o util.o endf.o
+	${F90} ${F90FLAGS} -c gaspr.f90
+
+samm.o: samm.f90 locale.o util.o endf.o mainio.o phys.o
+	${F90} ${F90FLAGS} -c samm.f90

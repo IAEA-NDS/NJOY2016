@@ -23,6 +23,7 @@ module acepa
    integer::eszg,jinc,jcoh,jflo,lhnm,jxsd(27)
 
    ! parameter for scratch array
+   ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    integer,parameter::nwscr=250000
 
 contains
@@ -1019,6 +1020,7 @@ contains
    !--output directory for mcnp
    call openz(ndir,1)
    if (mcnpx.eq.0) then
+        ! modified (DLA, IAEA)
       write(ndir,&
         '(a10,f12.6,'' filename route'',i2,'' 1 '',i9,2i6,1p,e10.3)')&
         hz(1:10),aw0,itype,len2,lrec,nern,tz

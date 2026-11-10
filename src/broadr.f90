@@ -1534,6 +1534,7 @@ contains
 !-- Next two statements not supported by Lahey Fortran-95 compiler
 !     1.e0_kr/(2.e0_kr*sqrt(pi)),0.25e0_kr,&
 !     1.e0_kr/(2.e0_kr*sqrt(pi)),0.375e0_kr/)
+!     (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    real(kr),parameter::one=1.e0_kr
    real(kr),parameter::two=2.e0_kr
    real(kr),parameter::atop=4.e0_kr
