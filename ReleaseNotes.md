@@ -1,6 +1,18 @@
 # Release Notes&mdash;NJOY2016
 Given here are some release notes for NJOY2016. Each release is made through a formal [Pull Request](https://github.com/njoy/NJOY2016/pulls) made on GitHub. There are links in this document that point to each of those Pull Requests, where you can see in great details the changes that were made. Often the Pull Requests are made in response to an [issue](https://github.com/njoy/NJOY2016/issues). In such cases, links to those issues are also given.
 
+## NJOY2016.80+ (IAEA-NDS, 10 November 2026)
+Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com). Only HEATR changes.
+
+This update fixes the following issue:
+  - HEATR (mt5tab): the effective MT5 residual built from the charge and mass deficit of the MF6/MT5 products (where the
+    evaluation gives no residual nucleus) is now used only when the product yields are balanced where residuals are given
+    (charge and nucleon balance within 5 %, the rule of GASPR for the decay of the MT5 residuals), no residual yield is
+    negative at that energy, and the deficit is a nucleus heavier than He-4. Otherwise the deficit is an inconsistency of
+    the light-particle yields and no recoil is added, with messages. Inconsistent TENDL-2010 MT5 data in the FENDL-3.2
+    Li-6 and Li-7 files (negative or missing residual yields at the first table, 20 MeV, and in Li-6 at 100-200 MeV) had
+    given residual recoils of 4-13 MeV: heating up to 1.7 times and damage up to 2.4 times too large at these energies.
+
 ## NJOY2016.80+ (IAEA-NDS, 5 November 2026)
 Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), used for the final FENDL-3.2d
 production and for the NDLIB processing of ENDF/B-VIII.1, JEFF-4.0 and JENDL-5. Only HEATR, GROUPR, ACER (acefc) and
