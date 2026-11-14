@@ -1,6 +1,25 @@
 # Release Notes&mdash;NJOY2016
 Given here are some release notes for NJOY2016. Each release is made through a formal [Pull Request](https://github.com/njoy/NJOY2016/pulls) made on GitHub. There are links in this document that point to each of those Pull Requests, where you can see in great details the changes that were made. Often the Pull Requests are made in response to an [issue](https://github.com/njoy/NJOY2016/issues). In such cases, links to those issues are also given.
 
+## NJOY2016.80+ (IAEA-NDS, 14 November 2026)
+Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 14Nov26. Only ACER
+changes (acepa, photo-atomic data; acefc, incident charged particles).
+
+This update fixes the following issues:
+  - ACER (acepa, alax, photo-atomic data, iopt=4): the transition energies of the atomic relaxation are computed as
+    differences of the binding energies of the subshells involved, EBI(i)-EBI(j)-EBI(k) (EBI(k)=0 for a radiative
+    transition), and used for the fluorescence lines (JFLO) and the heating; the file values ETR are only compared with
+    them (message when they differ by more than 1e-3; energetically closed transitions are listed). The fluorescence
+    energy subtracted from the heating is weighted by the K-shell fraction (1-rhok) of the photoelectric events above the
+    K edge and by the L-shell fraction (1-rholt) above the mean L edge, as in the JFLO block (MCPLIB04 behaviour); the
+    K-O and K-P lines are counted with the K-beta2' group; Z is taken from the ZA of the relaxation file (Fm is MAT 9920).
+    With EPDL2025/EADL2025 the heating for Z=12-100 agrees within 0 to +6 % with a cascade reference above the L1 edge
+    (previous code down to -62 %); with EPDL97/EADL97 the MCPLIB84 heating is reproduced within 1e-6 for Z=26-30.
+  - ACER (acefc, acecpe, incident charged particles): when two elastic tables are given at the same energy (change of
+    representation LTP=1 -> LTP=12, JENDL-5 = JEFF-4.0 = FENDL-3.2 p+Li-7 at 10 MeV), the union-grid point at that energy
+    took the left-hand table and the step of the evaluation was lost (1.875 b instead of 1.614 b at 10 MeV). It now takes
+    the right-hand table, and the shaded point below it the left-hand one.
+
 ## NJOY2016.80+ (IAEA-NDS, 10 November 2026)
 Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 10Nov26c. HEATR and
 GASPR change; ACER only gives one more message.
