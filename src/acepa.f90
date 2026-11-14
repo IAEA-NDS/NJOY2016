@@ -505,6 +505,17 @@ contains
    subroutine alax(nin,nlax,matd,fluor,ener,abs,heat,a,nes)
    !-------------------------------------------------------------------
    ! Generate fluorescence data in the Cashwell-Everett format.
+   ! modified (IAEA, DLA, 13Nov26): transition energies are computed
+   ! as differences of the binding energies of the subshells involved,
+   ! EBI(i)-EBI(j)-EBI(k) (EBI(k)=0 for a radiative transition), as the
+   ! EPICS data intend; the file values ETR are only compared with them
+   ! (warning beyond the relative tolerance tetr).  The fluorescence
+   ! energy subtracted from the heating is weighted, as in the JFLO
+   ! block, by the K-shell fraction (1-rhok) of the photoelectric
+   ! events above the K edge and by the L-shell fraction (1-rholt)
+   ! above the mean L edge (MCPLIB04 behaviour); all radiative K
+   ! transitions are counted (O and P lines included), and Z is taken
+   ! from the ZA of the relaxation file (Fm is MAT 9920).
    !-------------------------------------------------------------------
    use mainio ! provides nsyso
    use util ! provides closz,error
@@ -521,6 +532,11 @@ contains
    real(kr)::el2,pl2,el3,pl3,tot,y,phi,rholt,elav,denom
    real(kr)::wt,ylt,flt,sum11,sum12,sum21,sum22,phik
    real(kr)::enl(3),rhol(3),wtl(3)
+   ! modified (IAEA, DLA, 13Nov26): binding-energy transition energies
+   integer::sdes(50),ndif,nneg,j,k,kk
+   real(kr)::sebi(50),eb,ej,ek2,etr,rmax,ermax(2),rel
+   character(60)::strng
+   real(kr),parameter::tetr=1.e-3_kr
    real(kr),parameter::dn=.9999e0_kr
    real(kr),parameter::up=1.0001e0_kr
    real(kr),parameter::emev=1.e6_kr
@@ -540,7 +556,10 @@ contains
    go to 110
   130 call tofend(nlax,0,0,a)
    call contio(nlax,0,0,a,nb,nw)
+   ! modified (IAEA, DLA, 13Nov26): Z from the ZA of MF28 (Fm is 9920)
+   iz=nint(c1h)/1000
    nss=n1h
+   if (nss.gt.50) call error('alax','more than 50 subshells',' ')
    ll=1
    do iss=1,nss
       loc(iss)=ll
@@ -556,6 +575,68 @@ contains
          ll=ll+nw
       enddo
    enddo
+
+   ! modified (IAEA, DLA, 13Nov26): transition energies from the
+   ! binding energies, EBI(i)-EBI(j)-EBI(k); compare with ETR
+   do iss=1,nss
+      sdes(iss)=nint(a(loc(iss)))
+      sebi(iss)=a(loc(iss)+6)
+   enddo
+   ndif=0
+   nneg=0
+   rmax=0
+   ermax=0
+   write(nsyso,'(/'' atomic relaxation: transition energies'',&
+     &'' recomputed as binding-energy differences'')')
+   do iss=1,nss
+      jj=loc(iss)
+      n=nint(a(jj+5))
+      eb=a(jj+6)
+      do i=1,n
+         j=nint(a(jj+6+6*i))
+         k=nint(a(jj+7+6*i))
+         ej=0
+         ek2=0
+         do kk=1,nss
+            if (sdes(kk).eq.j) ej=sebi(kk)
+            if (k.gt.0.and.sdes(kk).eq.k) ek2=sebi(kk)
+         enddo
+         etr=eb-ej-ek2
+         if (a(jj+8+6*i).gt.0) then
+            ! (abs is the photoabsorption array in this routine)
+            rel=etr/a(jj+8+6*i)-1
+            if (rel.lt.0) rel=-rel
+            if (rel.gt.tetr) ndif=ndif+1
+            if (rel.gt.rmax) then
+               rmax=rel
+               ermax(1)=a(jj+8+6*i)
+               ermax(2)=etr
+            endif
+         else if (etr.gt.0) then
+            ndif=ndif+1
+         endif
+         if (etr.le.0) then
+            nneg=nneg+1
+            write(nsyso,'(''   closed transition: subshell'',i3,&
+              &'' ->'',2i3,'' prob'',1p,e11.4,'' ETR'',e11.4,&
+              &'' EBI diff'',e11.4,'' eV'')')&
+              sdes(iss),j,k,a(jj+9+6*i),a(jj+8+6*i),etr
+         endif
+         a(jj+8+6*i)=etr
+      enddo
+   enddo
+   if (ndif.gt.0) then
+      write(strng,'(i5,'' ETR differ from EBI differences by >'',&
+        &1p,e8.1)') ndif,tetr
+      call mess('alax',strng,'binding-energy differences used')
+      write(strng,'(''largest: ETR'',1p,e11.4,'' EBI diff'',e11.4,'' eV'')')&
+        ermax(1),ermax(2)
+      call mess('alax',strng,' ')
+   endif
+   if (nneg.gt.0) then
+      write(strng,'(i5,'' transitions with EBI(i)-EBI(j)-EBI(k) <= 0'')') nneg
+      call mess('alax',strng,'energetically closed; listed in the output')
+   endif
 
    !--read in the photoionization cross section for the material
    call openz(nin,0)
@@ -610,8 +691,10 @@ contains
       sum2=sum2/sum1
 
       !--subtract the photon energy from the heating
+      ! modified (IAEA, DLA, 13Nov26): K-shell fraction (1-rhok)
       do i=1,nes
-         if (ener(i).gt.ek/emev) heat(i)=heat(i)-abs(i)*sum1*sum2/emev
+         if (ener(i).gt.ek/emev) heat(i)=heat(i)&
+           -abs(i)*(1-rhok)*sum1*sum2/emev
       enddo
 
       !--store the results
@@ -648,7 +731,8 @@ contains
 
       !--subtract the photon energy from the heating
       do i=1,nes
-         if (ener(i).gt.ek/emev) heat(i)=heat(i)-abs(i)&
+         ! modified (IAEA, DLA, 13Nov26): K-shell fraction (1-rhok)
+         if (ener(i).gt.ek/emev) heat(i)=heat(i)-abs(i)*(1-rhok)&
            *(sum1*sum2+el2*pl2+el3*pl3)/emev
       enddo
 
@@ -732,7 +816,8 @@ contains
             else if (mm.ge.5.and.mm.le.9) then
                sum11=sum11+a(jj+2)
                sum12=sum12+a(jj+1)*a(jj+2)
-            else if (mm.ge.10.and.mm.le.16) then
+            ! modified (IAEA, DLA, 13Nov26): O and P lines (mm>16) kept
+            else if (mm.ge.10) then
                sum21=sum21+a(jj+2)
                sum22=sum22+a(jj+1)*a(jj+2)
             endif
@@ -749,9 +834,12 @@ contains
 
       !--subtract the photon energy from the heating
       do i=1,nes
-         if (ener(i).gt.elav/emev) heat(i)=heat(i)-abs(i)*ylt*flt/emev
-         if (ener(i).gt.ek/emev) heat(i)=heat(i)&
-           -abs(i)*(sum11*sum12+sum21*sum22+el2*pl2+el3*pl3)/emev
+         ! modified (IAEA, DLA, 13Nov26): L-shell fraction (1-rholt) and
+         ! K-shell fraction (1-rhok), as in the JFLO yields
+         if (ener(i).gt.elav/emev) heat(i)=heat(i)&
+           -abs(i)*(1-rholt)*ylt*flt/emev
+         if (ener(i).gt.ek/emev) heat(i)=heat(i)-abs(i)*(1-rhok)&
+           *(sum11*sum12+sum21*sum22+el2*pl2+el3*pl3)/emev
       enddo
 
       !--store the results
