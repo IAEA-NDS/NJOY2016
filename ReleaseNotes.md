@@ -2,8 +2,8 @@
 Given here are some release notes for NJOY2016. Each release is made through a formal [Pull Request](https://github.com/njoy/NJOY2016/pulls) made on GitHub. There are links in this document that point to each of those Pull Requests, where you can see in great details the changes that were made. Often the Pull Requests are made in response to an [issue](https://github.com/njoy/NJOY2016/issues). In such cases, links to those issues are also given.
 
 ## NJOY2016.80+ (IAEA-NDS, 14 November 2026)
-Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 14Nov26. Only ACER
-changes (acepa, photo-atomic data; acefc, incident charged particles).
+Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 14Nov26. ACER
+changes (acepa, photo-atomic data; acefc, incident charged particles); HEATR gives one more message.
 
 This update fixes the following issues:
   - ACER (acepa, alax, photo-atomic data, iopt=4): the transition energies of the atomic relaxation are computed as
@@ -19,6 +19,9 @@ This update fixes the following issues:
     representation LTP=1 -> LTP=12, JENDL-5 = JEFF-4.0 = FENDL-3.2 p+Li-7 at 10 MeV), the union-grid point at that energy
     took the left-hand table and the step of the evaluation was lost (1.875 b instead of 1.614 b at 10 MeV). It now takes
     the right-hand table, and the shaded point below it the left-hand one.
+  - HEATR (mt5tab, output only): where the MT5 residuals given with LAW=0 are used for the recoil, a message is given
+    when the sum of the residual yields per MT5 event differs from 1 by more than 5 % (range of the sum and number of
+    energies); recoil heating and damage are computed with the evaluated yields. No PENDF or ACE change.
 
 ## NJOY2016.80+ (IAEA-NDS, 10 November 2026)
 Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 10Nov26c. HEATR and

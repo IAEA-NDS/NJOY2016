@@ -6571,6 +6571,11 @@ contains
    ! (DLA, IAEA, 10 Nov 2026c)
    logical::light5
    integer::izr5,iar5,nlit5
+   ! sum of the residual yields where LAW=0 residuals are used: a
+   ! value far from 1 (one residual per event) scales the recoil;
+   ! message only, the evaluated yields are kept (DLA, IAEA, 15 Nov 2026)
+   integer::nysum
+   real(kr)::ysmin,ysmax
    real(kr)::fz5
    real(kr),parameter::tolf5=0.05e0_kr
    real(kr),parameter::ymin5=0.01e0_kr
@@ -6910,6 +6915,9 @@ contains
       nnegy=0
       nunbal=0
       nlit5=0
+      nysum=0
+      ysmin=1.e30_kr
+      ysmax=0
       do iu=1,nu
          e=eu(iu)
          p0=sqrt(2*e)
@@ -6956,7 +6964,12 @@ contains
                   hsum=hsum+yr*pr2/(2*ar5(k))
                   yres=yres+yr
                enddo
-               if (yres.gt.zero) nadd0=nadd0+1
+               if (yres.gt.zero) then
+                  nadd0=nadd0+1
+                  ysmin=min(ysmin,yall)
+                  ysmax=max(ysmax,yall)
+                  if (abs(yall-1).gt.tolb5) nysum=nysum+1
+               endif
             else
                zeff=zt-yz
                aeff=awr+1-ym
@@ -7023,6 +7036,13 @@ contains
            &'' energies is not a nucleus'')') nlite
          call mess('mt5tab',strng,&
            'nor a bound light particle: no recoil added')
+      endif
+      if (nysum.gt.0) then
+         write(strng,'(''mt5 residual yields sum to'',f7.3,'' -'',f8.3,&
+           &'' per event'')') ysmin,ysmax
+         write(strng2,'(''at'',i5,'' energies: recoil and damage with '',&
+           &''evaluated yields'')') nysum
+         call mess('mt5tab',strng,strng2)
       endif
       if (nlit5.gt.0) then
          write(strng,'(''mt5 deficit is a light particle at'',i5,&
