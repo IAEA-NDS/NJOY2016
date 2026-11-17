@@ -1806,7 +1806,7 @@ contains
    integer::ipwr,inx,ngn,isave,ngneg,jg,igt,ngpos,npr,nmf12
    character(40)::text
    real(kr)::stpmax,awrx,eg,qx,thrx,thrxx,et
-   real(kr)::er,sr,ernext,srnext,enl,test,snl,erl,srl
+   real(kr)::er,sr,ernext,srnext,enl,enl_max,test,snl,erl,srl
    real(kr)::en,sn,xm,ym,yl,errn,ent,egl,time
    real(kr)::ab(1)
    real(kr),dimension(:),allocatable::ekept
@@ -2068,7 +2068,14 @@ contains
 
    !--determine upper limit of this panel
   240 continue
-   if (lr+ir.gt.n2h) go to 350
+   ! MOD by vlopez: store the maximum energy in any reaction channel
+   if (enl.gt.enl_max) enl_max=enl
+   
+   ! MOD by vlopez: don't cut the table if other channels had higher maximum energy
+   !if (lr+ir.gt.n2h) go to 350
+   if ((lr+ir.gt.n2h).and.(ig.gt.ngo)) go to 350
+   
+   
    if (ig.ge.ngo) go to 250
    if (abs(eg).ge.er*(1-small)) go to 250
    en=abs(eg)
@@ -2103,7 +2110,15 @@ contains
    erl=er
    srl=sr
    260 ir=ir+1
-   if (lr+ir.gt.n2h) go to 280
+   
+   ! MOD by vlopez: extend the energy grid up to the maximum energy in any channel
+   !if (lr+ir.gt.n2h) go to 280
+   if (lr+ir.gt.n2h) then
+     er = enl_max
+     sr = 0.0
+     go to 280
+   endif
+   
    er=scr(ibase+ir*2-1)
    sr=scr(ibase+ir*2)
    if (lr+ir.gt.nbta) then
