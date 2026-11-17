@@ -3,7 +3,8 @@ Given here are some release notes for NJOY2016. Each release is made through a f
 
 ## NJOY2016.80+ (IAEA-NDS, 14 November 2026)
 Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 14Nov26. ACER
-changes (acepa, photo-atomic data; acefc, incident charged particles); HEATR gives one more message.
+changes (acepa, photo-atomic data; acefc, incident charged particles and generalized yields); BROADR change (MT4 of
+isomeric targets); HEATR gives one more message.
 
 This update fixes the following issues:
   - ACER (acepa, alax, photo-atomic data, iopt=4): the transition energies of the atomic relaxation are computed as
@@ -22,6 +23,17 @@ This update fixes the following issues:
   - HEATR (mt5tab, output only): where the MT5 residuals given with LAW=0 are used for the recoil, a message is given
     when the sum of the residual yields per MT5 event differs from 1 by more than 5 % (range of the sum and number of
     energies); recoil heating and damage are computed with the evaluated yields. No PENDF or ACE change.
+  - BROADR: when MT51 starts at the first grid point (isomeric targets with exothermic inelastic levels), the rebuilt
+    MT4 started at MT91, so it was missing where MT51-90 are non-zero and no longer equal to the sum of its parts
+    (ENDF/B-VIII.1 Ag-118m; JEFF-4.0 and JENDL-5 isomers). MT4 now starts at the smallest start of the broadened
+    MT51-91; the MF1/MT451 record count uses the same index. Fix by M. Becker (LANL NJOY2016 pull request #426); new
+    test 89 (ENDF/B-VIII.1 Ag-118m1).
+  - ACER (acefc, acelf6): the law probability of a generalized-yield reaction is evaluated slightly above the first and
+    below the last yield energy (factor 1.00001). When the neighbouring point is closer than that (yield grid starting
+    at 19.99999 and 20 MeV), the summed yield was extrapolated and the stored probability was wrong (ENDF/B-VIII.1 Si-29
+    MT5: 2.5e-7 instead of 1 at 20 MeV). The shift is now limited to the middle of the first (last) interval and the
+    yield energies are written unchanged. Fix by M. Becker (LANL NJOY2016 pull request #428); test 55 reference tapes
+    updated (one probability, 1.000003 -> 1).
 
 ## NJOY2016.80+ (IAEA-NDS, 10 November 2026)
 Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 10Nov26c. HEATR and
