@@ -4,7 +4,7 @@ Given here are some release notes for NJOY2016. Each release is made through a f
 ## NJOY2016.80+ (IAEA-NDS, 14 November 2026)
 Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 14Nov26. ACER
 changes (acepa, photo-atomic data; acefc, incident charged particles and generalized yields); BROADR change (MT4 of
-isomeric targets); HEATR gives one more message.
+isomeric targets); RECONR change (end of a section in the union grid); HEATR gives one more message.
 
 This update fixes the following issues:
   - ACER (acepa, alax, photo-atomic data, iopt=4): the transition energies of the atomic relaxation are computed as
@@ -34,6 +34,13 @@ This update fixes the following issues:
     MT5: 2.5e-7 instead of 1 at 20 MeV). The shift is now limited to the middle of the first (last) interval and the
     yield energies are written unchanged. Fix by M. Becker (LANL NJOY2016 pull request #428); test 55 reference tapes
     updated (one probability, 1.000003 -> 1).
+  - RECONR (lunion): when a section ends below the top of the union grid and its last point was already taken by
+    the panel loop (en left at 0, last energy in enl), the end energy of the section was taken as 0 at label 350:
+    the point was left out of the grid and the message gave "ends at 0.00000E+00 eV".  The section now ends at its
+    last energy.  JEFF-4.0 Mo-100, Ru-101, Pd-106, Nd-142 to Nd-145
+    and Sm-152 (MF3/MT102 to 30 MeV, EMAX 200 MeV): the 30 MeV point is added to the grid, the other values are
+    unchanged.  No change in the 88 tests.  Reviewed with IAEA-NDS pull request 32 (V. Lopez), which addresses the
+    same truncation.
 
 ## NJOY2016.80+ (IAEA-NDS, 10 November 2026)
 Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 10Nov26c. HEATR and
