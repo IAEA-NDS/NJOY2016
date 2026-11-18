@@ -339,6 +339,7 @@ contains
    real(kr)::factx,facty
    real(kr)::xx,yy,zz
    character(80)::text
+   ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    integer,parameter::mmax=50000   !same in plotr and viewr
    integer,parameter::maxaa=5000000
    real(kr),dimension(15)::z
@@ -1270,6 +1271,7 @@ contains
    real(kr)::xyz(nxyz)
    ! internals
    integer,parameter::length=2000
+   ! modified (DLA, IAEA)
    integer,parameter::lenxyz=10000
    integer::i,j,nn,k,ncurv,major,minor,itop,ibot,l,n
    real(kr)::wt,xlo,xhi,ylo,yhi,zlo,zhi,xn,yn,zn,yy

@@ -179,20 +179,21 @@ contains
    integer::lun,new
    ! internals
    integer::nun
-   character::for*15,age*7,fn*6
+   character::for*15,age*7,fn*7
    logical::there
 
    nun=iabs(lun)
    if ((nun.ge.5.and.nun.le.7).or.nun.eq.0) return
-   if (nun.gt.99) call error('openz','illegal unit number.',' ')
+   if (nun.gt.999) call error('openz','illegal unit number.',' ')
    ! construct file name
-   write(fn,'(''tape'',i2)') nun
+   write(fn,'(''tape'',i0)') nun
    ! set format based on sign of unit number
    for='formatted'
    if (lun.lt.0) for='unformatted'
    if (nun.ge.10.and.nun.le.19) then
       ! scratch units
       age='scratch'
+      ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
       inquire(nun,opened=there)
       if (there) close (nun)
       open(nun,form=for,status=age)
@@ -229,7 +230,7 @@ contains
 
    nun=iabs(lun)
    if (nun.lt.10) return
-   if (nun.gt.99) call error('closz','illegal unit number.',' ')
+   if (nun.gt.999) call error('closz','illegal unit number.',' ')
    close(nun)
    return
    end subroutine closz
@@ -379,7 +380,6 @@ contains
    if (x.ne.zero) then
       aa=log10(abs(x))
       ipwr=int(aa)
-      if ((ndig.eq.9).and.(aa.gt.zero).and.(aa-ipwr.lt.1.0e-6_kr)) ipwr=ipwr-1
       if (aa.lt.zero) ipwr=ipwr-1
       ipwr=ndig-1-ipwr
       ii=nint(x*ten**ipwr+ten**(ndig-11))
@@ -387,7 +387,14 @@ contains
          ii=ii/10
          ipwr=ipwr-1
       endif
-      ii=ii+idig
+      ! shading down from an exact power of ten keeps ndig figures
+      ! (10**n -> 0.999999999*10**n, not 0.99999999*10**n) (DLA, IAEA)
+      if (ndig.eq.9.and.idig.lt.0.and.ii+idig.lt.10**(ndig-1)) then
+         ii=10*ii+idig
+         ipwr=ipwr+1
+      else
+         ii=ii+idig
+      endif
       xx=ii*ten**(-ipwr)
    endif
    xx=xx*bias

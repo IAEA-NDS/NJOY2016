@@ -525,6 +525,7 @@ contains
    integer::inin,inout,inscr,i
 
    !--input.
+   ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    inin=iabs(nin)
    if (inin.ne.0) rewind inin
    if (nin.lt.0) then

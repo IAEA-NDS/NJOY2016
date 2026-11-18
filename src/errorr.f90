@@ -1126,6 +1126,7 @@ contains
    if (iread.ne.1) then
       allocate(ak(nmtmax*2,irmax))
    endif
+   ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    nwscr=5000000
    allocate(scr(nwscr))
    neki=0
@@ -1832,6 +1833,7 @@ contains
    if (mfcov.eq.35) then
       namx=max(npage+6,ncovl)
    else
+      ! modified (DLA, IAEA)
       namx=5000000
    endif
    allocate(scr(namx))
@@ -3023,7 +3025,10 @@ contains
    ! internals
    integer::indx
    integer::nb,nw,nngn,ig,ner
-   integer::ip1,ip2,i,iest,ieed,iscr,jscr,nro,mls
+   ! nro is not declared here: the module variable is set below and is used
+   ! later by rpxsamm (call rdsammy).  A local nro hid it, so rpxsamm passed
+   ! an undefined value (DLA, IAEA, 13 Oct 2026).
+   integer::ip1,ip2,i,iest,ieed,iscr,jscr,mls
    integer,parameter::mxlru2=100
    real(kr)::za,awr,ee
    real(kr)::amur(3,mxlru2)
@@ -3270,7 +3275,7 @@ contains
    integer::i,nb,nw
    integer::isrrr
    real(kr)::el,eh,spin,ap,awri,aw,fact,rat,frac
-   real(kr)::e,enext,wt,wtl,elo,ehi,ee,eel,tmp
+   real(kr)::e,enext,wt,wtl,elo,ehi,ee,eel,tmp,em
    integer,parameter::nodmax=30000
    real(kr),dimension(:),allocatable::enode
    integer,parameter::maxb=90000
@@ -3540,9 +3545,14 @@ contains
    e=0
    call egtwtf(e,enext,idis,lord,wtl)
    i2=1
+   ! sigs has nnn=max(nmt,nmtres+2) columns and is accumulated for all nmt
+   ! reactions below, so every column is zeroed.  The old loop zeroed only the
+   ! first nmtres+2 columns; the others (e.g. MT102) started from whatever was
+   ! left in memory, and the results depended on the modules and errorr runs
+   ! done before in the same job (DLA, IAEA, 13 Oct 2026).
    do i1=1,ngn
       sflx(i1)=0
-      do n1=1,nmtres+2
+      do n1=1,nnn
          sigs(i1,n1)=0
       enddo
       do n1=1,nmt
@@ -3622,10 +3632,26 @@ contains
          write(strng1,'(''convergence issue for e='',1p,e10.3)') eel
          call mess('rpxsamm',strng1,'check reconstructed xs for steep increase')
       endif
+      ! derived-coefficient range k of the panel (eel,ee):
+      ! it is taken at the panel midpoint em=(eel+ee)/2, not at its upper
+      ! end ee.  A panel ending exactly on a range boundary ek(i) belongs
+      ! to range i-1, and the case ee=ek(nek+1) (upper end of the last
+      ! range, where the old test left k=0) no longer occurs.
+      ! An energy above the last range keeps the coefficients of the last
+      ! range; an energy below the first range stops (DLA, IAEA, 13 Oct 2026).
+      em=(eel+ee)/2
       k=0
       do i=1,nek
-         if (ee.ge.ek(i).and.ee.lt.ek(i+1)) k=i
+         if (em.ge.ek(i).and.em.lt.ek(i+1)) k=i
       enddo
+      if (k.eq.0) then
+        if (em.ge.ek(nek+1)) then
+          k=nek
+        else
+          write(strng1,'(''energy issue for e='',1p,e13.5)') em
+          call error('rpxsam',strng1,' check ek energy grid')
+        endif
+      endif
       do n1=1,nmt
          do n2=1,nmt
             k2=0
@@ -3640,7 +3666,7 @@ contains
                  (ee-eel)*(sigp(k2)*wt+sigpl(k2)*wtl)/2
             endif
          enddo
-      enddo
+      enddo   
       do n1=1,nmt
          do n2=1,nmt
             k2=0
@@ -5923,13 +5949,15 @@ contains
       b(2)=awr
       ! pass iverf on to covr
       b(3)=iverf
-      b(4)=0
+      ! modified (DLA, IAEA)
+      b(4)=irelco
       b(5)=-11
       b(6)=0
       call contio(0,nout,0,b,nb,nw)
       b(1)=tempin
       b(2)=0
       b(3)=ngn
+      b(4)=0
       nw=6
       ngnp1=ngn+1
       do i=1,ngnp1
@@ -6094,13 +6122,15 @@ contains
       b(1)=za
       b(2)=awr
       b(3)=iverf
-      b(4)=0
+      ! modified (DLA, IAEA)
+      b(4)=irelco
       b(5)=-12
       b(6)=0
       call contio(0,nout,0,b,nb,nw)
       b(1)=tempin
       b(2)=0
       b(3)=ngn
+      b(4)=0
       nw=6
       ngnp1=ngn+1
       do i=1,ngnp1
@@ -7054,7 +7084,7 @@ contains
    integer::n,ngn2,mtl,lmtold,nmtold,itp,ldlst,ldold
    integer::irpc,iupc
    integer,dimension(:),allocatable::lmt1,lmt2
-   real(kr)::egtjg,egtjgp,time,denom,epsvar
+   real(kr)::egtjg,egtjgp,time,denom
    character(60)::strng
    real(kr),dimension(:),allocatable::xmu
    real(kr),dimension(:),allocatable::alp
@@ -7568,18 +7598,26 @@ contains
          if (mfcov.eq.33.and.mth.eq.mts(ixp).and.(ig.eq.igp).and.&
            & (mats(ixp).eq.0.or.math.eq.mats(ixp))) then
            if (scr(ibase+ip).lt.zero) then
+             ! negative diagonal variance: reset to a small positive
+             ! value; the message goes to the terminal (nsyse) and to
+             ! the output listing (nsyso) (DLA, IAEA, 12 Oct 2026)
              write(nsyse,*)
              write(nsyse,'(a,i3,a,i5)') &
                & ' ---message from covout--- negative variance for mt=',&
                &  mth,' in group=',ig
              write(nsyse,'(27x,a,1pe11.3)')'var=',scr(ibase+ip)
-             epsvar=max(abs(scr(ibase+ip)),epsvar0)
+             write(nsyso,*)
+             write(nsyso,'(a,i3,a,i5)') &
+               & ' ---message from covout--- negative variance for mt=',&
+               &  mth,' in group=',ig
+             write(nsyso,'(27x,a,1pe11.3)')'var=',scr(ibase+ip)
              if (irelco.ne.0) then
-               scr(ibase+ip)=epsvar
+               scr(ibase+ip)=epsvar0
              else
-               scr(ibase+ip)=epsvar*csig(ig,ix)*csig(ig,ix)
+               scr(ibase+ip)=epsvar0*csig(ig,ix)*csig(ig,ix)
              endif
              write(nsyse,'(27x,a,1pe10.3)')'reset to ',scr(ibase+ip)
+             write(nsyso,'(27x,a,1pe10.3)')'reset to ',scr(ibase+ip)
            endif
          endif
          if (abs(scr(ibase+ip)).le.eps) then
@@ -7837,7 +7875,8 @@ contains
       b(1)=za
       b(2)=awr
       b(3)=iverf
-      b(4)=0
+      ! modified (DLA, IAEA)
+      b(4)=irelco
       b(5)=-11
       if (mfcov.eq.40) b(5)=-14
       b(6)=0
@@ -7845,6 +7884,7 @@ contains
       b(1)=tempin
       b(2)=0
       b(3)=ngn
+      b(4)=0
       nw=6
       ngnp1=ngn+1
       do i=1,ngnp1

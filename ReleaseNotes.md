@@ -1,7 +1,141 @@
 # Release Notes&mdash;NJOY2016
 Given here are some release notes for NJOY2016. Each release is made through a formal [Pull Request](https://github.com/njoy/NJOY2016/pulls) made on GitHub. There are links in this document that point to each of those Pull Requests, where you can see in great details the changes that were made. Often the Pull Requests are made in response to an [issue](https://github.com/njoy/NJOY2016/issues). In such cases, links to those issues are also given.
 
-## NJOY2016.77
+## NJOY2016.80+ (IAEA-NDS, 14 November 2026)
+Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 14Nov26. ACER
+changes (acepa, photo-atomic data; acefc, incident charged particles and generalized yields); BROADR change (MT4 of
+isomeric targets); RECONR change (end of a section in the union grid); HEATR gives one more message.
+
+This update fixes the following issues:
+  - ACER (acepa, alax, photo-atomic data, iopt=4): the transition energies of the atomic relaxation are computed as
+    differences of the binding energies of the subshells involved, EBI(i)-EBI(j)-EBI(k) (EBI(k)=0 for a radiative
+    transition), and used for the fluorescence lines (JFLO) and the heating; the file values ETR are only compared with
+    them (message when they differ by more than 1e-3; energetically closed transitions are listed). The fluorescence
+    energy subtracted from the heating is weighted by the K-shell fraction (1-rhok) of the photoelectric events above the
+    K edge and by the L-shell fraction (1-rholt) above the mean L edge, as in the JFLO block (MCPLIB04 behaviour); the
+    K-O and K-P lines are counted with the K-beta2' group; Z is taken from the ZA of the relaxation file (Fm is MAT 9920).
+    With EPDL2025/EADL2025 the heating for Z=12-100 agrees within 0 to +6 % with a cascade reference above the L1 edge
+    (previous code down to -62 %); with EPDL97/EADL97 the MCPLIB84 heating is reproduced within 1e-6 for Z=26-30.
+  - ACER (acefc, acecpe, incident charged particles): when two elastic tables are given at the same energy (change of
+    representation LTP=1 -> LTP=12, JENDL-5 = JEFF-4.0 = FENDL-3.2 p+Li-7 at 10 MeV), the union-grid point at that energy
+    took the left-hand table and the step of the evaluation was lost (1.875 b instead of 1.614 b at 10 MeV). It now takes
+    the right-hand table, and the shaded point below it the left-hand one.
+  - HEATR (mt5tab, output only): where the MT5 residuals given with LAW=0 are used for the recoil, a message is given
+    when the sum of the residual yields per MT5 event differs from 1 by more than 5 % (range of the sum and number of
+    energies); recoil heating and damage are computed with the evaluated yields. No PENDF or ACE change.
+  - BROADR: when MT51 starts at the first grid point (isomeric targets with exothermic inelastic levels), the rebuilt
+    MT4 started at MT91, so it was missing where MT51-90 are non-zero and no longer equal to the sum of its parts
+    (ENDF/B-VIII.1 Ag-118m; JEFF-4.0 and JENDL-5 isomers). MT4 now starts at the smallest start of the broadened
+    MT51-91; the MF1/MT451 record count uses the same index. Fix by M. Becker (LANL NJOY2016 pull request #426); new
+    test 89 (ENDF/B-VIII.1 Ag-118m1).
+  - ACER (acefc, acelf6): the law probability of a generalized-yield reaction is evaluated slightly above the first and
+    below the last yield energy (factor 1.00001). When the neighbouring point is closer than that (yield grid starting
+    at 19.99999 and 20 MeV), the summed yield was extrapolated and the stored probability was wrong (ENDF/B-VIII.1 Si-29
+    MT5: 2.5e-7 instead of 1 at 20 MeV). The shift is now limited to the middle of the first (last) interval and the
+    yield energies are written unchanged. Fix by M. Becker (LANL NJOY2016 pull request #428); test 55 reference tapes
+    updated (one probability, 1.000003 -> 1).
+  - RECONR (lunion): when a section ends below the top of the union grid and its last point was already taken by
+    the panel loop (en left at 0, last energy in enl), the end energy of the section was taken as 0 at label 350:
+    the point was left out of the grid and the message gave "ends at 0.00000E+00 eV".  The section now ends at its
+    last energy.  JEFF-4.0 Mo-100, Ru-101, Pd-106, Nd-142 to Nd-145
+    and Sm-152 (MF3/MT102 to 30 MeV, EMAX 200 MeV): the 30 MeV point is added to the grid, the other values are
+    unchanged.  No change in the 88 tests.  Reviewed with IAEA-NDS pull request 32 (V. Lopez), which addresses the
+    same truncation.
+
+## NJOY2016.80+ (IAEA-NDS, 10 November 2026)
+Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), vers 10Nov26c. HEATR and
+GASPR change; ACER only gives one more message.
+
+This update fixes the following issues:
+  - HEATR (mt5tab): the effective MT5 residual built from the charge and mass deficit of the MF6/MT5 products (where the
+    evaluation gives no residual nucleus) is now used only when the product yields are balanced where residuals are given
+    (charge and nucleon balance within 5 %, the rule of GASPR for the decay of the MT5 residuals), no residual yield is
+    negative at that energy, and the deficit is a nucleus heavier than He-4. Otherwise the deficit is an inconsistency of
+    the light-particle yields and no recoil is added, with messages. Inconsistent TENDL-2010 MT5 data in the FENDL-3.2
+    Li-6 and Li-7 files (negative or missing residual yields at the first table, 20 MeV, and in Li-6 at 100-200 MeV) had
+    given residual recoils of 4-13 MeV: heating up to 1.7 times and damage up to 2.4 times too large at these energies.
+  - HEATR (mt5tab): a product given in MF6/MT5 with LAW=0 (unknown distribution) is a residual whatever its ZAP. H-4 to
+    H-7 given with LAW=0 (JENDL-5 Be-7 and Be-10) were taken as light particles without distribution, and then no residual
+    of the section got a recoil (heating and damage 8-124 % too low above 20 MeV). The effective residual is also used
+    when the deficit is one bound light particle not given in File 6 (p, d, t, He-3, He-4), with the same conditions.
+  - GASPR: prompt break-up of H-5, H-6 and H-7 into a triton and neutrons (as H-4) for the MT5 residuals.
+  - ACER (incident charged particles): a LAW=0 product with ZAP 1004-1999 gives the "no heating info for recoil particle"
+    message like the other LAW=0 residuals; the ACE files do not change.
+
+## NJOY2016.80+ (IAEA-NDS, 5 November 2026)
+Update of the IAEA Nuclear Data Section version (D. Lopez Aldama, dlopezaldama@gmail.com), used for the final FENDL-3.2d
+production and for the NDLIB processing of ENDF/B-VIII.1, JEFF-4.0 and JENDL-5. Only HEATR, GROUPR, ACER (acefc) and
+GASPR change. New options keep the NJOY2016 behaviour by default.
+
+This update fixes the following issues:
+  - HEATR, GROUPR, ACER: MF12 LO=2 photon cascades. Levels reached through an intermediate level were populated with TP*GP
+    instead of TP (ENDF-102, MF12), so the photons below converted transitions were lost (present since NJOY97). Messages
+    for GP outside [0,1] and for transitions to levels that are not in the list.
+  - HEATR: mean secondary energies of MF6 LAW=7 and LAW=1 LEP=2 by exact integration in each interval.
+  - HEATR: File 6 yield records longer than the hinit buffer overflowed it; up to 50 subsections per particle in MF6/MT5.
+  - ACER: work area of the generalized neutron yield of several MF6 subsections not cleared (wrong law read for a later
+    reaction).
+  - ACER: MF6 given for MT201-207 is not used when the other reactions already give the particle (double counting); when it
+    is the only source it is used as before, with a warning (ENDF-6 violation).
+  - GASPR: storage of the MF6/MT5 product yields and number of products increased, with messages.
+  - Array sizes of HEATR, ACER and GASPR checked on 4697 evaluations (ENDF/B-VIII.1, JEFF-4.0, JENDL-5, FENDL-3.2d), with
+    truncation messages and explicit initialization.
+
+In addition, this update added the following features and changes:
+  - HEATR input kkerma=3: the energy-balance heating of kkerma=2, capped at the kinematic upper limit of the inelastic,
+    capture and (n,xn) reaction groups, with or without photon data; internal conversion declared in the evaluation
+    (MF12 LO=2, LG=2, GP<1) is kept. Photon energy missing in an evaluation is not deposited locally. A listing diagnostic
+    gives, per reaction group and energy band, the energy removed above the kinematic limit.
+  - HEATR kkerma=2: the lower limit includes the recoil energy of the residual.
+  - ACER: diagnostic of the heating partition (heating minus the charged-particle heating, against the damage).
+
+## NJOY2016.80+ (IAEA-NDS, 28 October 2026)
+IAEA Nuclear Data Section version based on NJOY2016.80 (D. Lopez Aldama, dlopezaldama@gmail.com).  The corrections
+proposed to LANL are in the NJOY2016 pull requests #370, #371, #374, #376, #379, #380, #382, #384 and a PURR pull
+request.  The new input options default to the NJOY2016 behaviour, except the ACER interpolation of the
+charged-particle elastic between tabulated cosines (icpel=0, monotone cubic; NJOY2016 has no interpolation there).
+
+This update fixes the following issues:
+  - RECONR: sublibrary-dependent treatment (1/v step, zero at threshold and redundant sums only for neutrons; charged particles and photonuclear data), evaluated MT3 kept, sections that are zero everywhere, union grid above a section that ends below the top energy.
+  - HEATR: damage energy (MT444) and heating corrections for capture, fission, multi-particle and File 6 reactions, MT5 residuals, discrete charged-particle levels, tabulated angular distributions and incomplete files.
+  - ACER: corrections for incident charged particles, photonuclear yields, MF6 LAW=4/5/7, interpolation laws of tabulated angular distributions, tables with zero integral, distributions below the cross-section threshold, isomeric targets, multi-temperature PENDF tapes and check plots.
+  - PURR: no negative values in the probability tables; first bin no longer empty with tied minimum samples.
+  - GASPR: MT875-891 without MT16, prompt break-up of particle-unstable residuals, LR=1 levels, MF6/MT18 and MF6/MT5 light particles.
+  - GROUPR: partial fission excluded from residual production; sqrt(E) smoothing conditions as in ACER.
+  - ERRORR: irelco in the HEAD records, negative variances, SAMMY (LRF=3/7) sensitivities.
+  - MATXSR, WIMSR, LEAPR, UTIL, ENDF, BROADR, PLOTR, VIEWR: robustness, portability and array sizes.
+
+In addition, this update added the following features and changes:
+  - HEATR input kkerma (kinematic KERMA options), mtrec and up to 10 partial kermas with the kinematic check.
+  - ACER card 6: no7 (LAW=7 to ACE law 61 or 67) and icpel (charged-particle elastic between cosines).
+  - GASPR input idec, mt5opt (residual decays); PURR input smin (floor of the sampled total); THERMR input mgrid.
+  - WIMSR: WIMS-D Library Update Project conventions for WIMSD-5 libraries.
+
+## [NJOY2016.80](https://github.com/njoy/NJOY2016/pull/418)
+This update fixes the following issues:
+  - The ismooth option in ACER assumes that the first outgoing energy in a distribution is always 0, which can lead to outgoing energies out of order and other issues. We now ensure ismooth does not perform its smoothing operation when the first ougoing energy value is not zero.
+  - An issue in the Coulomb wave function calculation was corrected (see issue #415), this corrects the known issue of proton emission on Ca40 in ENDF/B-VIII.1. A test using Ca40 has been aded to the test suite.
+
+## [NJOY2016.79](https://github.com/njoy/NJOY2016/pull/395)
+This update fixes the following issues:
+  - GROUPR output now correctly distinguishes between level numbers and isomeric numbers when extracting nuclide production.
+  - LEAPR now sets the EMAX value in MF1 MT451 to be equal to the B(4) value in MF7 MT4.
+  - PURR now uses quicksort instead of bubble sort, which leads to a significant speedup in this module. This change should have no effect on the values of the probability table.
+  - ACER now correctly handles discrete primary gammas in File 6 for the ENDF/B-VIII.1 release, which uses a different format than JEFF and JENDL libraries.
+
+In addition, this update added the following features and changes:
+  - Added optional card9a to GROUPR to support extracting MF=9 and MF=10 production channels with resulting level numbers greater than 9.
+  - Two group structures were added to GROUPR (the apollo 99-group structure and the ecco 1962-group structure). The shem epm 295-group structure and shem cea/epm 361-group structure were updated as well.
+
+The cmake files were simplified to allow for the use of LLVM's flang compiler. A minor update was mode to GROUPR as well to allow for compilation with LLVM flang.
+
+## [NJOY2016.78](https://github.com/njoy/NJOY2016/pull/361)
+This update fixes the following issues:
+  - Tape numbers are now allowed to go up to 999 instead of 99 previously. This change was made to accommodate processing of the light water evaluation in ENDF/B-VIII.1 that has 94 temperatures. Test 84 was added to detect this issue in the future.
+  - A few updates were made related to array sizes and array allocation.
+  - Adding a message to signal malformed ENDF files when l-value lists for SLBW/MLBW and Reich-Moore have nrs=0 (no resonances given for this l value).
+
+## [NJOY2016.77](https://github.com/njoy/NJOY2016/pull/347)
 This update fixes the following issues:
   - Background cross section values for reactions other than total, elastic, fission and capture were not handled properly in the unresolved resonance region. The background for total, elastic, fission and capture is integrated into the unresolved resonance cross section values in the genunr subroutine. In the emerge subroutine, the background in the unresolved resonance region was therefore zeroed out for any resonance reaction. This has never been an issue but now we have LRF=7 evaluations that can define reactions other than total, elastic, fission and capture. Test 82 was added to detect this issue in the future.
   - Increased the size of internal arrays in VIEWR.

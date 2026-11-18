@@ -30,6 +30,7 @@ module wimsm
    integer,parameter::nymax=100
    real(kr)::yield(nymax)
    integer::ifisp(nymax)
+   ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
    integer::ifiss,ifissr,nfiss
    integer::isg
    integer::ixs
@@ -581,7 +582,7 @@ contains
          sabs(iadd-jz+1)=sabs(iadd-jz+1)+scr(nl*jz+loca)
       enddo
 
-   !--elastic or inelastic scattering
+   !--elastic or inelastic scattering (DLA, IAEA)
    else if ((mth.eq.2).or.((mth.gt.50).and.(mth.le.91))) then
       iadd=nsigz+nsigz*(jtemp-1+ires*(jg-1))
       loca=l+lz+nl*(nz-1)
@@ -935,6 +936,7 @@ contains
    call tpidio(ngendf,0,0,scr,nb,nw)
    isg=0
    if (sgref.lt.dilinf) isg=1
+   ! modified (DLA, IAEA)
    if (iverw.eq.5) isg=1
    jtemp=0
    i318=0
@@ -2054,6 +2056,7 @@ contains
 
    !--write material identifier data
    awt=awr*amassn
+   ! modified (DLA, IAEA)
    if((ifis.eq.3).and.(ifissr.ne.3)) ifis=2
    write(nout,'(i6,1p,e15.8,5i6)')&
      ident,awt,iznum,ifis,ntemp,nrestb,isof

@@ -4,6 +4,7 @@ module mainio
    ! cause conflicts with njoy scratch or user logical units.
 
    ! legacy values are used for compatibility with some FORTRAN compilers
+   ! (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
 
    ! use iso_fortran_env,only: INPUT_UNIT, ERROR_UNIT, OUTPUT_UNIT
 

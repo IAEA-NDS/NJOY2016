@@ -1034,6 +1034,7 @@ contains
       start=itce
       middle=itca
       nea=ncl+1
+      ! modified (IAEA, D. Lopez Aldama, dlopezaldama@gmail.com)
       ne=nee
       if (idpnc.eq.5) then
          start=itcei
@@ -1062,7 +1063,7 @@ contains
             lines=4
          endif
          write(nsyso,'(/2x,i3,1x,1p,e12.4,3x,e12.4,3x,0p,8f10.4)')&
-           i,xss(start+i),xss(start+neei+i),(xss(loc+j),j=1,lim)
+           i,xss(start+i),xss(start+ne+i),(xss(loc+j),j=1,lim)
          if (nea.gt.8) write(nsyso,'(36x,8f10.4)')&
            (xss(loc+j),j=lim1,nea)
          loc=loc+nea
@@ -1259,6 +1260,7 @@ contains
       i=0
       idone=0
       e=0
+      ! modified (DLA, IAEA)
       do while (idone.eq.0.and.i.lt.nie)
          i=i+1
          e=xss(itie+i)
